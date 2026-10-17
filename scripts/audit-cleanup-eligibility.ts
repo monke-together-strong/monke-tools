@@ -24,9 +24,11 @@ const ExpectedInventorySchema = z.object({
 });
 
 const [input, output] = process.argv.slice(2);
+
 if (!input || !output) {
   throw new Error("Usage: bun scripts/audit-cleanup-eligibility.ts <expected.json> <report.json>");
 }
+
 const inventory = ExpectedInventorySchema.parse(await Bun.file(input).json());
 const runtime = createRuntime();
 const cache = createCleanupEvidenceCache();
@@ -46,8 +48,10 @@ const results = await Promise.all(
         },
         cache
       );
+
       const decision = decideCleanupEligibility(snapshot);
       const actual = decision.eligible;
+
       // A replay needs only this branch's PRs, not repeated copies of every repo's history.
       const repository = snapshot.repository
         ? {
@@ -57,10 +61,13 @@ const results = await Promise.all(
             )
           }
         : null;
+
       inspected += 1;
+
       if (inspected % 40 === 0) {
         process.stderr.write(`Inspected ${inspected}/${inventory.rows.length} worktrees\n`);
       }
+
       return {
         actual,
         decision,
@@ -75,6 +82,7 @@ const results = await Promise.all(
 );
 
 const mismatches = results.filter((result) => !result.matches);
+
 const summary = {
   eligible: results.filter((result) => result.actual).length,
   ineligible: results.filter((result) => result.decision.status === "ineligible").length,
@@ -87,6 +95,7 @@ const summary = {
   total: results.length,
   unknown: results.filter((result) => result.decision.status === "unknown").length
 };
+
 await Bun.write(
   output,
   `${JSON.stringify(
@@ -100,7 +109,9 @@ await Bun.write(
     2
   )}\n`
 );
+
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+
 if (mismatches.length > 0) {
   process.exitCode = 1;
 }

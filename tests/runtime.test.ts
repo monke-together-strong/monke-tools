@@ -40,6 +40,7 @@ describe(findExecutable, () => {
 describe("runtime", () => {
   test("interactive lines preserve UTF-8 across CRLF and final EOF", () => {
     const runtimeUrl = new URL("../src/runtime.ts", import.meta.url).href;
+
     const result = Bun.spawnSync(
       [
         process.execPath,
@@ -166,6 +167,7 @@ describe("runtime", () => {
     const killMock = vi.spyOn(process, "kill").mockImplementation(() => {
       throw Object.assign(new Error(code), { code });
     });
+
     try {
       expect(isProcessRunning(1234)).toBe(expected);
     } finally {
@@ -213,11 +215,13 @@ try {
 await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedCommandMarker}"`)}]);
 `
       );
+
       const worker = Bun.spawn({
         cmd: [process.execPath, workerPath],
         stderr: "pipe",
         stdout: "pipe"
       });
+
       let childPid: number | undefined;
       let descendantPid: number | undefined;
 
@@ -225,6 +229,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
         await waitFor(() => {
           childPid = readPublishedPid(childPidPath);
           descendantPid = readPublishedPid(descendantPidPath);
+
           return childPid !== undefined && descendantPid !== undefined;
         });
         worker.kill(signal);
@@ -250,6 +255,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
     const descendantPidPath = path.join(sandbox, "descendant.pid");
     const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
     const runtime = createRuntime();
+
     const resultPromise = runtime.execAsync(
       "sh",
       [
@@ -258,6 +264,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
       ],
       { allowFailure: true, timeoutSeconds: 0.5 }
     );
+
     await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
     const childPid = Number(readFileSync(childPidPath, "utf-8"));
     const descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
@@ -292,11 +299,13 @@ await runtime.execAsync(
 );
 `
     );
+
     const worker = Bun.spawn({
       cmd: [process.execPath, workerPath],
       stderr: "pipe",
       stdout: "pipe"
     });
+
     let childPid: number | undefined;
     let descendantPid: number | undefined;
 
@@ -325,10 +334,13 @@ await runtime.execAsync(
     const childPidPath = path.join(sandbox, "child.pid");
     const timeoutStartedMarker = path.join(sandbox, "timeout-started");
     const signals = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
+
     const baselineListeners = new Map(
       signals.map((signal) => [signal, process.listenerCount(signal)])
     );
+
     const runtime = createRuntime();
+
     const timedResult = runtime.execAsync(
       "sh",
       [
@@ -337,10 +349,13 @@ await runtime.execAsync(
       ],
       { allowFailure: true, timeoutSeconds: 0.5 }
     );
+
     let timedResultSettled = false;
+
     const observedTimedResult = (async () => {
       const result = await timedResult;
       timedResultSettled = true;
+
       return result;
     })();
 
@@ -359,9 +374,11 @@ await runtime.execAsync(
   test("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
     let authorization = "";
     let signal: AbortSignal | null | undefined;
+
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       authorization = new Headers(init?.headers).get("Authorization") ?? "";
       signal = init?.signal;
+
       return new Response("[]", { status: 200 });
     });
 
@@ -378,6 +395,7 @@ await runtime.execAsync(
 
   test("Release asset downloads reject unapproved URLs before sending credentials", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
+
     try {
       const runtime = createRuntime({ env: { GITHUB_TOKEN: "secret-token" } });
       await expect(
@@ -392,8 +410,10 @@ await runtime.execAsync(
   test("Release asset downloads expose the response body without buffering it", async () => {
     const response = new Response("streamed asset");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+
     try {
       const runtime = createRuntime();
+
       const downloaded = await runtime.releaseDistribution.downloadReleaseAsset(
         "https://github.com/monke-together-strong/monke-tools/releases/download/monke-tools-v1.2.3/monke-tools-v1.2.3-linux-x64.tar.gz"
       );
@@ -430,6 +450,7 @@ await runtime.execAsync(
     const home = path.join(sandbox, "home");
     const reclaimPath = path.join(home, "lock.reclaim");
     mkdirSync(reclaimPath, { recursive: true });
+
     const reclaimer = Bun.spawn({
       cmd: ["sh", "-c", 'sleep 0.1; rmdir "$1"', "sh", reclaimPath],
       stderr: "pipe",
@@ -488,15 +509,18 @@ await runtime.execAsync(
 
 function readPublishedPid(filePath: string) {
   const value = existsSync(filePath) ? readFileSync(filePath, "utf-8").trim() : "";
+
   return /^[1-9]\d*$/u.test(value) ? Number(value) : undefined;
 }
 
 async function waitFor(predicate: () => boolean) {
   const deadline = Date.now() + 3000;
+
   while (!predicate()) {
     if (Date.now() >= deadline) {
       throw new Error("Timed out waiting for subprocess state");
     }
+
     await wait(10);
   }
 }
@@ -508,6 +532,7 @@ function killRetainedDescendant(
   if (descendantPid === undefined || descendantPid <= 0 || !isProcessRunning(descendantPid)) {
     return;
   }
+
   if (groupLeaderPid !== undefined && groupLeaderPid > 0) {
     try {
       process.kill(-groupLeaderPid, "SIGKILL");
@@ -515,6 +540,7 @@ function killRetainedDescendant(
       // Fall through to exact-PID cleanup.
     }
   }
+
   if (isProcessRunning(descendantPid)) {
     try {
       process.kill(descendantPid, "SIGKILL");

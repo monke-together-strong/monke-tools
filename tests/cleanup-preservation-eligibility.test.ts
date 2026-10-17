@@ -16,6 +16,7 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 const REPOSITORY = "owner/preservation";
 const BRANCH = "feature/preserved";
 const sandboxes: string[] = [];
+
 type PullRequest = CleanupRepositoryEvidence["pullRequests"][number];
 
 describe("cleanup preservation collection", () => {
@@ -30,31 +31,39 @@ describe("cleanup preservation collection", () => {
     mkdirSync(tempRoot, { recursive: true });
     const sandbox = mkdtempSync(path.join(tempRoot, "cleanup-preservation-"));
     sandboxes.push(sandbox);
+
     const sourceRoot = createRepo(path.join(sandbox, "source"), {
       "other.txt": "unchanged\n",
       "tracked.txt": "original\n"
     });
+
     const worktreePath = path.join(sandbox, "worktree");
     git(sourceRoot, ["remote", "add", "origin", `git@github.com:${REPOSITORY}.git`]);
     git(sourceRoot, ["worktree", "add", "-b", BRANCH, worktreePath]);
+
     if (options.detached) {
       git(worktreePath, ["checkout", "--detach"]);
     }
+
     if (!options.recent) {
       ageWorktree(worktreePath);
     }
+
     const candidate: CleanupCandidate = {
       sourceRoot,
       worktreePath,
       ...(options.ordinary ? {} : { sessionBranch: BRANCH })
     };
+
     const prs: PullRequest[] = [];
     const baseRuntime = createTestRuntime({ cwd: sourceRoot });
+
     const runtime: Runtime = {
       ...baseRuntime,
       async execAsync(command, args) {
         expect(command).toBe("gh");
         const endpoint = args?.[1];
+
         const responses = {
           [`repos/${REPOSITORY}/git/ref/heads/main`]: {
             object: { sha: git(sourceRoot, ["rev-parse", "main"]) }
@@ -62,16 +71,20 @@ describe("cleanup preservation collection", () => {
           [`repos/${REPOSITORY}/pulls?state=all&per_page=100`]: [prs],
           [`repos/${REPOSITORY}`]: { default_branch: "main", full_name: REPOSITORY }
         };
+
         const response =
           endpoint?.includes("/commits/") && endpoint.endsWith("/pulls?per_page=100")
             ? [[]]
             : Object.entries(responses).find(([key]) => key === endpoint)?.[1];
+
         if (!response) {
           throw new Error(`Unexpected API endpoint: ${endpoint}`);
         }
+
         return { exitCode: 0, stderr: "", stdout: JSON.stringify(response) };
       }
     };
+
     return { candidate, prs, runtime, sourceRoot, worktreePath };
   }
 
@@ -79,12 +92,14 @@ describe("cleanup preservation collection", () => {
     write(root, "tracked.txt", contents);
     git(root, ["add", "."]);
     git(root, ["commit", "-m", message]);
+
     return git(root, ["rev-parse", "HEAD"]);
   }
 
   function landPending(item: ReturnType<typeof fixture>) {
     const witness = commit(item.sourceRoot, "landed\n", "land pending changes");
     write(item.worktreePath, "tracked.txt", "landed\n");
+
     return witness;
   }
 
@@ -161,8 +176,10 @@ describe("cleanup preservation collection", () => {
       const original = item.runtime.execAsync;
       item.runtime.execAsync = async (...args) => {
         write(item.worktreePath, "tracked.txt", "unique!\n");
+
         return await original(...args);
       };
+
       const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);
       expect(decideCleanupEligibility(snapshot)).toMatchObject({
         code: "changed-during-inspection",

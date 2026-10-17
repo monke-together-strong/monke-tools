@@ -295,6 +295,7 @@ touch "${discoveryReached}"`
       git(repoRoot, ["commit", "-m", "upstream"]);
       git(repoRoot, ["switch", "-c", "parking"]);
       let checkout = repoRoot;
+
       if (kind === "Session") {
         runMonke({ args: ["spawn", "feature"], cwd: repoRoot, monkeHome: home });
         checkout = getExpectedWorktreePath(home, repoRoot, "feature");
@@ -304,6 +305,7 @@ touch "${discoveryReached}"`
       } else {
         git(repoRoot, ["switch", "feature"]);
       }
+
       writeFileSync(path.join(checkout, "feature.txt"), "feature\n");
       git(checkout, ["add", "."]);
       git(checkout, ["commit", "-m", "feature"]);
@@ -324,10 +326,12 @@ touch "${discoveryReached}"`
 
       expect(prompt).toBeUndefined();
       expect(readFileSync(codiffLog, "utf-8")).toBe(`--branch\nrefs/heads/main\n${checkout}\n`);
+
       const rememberedBase =
         kind === "Session"
           ? loadSessionState(home, repoRoot, "feature").repos[0]?.diffBaseRef
           : undefined;
+
       expect(rememberedBase).toBe(kind === "Session" ? "refs/heads/main" : undefined);
       expect(existsSync(path.join(home, "sessions"))).toBe(kind === "Session");
     }
@@ -340,15 +344,19 @@ touch "${discoveryReached}"`
       const binDirectory = path.join(sandbox, "bin");
       const home = path.join(sandbox, "home");
       const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+
       if (branch === "master") {
         git(repoRoot, ["branch", "-m", "master"]);
       }
+
       if (branch === "feature") {
         git(repoRoot, ["switch", "-c", "feature"]);
       }
+
       git(repoRoot, ["worktree", "add", "-b", "other", path.join(sandbox, "other")]);
       const codiffLog = installFakeCodiff(binDirectory);
       let prompt: SelectPrompt | undefined;
+
       const options = {
         binDirectory,
         cwd: repoRoot,
@@ -707,9 +715,11 @@ touch "${discoveryReached}"`
       const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
       git(repoRoot, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
       git(repoRoot, ["switch", "-c", "feature"]);
+
       if (attached) {
         git(repoRoot, ["worktree", "add", path.join(sandbox, "main"), "main"]);
       }
+
       const codiffLog = installFakeCodiff(binDirectory);
       let prompt: SelectPrompt | undefined;
 
@@ -910,12 +920,15 @@ touch "${discoveryReached}"`
         repos: state.repos.map((repo) => ({ ...repo, diffBaseRef: "refs/heads/original-base" }))
       });
       let selection = `ref:${base}`;
+
       if (kind === "Source") {
         selection = `worktree:${repoRoot}`;
       }
+
       if (kind === "Ordinary") {
         selection = `worktree:${ordinaryWorktree}`;
       }
+
       installFakeCodiff(failingBinDirectory, { exitCode: 23 });
       const options = { cwd: sessionWorktree, monkeHome: home, selectValues: [selection] };
 
@@ -1032,6 +1045,7 @@ touch "${discoveryReached}"`
       monkeHome: home,
       selectValues: ["remembered:refs/heads/main"]
     });
+
     expect(forced.stderr).toContain(
       "Warning: main has local changes; Diff uses its committed branch state only."
     );
@@ -1239,9 +1253,11 @@ touch "${discoveryReached}"`
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+
     const replacementRepo = createRepo(path.join(sandbox, "replacement"), {
       "README.md": "other\n"
     });
+
     runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
     const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
     const racyWorktree = path.join(sandbox, "ordinary-worktrees", "racy");
@@ -1286,6 +1302,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     const slowWorktree = getExpectedWorktreePath(home, repoRoot, "base-slow");
     const fastWorktree = getExpectedWorktreePath(home, repoRoot, "base-fast");
     const currentWorktree = getExpectedWorktreePath(home, repoRoot, "current");
+
     const codiffLog = installFakeCodiff(binDirectory, {
       delayByBase: { "refs/heads/base-slow": 0.25 },
       waitForBases: ["refs/heads/base-slow", "refs/heads/base-fast"]
@@ -1352,6 +1369,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     const adoptedRoot = createRepo(path.join(sandbox, "adopted-root"), {
       "README.md": "hello\n"
     });
+
     git(adoptedRoot, ["branch", "adopted"]);
     runMonke({ args: ["spawn", "adopted"], cwd: adoptedRoot, monkeHome: home });
     const adoptedState = loadSessionState(home, adoptedRoot, "adopted");
@@ -1360,6 +1378,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     const detachedRoot = createRepo(path.join(sandbox, "detached-root"), {
       "README.md": "hello\n"
     });
+
     git(detachedRoot, ["switch", "--detach"]);
     runMonke({ args: ["spawn", "detached"], cwd: detachedRoot, monkeHome: home });
     const detachedStates = loadSessionState(home, detachedRoot, "detached");
@@ -1368,6 +1387,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     const defaultRoot = createRepo(path.join(sandbox, "default-root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "default", "--main"], cwd: defaultRoot, monkeHome: home });
     const defaultStates = loadSessionState(home, defaultRoot, "default");
     expect(defaultStates.repos[0]?.diffBaseRef).toBe("refs/heads/main");
@@ -1376,10 +1396,12 @@ mv "${replacementRepo}" "${racyWorktree}"`
   test("repeated Spawn and Materialize preserve an existing Diff base", () => {
     const sandbox = makeTempDir("diff-lifecycle-preservation");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     git(repoRoot, ["branch", "custom-base"]);
     runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
     const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
@@ -1405,9 +1427,11 @@ mv "${replacementRepo}" "${racyWorktree}"`
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), { "README.md": "root\n" });
+
     const dependency = createRepo(path.join(sandbox, "dependency"), {
       "README.md": "dependency\n"
     });
+
     const rootWorktree = getExpectedWorktreePath(home, root, "session");
     const dependencyWorktree = getExpectedWorktreePath(home, dependency, "session");
     git(root, ["worktree", "add", "-b", "session", rootWorktree]);
@@ -1456,9 +1480,11 @@ async function runDiffChild(options: {
   const indexUrl = new URL("../src/index.ts", import.meta.url).href;
   const runtimeUrl = new URL("runtime-fixture.ts", import.meta.url).href;
   const selected = `worktree:${options.baseWorktree}`;
+
   const childPath = [options.binDirectory, process.env.PATH ?? ""]
     .filter(Boolean)
     .join(path.delimiter);
+
   const script = `
 import { runCliAsync } from ${JSON.stringify(indexUrl)};
 import { createTestRuntime } from ${JSON.stringify(runtimeUrl)};
@@ -1474,6 +1500,7 @@ await runCliAsync(["diff", "--pick"], createTestRuntime({
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
     });
+
     let stderr = "";
     child.stderr.setEncoding("utf-8");
     child.stderr.on("data", (chunk: string) => {

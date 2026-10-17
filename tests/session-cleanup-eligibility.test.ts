@@ -29,11 +29,14 @@ function fixture() {
   sandboxes.push(sandbox);
   const home = path.join(sandbox, "home");
   const root = createRepo(path.join(sandbox, "root"), { "tracked.txt": "root\n" });
+
   const dependency = createRepo(path.join(sandbox, "dependency"), {
     "tracked.txt": "dependency\n"
   });
+
   const session = "feature/finished";
   const sources = [dependency, root];
+
   for (const source of sources) {
     git(source, [
       "remote",
@@ -44,6 +47,7 @@ function fixture() {
     git(source, ["worktree", "add", "-b", session, getExpectedWorktreePath(home, source, session)]);
     ageWorktree(getExpectedWorktreePath(home, source, session));
   }
+
   const state: SessionState = {
     generation: { number: 1, status: "complete" },
     repos: sources.map((sourceRoot) => ({
@@ -58,18 +62,21 @@ function fixture() {
     session,
     version: 2
   };
+
   saveSessionState(home, state);
   const rootPath = getExpectedWorktreePath(home, root, session);
   const dependencyPath = getExpectedWorktreePath(home, dependency, session);
   // The Root has exact PR proof; the dependency has only default ancestry proof.
   const rootHead = git(rootPath, ["rev-parse", "HEAD"]);
   const baseRuntime = createTestRuntime({ cwd: root, env: { MONKE_HOME: home } });
+
   const runtime: Runtime = {
     ...baseRuntime,
     exec(command, args, options) {
       expect(command).toBe("git");
       expect(options?.env).toMatchObject({ GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" });
       expect(args).toContain("core.fsmonitor=false");
+
       return baseRuntime.exec(command, args, options);
     },
     async execAsync(command, args) {
@@ -78,6 +85,7 @@ function fixture() {
       const endpoint = args?.[1] ?? "";
       const repo = endpoint.includes("owner/dependency") ? "dependency" : "root";
       const source = repo === "root" ? root : dependency;
+
       const value = (() => {
         if (endpoint.includes("/git/ref/heads/")) {
           return { object: { sha: git(source, ["rev-parse", "main"]) } };
@@ -99,11 +107,14 @@ function fixture() {
         } else if (endpoint.includes("/compare/")) {
           return { behind_by: 1, merge_base_commit: { sha: rootHead }, status: "diverged" };
         }
+
         return { default_branch: "main", full_name: `owner/${repo}` };
       })();
+
       return { exitCode: 0, stderr: "", stdout: JSON.stringify(value) };
     }
   };
+
   return { dependency, dependencyPath, home, root, rootPath, runtime, sandbox, state };
 }
 
@@ -112,17 +123,21 @@ function nestedChild(f: ReturnType<typeof fixture>, childSource: string) {
   writeFileSync(path.join(f.root, ".git/info/exclude"), "child/\n");
   git(childSource, ["worktree", "add", "-b", "child-branch", child]);
   write(child, "unfinished.txt", "child work\n");
+
   return child;
 }
 
 async function decisionFor(f: ReturnType<typeof fixture>) {
   const report = await inspectSessionCleanup(f.runtime, f.home);
+
   const result = report.sessions.find(
     (row) => row.snapshot.session === f.state.session && row.snapshot.rootSourceRoot === f.root
   );
+
   if (!result) {
     throw new Error("Expected Session missing from report");
   }
+
   return result;
 }
 
@@ -149,14 +164,17 @@ describe("whole-Session read-only eligibility", () => {
     "a %s dependency blocks the entire Session",
     async (kind) => {
       const f = fixture();
+
       if (kind === "dirty" || kind === "unique-commit") {
         write(f.dependencyPath, "tracked.txt", "unfinished\n");
+
         if (kind === "unique-commit") {
           git(f.dependencyPath, ["commit", "-am", "unfinished"]);
         }
       } else {
         git(f.dependency, ["worktree", "lock", f.dependencyPath]);
       }
+
       const result = await decisionFor(f);
       expect(result.decision.eligible).toBeFalsy();
     }
@@ -173,16 +191,20 @@ describe("whole-Session read-only eligibility", () => {
   test("two Session records claiming one dependency block both owners", async () => {
     const f = fixture();
     const [dependencyRepo] = f.state.repos;
+
     if (!dependencyRepo) {
       throw new Error("Missing fixture dependency");
     }
+
     saveSessionState(f.home, { ...f.state, repos: [dependencyRepo], rootSourceRoot: f.dependency });
     const report = await inspectSessionCleanup(f.runtime, f.home);
     expect(report.sessions).toHaveLength(2);
+
     for (const row of report.sessions) {
       expect(row.decision.eligible).toBeFalsy();
       expect(row.decision.reasons).toContain("ownership-conflict");
     }
+
     // Same Session name on both records: the message must name the other Root to be useful.
     const rootRow = report.sessions.find((row) => row.snapshot.rootSourceRoot === f.root);
     expect(rootRow?.snapshot.problems?.[0]?.message).toContain(
@@ -198,10 +220,13 @@ describe("whole-Session read-only eligibility", () => {
       if (args?.includes("worktree") && args.includes("list")) {
         listings.push(options?.cwd ?? "");
       }
+
       return original(command, args, options);
     };
+
     const result = await decisionFor(f);
     expect(result.decision.eligible).toBeTruthy();
+
     // One collection pass, one post-provider recheck pass, and one unowned-worktree discovery.
     for (const source of [f.root, f.dependency]) {
       expect(listings.filter((cwd) => cwd === source)).toHaveLength(3);
@@ -213,6 +238,7 @@ describe("whole-Session read-only eligibility", () => {
     async (overlap) => {
       const f = fixture();
       const otherRoot = overlap ? f.dependency : path.join(f.sandbox, "unrelated");
+
       const corrupt = {
         ...f.state,
         repos: [
@@ -225,6 +251,7 @@ describe("whole-Session read-only eligibility", () => {
         session: "broken",
         version: 1
       };
+
       writeFileSync(path.join(f.home, "sessions", "corrupt.yml"), stringify(corrupt));
       const report = await inspectSessionCleanup(f.runtime, f.home);
       const valid = report.sessions.find((row) => row.snapshot.session === f.state.session);
@@ -249,6 +276,7 @@ describe("whole-Session read-only eligibility", () => {
     "%s blocks a finished Session",
     async (kind) => {
       const f = fixture();
+
       if (kind === "hold") {
         saveSessionState(f.home, { ...f.state, cleanupHold: true });
       } else if (kind === "operation-lock") {
@@ -257,6 +285,7 @@ describe("whole-Session read-only eligibility", () => {
         const original = f.runtime.execAsync;
         f.runtime.execAsync = async (command, args, options) => {
           const result = await original(command, args, options);
+
           if (args?.[1]?.includes("owner/root/pulls?")) {
             if (kind === "state-change") {
               saveSessionState(f.home, { ...f.state, cleanupHold: true });
@@ -264,9 +293,11 @@ describe("whole-Session read-only eligibility", () => {
               write(f.dependencyPath, "late.txt", "work arrived during Root lookup\n");
             }
           }
+
           return result;
         };
       }
+
       const result = await decisionFor(f);
       expect(result.decision.eligible).toBeFalsy();
     }
@@ -280,20 +311,25 @@ describe("whole-Session read-only eligibility", () => {
     let injected = false;
     f.runtime.exec = (command, args, options) => {
       const result = original(command, args, options);
+
       if (args?.includes("status")) {
         if (options?.cwd === f.dependencyPath) {
           dependencyStatuses += 1;
         }
+
         if (options?.cwd === f.rootPath) {
           rootStatuses += 1;
         }
+
         if (!injected && dependencyStatuses >= 2 && rootStatuses >= 2) {
           write(f.dependencyPath, "late.txt", "new work after dependency inspection\n");
           injected = true;
         }
       }
+
       return result;
     };
+
     const result = await decisionFor(f);
     expect(injected).toBeTruthy();
     expect(result.decision.eligible).toBeFalsy();
@@ -332,15 +368,19 @@ describe("whole-Session read-only eligibility", () => {
     const original = f.runtime.execAsync;
     f.runtime.execAsync = async (command, args, options) => {
       const result = await original(command, args, options);
+
       if (args?.[1]?.includes("owner/root/pulls?")) {
         await new Promise<void>((resolve) => {
           setTimeout(resolve, 20);
         });
         write(f.dependencyPath, "late.txt", "new work\n");
+
         return { ...result, stdout: "[[]]" };
       }
+
       return result;
     };
+
     const result = await decisionFor(f);
     expect(result.decision.reasons).toContain("member-changed-during-inspection");
     const report = createSessionCleanupReport(result.snapshot);
@@ -355,11 +395,14 @@ describe("whole-Session read-only eligibility", () => {
     const original = f.runtime.execAsync;
     f.runtime.execAsync = async (command, args, options) => {
       const result = await original(command, args, options);
+
       if (args?.[1]?.includes("owner/root/pulls?")) {
         writeFileSync(path.join(admin, "HEAD"), "ref: refs/heads/different\n");
       }
+
       return result;
     };
+
     const result = await decisionFor(f);
     expect(result.decision.eligible).toBeFalsy();
     expect(result.decision.reasons).toContain("member-changed-during-inspection");
@@ -369,14 +412,17 @@ describe("whole-Session read-only eligibility", () => {
     const f = fixture();
     const child = nestedChild(f, f.root);
     const rootRepo = f.state.repos.find((repo) => repo.sourceRoot === f.root);
+
     if (!rootRepo) {
       throw new Error("Missing Root fixture");
     }
+
     const childState = {
       ...f.state,
       repos: [{ ...rootRepo, worktreePath: child }],
       session: `${f.state.session}/child`
     };
+
     saveSessionState(f.home, childState);
     const owned = await decisionFor(f);
     expect(owned.decision.reasons).toContain("ownership-conflict");
@@ -386,6 +432,7 @@ describe("whole-Session read-only eligibility", () => {
     );
     const unowned = await decisionFor(f);
     expect(unowned.decision.reasons).toContain("ownership-conflict");
+
     for (const force of [false, true]) {
       expect(() =>
         preflightWorktreeRemoval(createTestRuntime({ cwd: f.root }), f.root, f.rootPath, { force })

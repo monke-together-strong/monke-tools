@@ -35,6 +35,7 @@ function simulateDeveloperGitEnvironment(sandbox: string) {
   write(xdgConfig, "git/attributes", "*.txt developer-attribute\n");
   write(sandbox, "global-config", config);
   write(sandbox, "system-config", config);
+
   for (const [key, value] of Object.entries({
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_GLOBAL: globalConfig,
@@ -59,6 +60,7 @@ describe("Git test environment", () => {
   test("fixtures ignore developer signing, hooks, ignores and injected Git settings", () => {
     const sandbox = makeTempDir("git-environment-fixtures");
     simulateDeveloperGitEnvironment(sandbox);
+
     const repoRoot = createConfiguredRepo(path.join(sandbox, "repo"), {
       ".gitattributes": "*.txt fixture-attribute\n",
       "fixture.txt": "tracked fixture\n"
@@ -83,9 +85,11 @@ describe("Git test environment", () => {
     async (mode) => {
       const sandbox = makeTempDir(`git-environment-${mode}`);
       simulateDeveloperGitEnvironment(sandbox);
+
       const repoRoot = createConfiguredRepo(path.join(sandbox, "repo"), {
         "fixture.txt": "tracked fixture\n"
       });
+
       const localHooks = path.join(sandbox, "local-hooks");
       writeExecutable(
         path.join(localHooks, "post-checkout"),
@@ -93,6 +97,7 @@ describe("Git test environment", () => {
       );
       git(repoRoot, ["config", "core.hooksPath", localHooks]);
       write(repoRoot, "dirty.txt", "untracked work\n");
+
       const options = {
         args: ["spawn", "isolated"],
         cwd: repoRoot,
@@ -106,6 +111,7 @@ describe("Git test environment", () => {
       } else {
         const worker = spawnMonkeWorker(options);
         const exitCode = await worker.exited;
+
         if (exitCode !== 0) {
           throw new Error(`mt worker exited with ${exitCode}`);
         }

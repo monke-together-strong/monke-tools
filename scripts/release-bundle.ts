@@ -22,6 +22,7 @@ import { verifyReleaseArchive } from "../src/release-contract.ts";
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 
 const program = new Command().name("release-bundle").allowExcessArguments(false);
+
 configureCliParser(program);
 
 program
@@ -37,6 +38,7 @@ program
       sourceCommit: options.sourceCommit,
       version: options.version
     });
+
     process.stdout.write(`${archivePath}\n`);
   });
 

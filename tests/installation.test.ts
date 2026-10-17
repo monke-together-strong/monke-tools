@@ -46,6 +46,7 @@ describe("versioned installation lifecycle", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const candidate = prepareReleaseBundle(sandbox);
     const importedSkill = "---\nname: legacy\ndescription: Legacy bundled skill.\n---\nAccepted.\n";
+
     const legacyLock = `${JSON.stringify({
       recipes: [
         {
@@ -64,6 +65,7 @@ describe("versioned installation lifecycle", () => {
       ],
       version: 3
     })}\n`;
+
     write(candidate.bundleRoot, "skills.lock.json", legacyLock);
     write(candidate.bundleRoot, "skills/imported/legacy/SKILL.md", importedSkill);
     write(
@@ -119,13 +121,16 @@ describe("versioned installation lifecycle", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
     const legacyLock = '{"recipes":[],"version":3}\n';
+
     const manifest = ReleaseInstallManifestSchema.parse(
       JSON.parse(readFileSync(path.join(installRoot, "install-manifest.json"), "utf-8"))
     );
+
     manifest.guidanceHashes["skills.lock.json"] = hash("sha256", legacyLock, "hex");
     write(installRoot, "skills.lock.json", legacyLock);
     write(installRoot, "install-manifest.json", `${JSON.stringify(manifest)}\n`);
     let stderr = "";
+
     const runtime = createTestRuntime({
       architecture: "x64",
       cwd: sandbox,
@@ -166,17 +171,21 @@ describe("versioned installation lifecycle", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     prepareSource(sourceCheckout);
     createRepo(sourceCheckout, { "monke.yml": "skills: []\n" });
+
     const runtime = createTestRuntime({
       cwd: sourceCheckout,
       env: { HOME: home, MONKE_HOME: monkeHome },
       onStderr() {},
       onStdout() {}
     });
+
     const upstream = createRepo(path.join(sandbox, "upstream"), {
       "alpha/SKILL.md": "---\nname: alpha\ndescription: Lifecycle fixture\n---\n\nAccepted one.\n"
     });
+
     const originalCwd = process.cwd();
     const originalMonkeHome = process.env.MONKE_HOME;
+
     try {
       process.chdir(sourceCheckout);
       process.env.MONKE_HOME = monkeHome;
@@ -305,6 +314,7 @@ describe("versioned installation lifecycle", () => {
     });
 
     const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+
     const projectedSkill = path.join(
       home,
       ".codex",
@@ -314,6 +324,7 @@ describe("versioned installation lifecycle", () => {
       "example",
       "SKILL.md"
     );
+
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.3-linux-x64")
     );
@@ -520,6 +531,7 @@ describe("versioned installation lifecycle", () => {
       const release = prepareReleaseBundle(sandbox);
       const configDirectory = path.join(home, ".codex");
       const instructionsPath = path.join(home, ".codex", "AGENTS.md");
+
       if (unwritablePathKind === "destination") {
         write(home, ".codex/AGENTS.md", "User instructions.\n");
         chmodSync(instructionsPath, 0o444);
@@ -588,6 +600,7 @@ describe("versioned installation lifecycle", () => {
         skillInstallPreference: { targets: [{ kind: "claude" }] },
         version: 1
       });
+
       if (instructionState === "unmanaged") {
         write(home, ".claude/CLAUDE.md", "User instructions.\n");
         chmodSync(instructionsPath, 0o444);
@@ -1050,17 +1063,20 @@ skillInstallPreference:
         "personal/SKILL.md",
         "---\nname: personal\ndescription: Personal skill\n---\nPersonal instructions.\n"
       );
+
       const runtime = createTestRuntime({
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome },
         onStderr() {},
         onStdout() {}
       });
+
       await runCliAsync(["skills", "add", personal], runtime);
       const registryLink = path.join(monkeHome, "skill-registry/skills/internal");
       const previousLink = readlinkSync(registryLink);
       const candidate = path.join(sandbox, "candidate");
       prepareSource(candidate);
+
       if (scenario === "removed bundled import") {
         // The registry's selection is authoritative, even when the candidate still bundles this slug.
         write(
@@ -1070,6 +1086,7 @@ skillInstallPreference:
         );
         write(home, ".claude/skills/obsolete/SKILL.md", "User-owned obsolete skill.\n");
       }
+
       if (scenario === "personal target") {
         rmSync(path.join(home, ".claude/skills/personal"));
         write(home, ".claude/skills/personal/SKILL.md", "User-owned personal skill.\n");
@@ -1080,14 +1097,17 @@ skillInstallPreference:
           "---\nname: personal\n---\nNew owned skill.\n"
         );
       }
+
       const protectedEntry = path.join(
         home,
         ".claude/skills",
         scenario === "removed bundled import" ? "obsolete" : "personal",
         "SKILL.md"
       );
+
       const protectedBytes = readFileSync(protectedEntry, "utf-8");
       let outcome = "activated";
+
       try {
         await activateLocal({
           home,
@@ -1099,6 +1119,7 @@ skillInstallPreference:
       } catch (error) {
         outcome = errorMessage(ThrownValueSchema.parse(error));
       }
+
       const succeeds = scenario === "removed bundled import";
       expect(outcome).toMatch(succeeds ? /^activated$/u : /preflight failed/u);
       expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
@@ -1123,12 +1144,14 @@ skillInstallPreference:
       await activateLocal({ home, installId: "local-first", monkeHome, sourceCheckout });
       const personal = path.join(sandbox, "personal-source");
       write(personal, "personal/SKILL.md", "---\nname: personal\n---\nPersonal instructions.\n");
+
       const runtime = createTestRuntime({
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome },
         onStderr() {},
         onStdout() {}
       });
+
       await runCliAsync(["skills", "add", personal, "--link", "--command", "exit 42"], runtime);
       await runCliAsync(
         ["skills", "policy", "personal-source", "--model-invocation", "deny"],
@@ -1153,13 +1176,17 @@ skillInstallPreference:
         ],
         version: 4
       });
+
       for (const recipe of readImportRecipeStore(sourceCheckout).recipes) {
         rememberRestoredRecipe(sourceCheckout, recipe);
       }
+
       if (scenario === "provider collision") {
         write(home, ".claude/skills/bundled/SKILL.md", "User-owned skill.\n");
       }
+
       let outcome = "activated";
+
       try {
         await activateLocal({
           home,
@@ -1171,6 +1198,7 @@ skillInstallPreference:
       } catch (error) {
         outcome = errorMessage(ThrownValueSchema.parse(error));
       }
+
       const succeeds = scenario === "retained imports";
       expect(outcome).toMatch(
         succeeds
@@ -1193,6 +1221,7 @@ skillInstallPreference:
       expect(readFileSync(path.join(personal, "personal/SKILL.md"), "utf-8")).toContain(
         "disable-model-invocation: true"
       );
+
       for (const relative of [
         ".claude/skills",
         ".codex/skills/monke-tools/imported",
@@ -1294,9 +1323,11 @@ skillInstallPreference:
         if (collisionInjected || !existsSync(path.join(monkeHome, "current"))) {
           return;
         }
+
         if (readlinkSync(path.join(monkeHome, "current")) !== path.join("installs", installId)) {
           return;
         }
+
         mkdirSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"), {
           recursive: true
         });
@@ -1349,6 +1380,7 @@ skillInstallPreference:
       onStdout() {},
       toolInstallRoot: fixedToolAlias
     });
+
     await activateLocal({
       home,
       installId: "local-second",

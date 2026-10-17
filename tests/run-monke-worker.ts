@@ -1,5 +1,6 @@
 // SAFETY: The parent test process sets this from its NodeJS.Platform-valued process.platform.
 const platform = process.env.MONKE_TEST_PLATFORM as NodeJS.Platform | undefined;
+
 if (platform !== undefined) {
   Object.defineProperty(process, "platform", { value: platform });
 }

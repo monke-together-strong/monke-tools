@@ -49,6 +49,7 @@ const ResourceCommandInputSchema = z.record(z.string(), z.array(z.string()));
 describe("resource commands", () => {
   test("Spawn honors an existing Resource command lock through the async production seam", async () => {
     const releaseMarker = "resource-lock-released";
+
     const scenario = createResourceCommandScenario({
       module: `import { existsSync } from "node:fs";
 
@@ -61,16 +62,19 @@ export default function () {
 `,
       name: "single-repo-resource-command-async-lock"
     });
+
     const lockPath = path.join(
       scenario.home,
       "locks",
       `${hashKey(`resource-command\u0000${scenario.repoRoot}\u0000e2e-symbols`)}.lock`
     );
+
     write(
       scenario.home,
       path.relative(scenario.home, lockPath),
       JSON.stringify({ acquiredAt: Date.now(), pid: process.pid })
     );
+
     const release = setTimeout(() => {
       write(scenario.sandbox, releaseMarker, "released\n");
       rmSync(lockPath, { force: true });
@@ -122,6 +126,7 @@ export default function ({ previous }) {
     });
     expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
     expect(scenario.readWorktree("banana", "apps/api/.env.local")).toBe("PORT=10000\n");
+
     const executed = runMonke({
       args: [
         "resources",
@@ -134,6 +139,7 @@ export default function ({ previous }) {
       cwd: worktreeRoot,
       monkeHome: scenario.home
     });
+
     expect(executed.stdout).toBe("SOL/USDT:USDT:LINK/USDT:USDT");
 
     expect(scenario.recordedCommands("banana")).toMatchObject([
@@ -153,6 +159,7 @@ export default function ({ previous }) {
     installShShim(binDirectory);
     installFakePnpmBootstrapper(binDirectory);
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": withDefaultApp(`bootstrapCommand: pnpm install
@@ -239,6 +246,7 @@ export default function ({ previous }) {
       // oxlint-disable-next-line no-template-curly-in-string
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
+
     saveSessionState(
       scenario.home,
       completeSessionState({
@@ -269,6 +277,7 @@ export default function ({ previous }) {
     const secondInput = ResourceCommandInputSchema.parse(
       JSON.parse(scenario.readWorktree("second", "command-stdin.json"))
     );
+
     expect(Object.keys(secondInput)).toStrictEqual(["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]);
     expect(secondInput).toStrictEqual({
       E2E_FLOW1_SYMBOL: ["SOL/USDT:USDT"],
@@ -292,6 +301,7 @@ export default function ({ previous }) {
       name: "single-repo-resource-command-input-dedupe",
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
+
     saveSessionState(scenario.home, {
       generation: { number: 1, status: "complete" },
       repos: [
@@ -381,6 +391,7 @@ export default function ({ previous }) {
     const input = ResourceCommandInputSchema.parse(
       JSON.parse(scenario.readWorktree("current", "command-stdin.json"))
     );
+
     expect(input.E2E_FLOW1_SYMBOL?.toSorted()).toStrictEqual(["SOL/USDT:USDT"]);
     expect(input.E2E_FLOW2_SYMBOL?.toSorted()).toStrictEqual(["NEAR/USDT:USDT"]);
     expect(JSON.stringify(input)).not.toContain("DETERMINISTIC_SHOULD_NOT_APPEAR");
@@ -467,6 +478,7 @@ export default function ({ previous }) {
       name: "single-repo-resource-command-cross-output",
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
+
     saveSessionState(scenario.home, {
       generation: { number: 1, status: "complete" },
       repos: [
@@ -591,6 +603,7 @@ export default function ({ previous }) {
 `,
       name: "single-repo-resource-command-cleanup-boundary"
     });
+
     saveSessionState(scenario.home, {
       generation: { number: 1, status: "complete" },
       repos: [
@@ -963,11 +976,13 @@ function isDirectExecution(importMetaUrl) {
     });
 
     let message = "";
+
     try {
       scenario.spawn("banana", { SECRET_STDOUT: "secret stdout" });
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
+
     expect(message).toMatch(
       /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*Resource command stderr/u
     );
@@ -1013,6 +1028,7 @@ function createResourceCommandScenario(options: {
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
   const moduleFiles = options.module ? { [moduleFilePath(options.run)]: options.module } : {};
+
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": options.appEnv ?? "PORT=3000\n",
     "monke.yml": options.monkeYml ?? singleCommandMonkeYml(options),
@@ -1082,7 +1098,9 @@ function singleCommandMonkeYml(options: {
   const resourceValues = options.resourceValuesYaml
     ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
     : "";
+
   const outputs = options.outputs ?? ["E2E_FLOW1_SYMBOL"];
+
   return withDefaultApp(`resources:
 ${resourceValues}  commands:
     ${options.commandName ?? "e2e-symbols"}:
@@ -1118,6 +1136,7 @@ function defaultAppYaml() {
 
 function indentBlock(value: string, spaces: number) {
   const indentation = " ".repeat(spaces);
+
   return value
     .split("\n")
     .map((line) => `${indentation}${line}`)

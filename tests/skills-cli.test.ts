@@ -109,6 +109,7 @@ describe("skills CLI", () => {
       skillInstallPreference: { targets: [{ kind: "codex" }] },
       version: 1
     });
+
     const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -116,6 +117,7 @@ describe("skills CLI", () => {
       onStderr() {},
       onStdout() {}
     });
+
     await runCliAsync(["skills", "add", source], runtime);
     await runCliAsync(
       ["skills", "policy", "private-skills", "--model-invocation", "deny"],
@@ -370,6 +372,7 @@ describe("skills CLI", () => {
       onStderr() {},
       onStdout() {}
     });
+
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
       runtime
@@ -426,6 +429,7 @@ describe("skills CLI", () => {
         operation === "refresh"
           ? `Personal guidance.\n${managedInstructions("Updated team baseline.\n")}Following guidance.\n`
           : "Personal guidance.\nFollowing guidance.\n";
+
       expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(expected);
     }
   );
@@ -479,6 +483,7 @@ describe("skills CLI", () => {
     writeSkillSource(sourceCheckout);
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
     selectActiveLocalInstall(monkeHome, sourceCheckout);
+
     const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -514,6 +519,7 @@ describe("skills CLI", () => {
       writeSkillSource(sourceCheckout);
       write(osHome, ".codex/AGENTS.md", userGuidance);
       selectActiveLocalInstall(monkeHome, sourceCheckout);
+
       const runtime = createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
@@ -542,6 +548,7 @@ describe("skills CLI", () => {
     writeSkillSource(sourceCheckout);
     write(osHome, ".codex/AGENTS.md", "");
     selectActiveLocalInstall(monkeHome, sourceCheckout);
+
     const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -632,6 +639,7 @@ describe("skills CLI", () => {
     write(osHome, ".codex/.keep", "\n");
     symlinkSync(dotfileTarget, destinationPath);
     selectActiveLocalInstall(monkeHome, sourceCheckout);
+
     const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -657,6 +665,7 @@ describe("skills CLI", () => {
       const destinationPath = path.join(codexHome, "AGENTS.md");
       writeSkillSource(sourceCheckout);
       write(codexHome, ".keep", "\n");
+
       if (symlinkState === "broken") {
         symlinkSync("missing.md", destinationPath);
       } else if (symlinkState === "cyclic") {
@@ -666,6 +675,7 @@ describe("skills CLI", () => {
         write(codexHome, "directory-target/.keep", "\n");
         symlinkSync(path.join(codexHome, "directory-target"), destinationPath, "dir");
       }
+
       selectActiveLocalInstall(monkeHome, sourceCheckout);
 
       await expect(
@@ -741,6 +751,7 @@ describe("skills CLI", () => {
     let stderr = "";
     let installationLockObserved = false;
     let prompt: MultiSelectPrompt | undefined;
+
     const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),

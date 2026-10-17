@@ -11,6 +11,7 @@ const repositoryRoot = path.resolve(import.meta.dirname, "..");
 function tegamiPackages() {
   const source = readFileSync(path.join(repositoryRoot, "scripts/tegami.mts"), "utf-8");
   const block = /packages:\s*\{(?<body>[\s\S]*?)\n {2}\}/u.exec(source)?.groups?.body ?? "";
+
   return new Set([...block.matchAll(/"(?<name>[^"]+)":/gu)].map((match) => match.groups?.name));
 }
 
@@ -22,6 +23,7 @@ const FrontmatterSchema = z.object({
 
 describe("Tegami release entries", () => {
   const published = tegamiPackages();
+
   const entries = readdirSync(path.join(repositoryRoot, ".tegami")).filter((name) =>
     name.endsWith(".md")
   );
@@ -35,6 +37,7 @@ describe("Tegami release entries", () => {
     const frontmatter = /^---\n(?<yaml>[\s\S]*?)\n---(?:\n|$)/u.exec(text)?.groups?.yaml;
     expect(frontmatter, "missing frontmatter").toBeDefined();
     const { packages } = FrontmatterSchema.parse(parse(frontmatter ?? ""));
+
     for (const name of Object.keys(packages)) {
       expect(published, `${entry} names ${name}, which Tegami does not publish`).toContain(name);
     }

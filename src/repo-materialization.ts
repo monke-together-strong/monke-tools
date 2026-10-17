@@ -79,6 +79,7 @@ type RepoMaterializationProgressCheckpoint = Exclude<
 
 export async function materializeRepo(options: MaterializeRepoOptions) {
   const unlock = acquireCheckoutResourceLock(options.store.home, options.worktreePath);
+
   try {
     return await materializeRepoLocked(options);
   } finally {
@@ -106,9 +107,11 @@ async function materializeRepoLocked(options: MaterializeRepoOptions) {
 
 function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterializationContext {
   const resourceStore = new CheckoutResourceStore(options.store.home, options.store.list());
+
   const resources = resourceStore.get(
     resourceOwner(options.repoConfig.sourceRoot, options.worktreePath, options.session)
   );
+
   const context = {
     ...options,
     diffBaseRef: options.diffBaseRef || options.existingState?.diffBaseRef,
@@ -130,6 +133,7 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
     resources,
     resourceStore
   };
+
   resources.resourceValues = context.resolvedResourceValues.values;
   resourceStore.save(resources);
   persistRepoMaterializationState(
@@ -140,6 +144,7 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
     },
     "repo-progress"
   );
+
   return context;
 }
 
@@ -147,6 +152,7 @@ async function resolveCommandsBeforeAssignments(context: RepoMaterializationCont
   if (context.hasBootstrapCommand) {
     return;
   }
+
   return await resolveRepoResourceCommands(context, context.existingState?.assignedPorts ?? []);
 }
 
@@ -154,15 +160,18 @@ function resolveRepoAssignments(
   context: RepoMaterializationContext
 ): RepoMaterializationAssignments {
   const { baselinePortsRoot, dependencyResults, existingState, repoConfig, store } = context;
+
   const reservation = getOrCreateReservation(
     store.home,
     repoConfig.sourceRoot,
     repoConfig.localPortOrder.length
   );
+
   const baselinePorts = collectBaselinePortsFromRoot({
     config: repoConfig,
     sourceRoot: baselinePortsRoot
   });
+
   const localAssignments = allocateLocalPorts({
     baselinePorts,
     existingRepoState: existingState,
@@ -172,8 +181,10 @@ function resolveRepoAssignments(
     session: context.session,
     store
   });
+
   const externalAssignments = resolveExternalAssignments(repoConfig, dependencyResults);
   rewriteManagedEnvFiles(repoConfig, context.worktreePath, localAssignments, externalAssignments);
+
   return {
     externalAssignments,
     externalPathAssignments: resolveExternalPathAssignments(
@@ -193,12 +204,14 @@ async function runRepoMaterializationCommands(
 ) {
   const { repoConfig, resolvedResourceValues, worktreePath } = context;
   let commands = resolvedCommands;
+
   const rootEnvAssignmentsBeforeCommands = [
     ...assignments.externalPathAssignments,
     ...toRootEnvAssignments(assignments.localAssignedPorts),
     ...toRootEnvAssignments(dedupeAssignedPorts(assignments.externalAssignments)),
     ...resolvedResourceValues.values
   ];
+
   const existingResourceCommandEnvNames = [
     ...new Set([
       ...toResourceCommandEnvNames(context.resources.resourceCommandOutputs),
@@ -224,6 +237,7 @@ async function runRepoMaterializationCommands(
     );
     commands = await resolveRepoResourceCommands(context, assignments.localAssignedPorts);
   }
+
   if (!commands) {
     throw new MonkeError(`Resource commands were not resolved for ${repoConfig.sourceRoot}`);
   }
@@ -251,12 +265,14 @@ function resolveRepoResourceCommands(
     onResolvedCommandOutputs(resourceCommandOutputs) {
       context.resources.resourceCommandOutputs = resourceCommandOutputs;
       delete context.resources.releasedLegacyCleanup;
+
       if (
         resourceCommandOutputs.some((command) => command.legacy) &&
         context.repoConfig.cleanupCommand
       ) {
         context.resources.legacyCleanupCommand ??= context.repoConfig.cleanupCommand;
       }
+
       context.resourceStore.save(context.resources);
       persistRepoMaterializationState(
         context,
@@ -284,6 +300,7 @@ function establishReplacementCleanupAuthority(
   if (context.replacementCleanupAuthorityEstablished) {
     return;
   }
+
   context.replacementCleanupAuthorityEstablished = true;
   persistRepoMaterializationState(
     context,
@@ -316,6 +333,7 @@ function createRepoMaterializationState(
   }
 ) {
   const cleanupAuthority = resolveCleanupAuthority(context, state);
+
   return buildSessionRepoState({
     ...state,
     ...cleanupAuthority,
@@ -336,15 +354,18 @@ function resolveCleanupAuthority(
     context.existingState?.cleanupEligible === true &&
     context.existingState.cleanupCommand !== undefined &&
     !context.replacementCleanupAuthorityEstablished;
+
   if (retainExistingAuthority) {
     return {
       cleanupCommand: context.existingState?.cleanupCommand,
       cleanupEligible: true
     };
   }
+
   const retainExistingCleanupCommand =
     context.existingState?.cleanupEligible === true &&
     !context.replacementCleanupAuthorityEstablished;
+
   return {
     cleanupCommand: retainExistingCleanupCommand
       ? context.existingState?.cleanupCommand
@@ -369,8 +390,10 @@ function resolveExternalAssignments(
   dependencyResults: Map<string, RepoMaterializationResult>
 ) {
   const assignments: AssignedPort[] = [];
+
   for (const externalRepo of repoConfig.externalInOrder) {
     const dependency = dependencyResults.get(externalRepo.absoluteRepoRoot);
+
     if (!dependency) {
       throw new MonkeError(
         `Missing dependency materialization result for ${externalRepo.absoluteRepoRoot}`
@@ -379,14 +402,17 @@ function resolveExternalAssignments(
 
     for (const mapping of externalRepo.mappings) {
       const value = dependency.localAssignments.get(mapping.portKey);
+
       if (value === undefined) {
         throw new MonkeError(
           `Dependency ${externalRepo.absoluteRepoRoot} did not materialize local port ${mapping.portKey}`
         );
       }
+
       assignments.push({ key: mapping.portKey, value });
     }
   }
+
   return assignments;
 }
 
@@ -397,6 +423,7 @@ function resolveExternalPathAssignments(
 ) {
   return repoConfig.externalInOrder.map((externalRepo) => {
     const dependency = dependencyResults.get(externalRepo.absoluteRepoRoot);
+
     if (!dependency) {
       throw new MonkeError(
         `Missing dependency materialization result for ${externalRepo.absoluteRepoRoot}`
@@ -404,6 +431,7 @@ function resolveExternalPathAssignments(
     }
 
     const relativePath = path.relative(worktreePath, dependency.state.worktreePath) || ".";
+
     return {
       env: externalRepo.pathEnv,
       value: relativePath
@@ -420,9 +448,11 @@ function toRootEnvAssignments(assignments: AssignedPort[]) {
 
 function dedupeAssignedPorts(assignments: AssignedPort[]) {
   const deduped = new Map<string, AssignedPort>();
+
   for (const assignment of assignments) {
     deduped.set(assignment.key, assignment);
   }
+
   return [...deduped.values()];
 }
 
@@ -508,6 +538,7 @@ async function runBootstrapCommand(
   }
 
   createLogger(runtime).info(`Bootstrapping ${repoConfig.sourceRoot} in ${worktreePath}`);
+
   try {
     await runtime.execAsync("sh", ["-c", repoConfig.bootstrapCommand], {
       cwd: worktreePath,

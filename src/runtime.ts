@@ -39,12 +39,16 @@ const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
+
 type AsyncChildProcess = Bun.PipedSubprocess;
+
 type ManagedChild = Pick<Bun.Subprocess, "pid" | "kill">;
+
 const activeAsyncChildren = new Set<ManagedChild>();
 const foregroundChildren = new Set<ManagedChild>();
 const timedOutProcessGroups = new Map<number, ManagedChild>();
 const PARENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
+
 // Stable handler identities, so detaching removes exactly what attaching added.
 const PARENT_TERMINATION_HANDLERS = new Map<NodeJS.Signals, () => void>(
   PARENT_TERMINATION_SIGNALS.map((signal) => [
@@ -54,10 +58,12 @@ const PARENT_TERMINATION_HANDLERS = new Map<NodeJS.Signals, () => void>(
     }
   ])
 );
+
 let forwardedTerminationSignal: NodeJS.Signals | undefined;
 let parentExitScheduled = false;
 let terminationEscalated = false;
 const LockPidSchema = z.number().int().positive();
+
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
   pid: z.unknown().optional(),
@@ -65,6 +71,7 @@ const LockMetadataSchema = z.object({
   protectedGroup: LockPidSchema.optional(),
   protectedPids: z.array(LockPidSchema).optional()
 });
+
 const LockTimestampSchema = z.number();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
@@ -99,11 +106,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   // oxlint-disable-next-line node/no-process-env -- This adapter centralizes access to the process environment.
   const runtimeEnv = { ...process.env, ...options.env };
   const runtimeCwd = options.cwd ?? process.cwd();
+
   const writeStdout =
     options.writeStdout ??
     ((text: string) => {
       process.stdout.write(text);
     });
+
   const writeStderr =
     options.writeStderr ??
     ((text: string) => {
@@ -127,22 +136,27 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         placeholder: "Type to search...",
         required: prompt.required ?? true
       });
+
       if (isCancel(selected)) {
         throw new MonkeError(`${prompt.message} cancelled`);
       }
+
       return selected;
     },
     platform: options.platform ?? process.platform,
     readLine(prompt: string) {
       writeStdout(prompt);
+
       return readLineFromStdin();
     },
     releaseDistribution: options.releaseDistribution ?? createGitHubReleaseDistribution(runtimeEnv),
     async select(prompt) {
       const selected = await autocomplete({ ...prompt, placeholder: "Type to search..." });
+
       if (isCancel(selected)) {
         throw new MonkeError(`${prompt.message} cancelled`);
       }
+
       return selected;
     },
     sessionMaterializationBoundary: options.sessionMaterializationBoundary,
@@ -158,16 +172,19 @@ function createGitHubReleaseDistribution(
   env: Record<string, string | undefined>
 ): ReleaseDistribution {
   const repository = "monke-together-strong/monke-tools";
+
   const commonHeaders = {
     Accept: "application/vnd.github+json",
     "User-Agent": "monke-tools",
     "X-GitHub-Api-Version": "2022-11-28"
   };
+
   const token = env.GH_TOKEN || env.GITHUB_TOKEN;
   const headers = token ? { ...commonHeaders, Authorization: `Bearer ${token}` } : commonHeaders;
 
   const request = async (url: string) => {
     let response: Response;
+
     try {
       response = await fetch(url, {
         headers,
@@ -178,20 +195,24 @@ function createGitHubReleaseDistribution(
         `GitHub Release request failed: ${errorMessage(ThrownValueSchema.parse(error))}`
       );
     }
+
     if (!response.ok) {
       throw new MonkeError(`GitHub Release request failed with HTTP ${response.status}`);
     }
+
     return response;
   };
 
   return {
     async downloadReleaseAsset(url) {
       let parsedUrl: URL;
+
       try {
         parsedUrl = new URL(url);
       } catch {
         throw new MonkeError("GitHub Release asset URL is invalid");
       }
+
       if (
         parsedUrl.protocol !== "https:" ||
         parsedUrl.hostname !== "github.com" ||
@@ -199,6 +220,7 @@ function createGitHubReleaseDistribution(
       ) {
         throw new MonkeError("GitHub Release asset URL is not an approved repository download");
       }
+
       return await request(url);
     },
     async listReleases(page) {
@@ -206,12 +228,15 @@ function createGitHubReleaseDistribution(
         const response = await request(
           `https://api.github.com/repos/${repository}/releases?per_page=${RELEASE_CATALOG_PAGE_SIZE}&page=${page}`
         );
+
         const body: unknown = await response.json();
+
         return ReleaseCatalogPageSchema.parse(body);
       } catch (error) {
         if (error instanceof MonkeError) {
           throw error;
         }
+
         throw new MonkeError(
           `GitHub Release metadata is invalid: ${errorMessage(ThrownValueSchema.parse(error))}`
         );
@@ -234,6 +259,7 @@ function executeCommand(
   };
 
   let result: Bun.ReadableSyncSubprocess;
+
   try {
     result = Bun.spawnSync({
       cmd: [command, ...args],
@@ -252,6 +278,7 @@ function executeCommand(
       }
     );
   }
+
   return handleCompletedCommand(result, command, args, options?.allowFailure === true);
 }
 
@@ -267,6 +294,7 @@ function executeCommandAsync(
       new MonkeError("Cannot start a command while the process is terminating")
     );
   }
+
   const childEnv = {
     ...runtimeEnv,
     ...options?.env,
@@ -282,7 +310,9 @@ function executeCommandAsync(
     if (activeAsyncChildren.size === 0 && timedOutProcessGroups.size === 0) {
       attachParentTerminationHandlers();
     }
+
     let child: AsyncChildProcess;
+
     try {
       child = Bun.spawn({
         cmd: [command, ...args],
@@ -303,8 +333,10 @@ function executeCommandAsync(
           }
         )
       );
+
       return;
     }
+
     new AsyncCommandExecution(child, command, args, options, resolve, reject).start();
   });
 }
@@ -319,8 +351,10 @@ async function executeForeground(
   if (activeAsyncChildren.size === 0) {
     attachParentTerminationHandlers();
   }
+
   let child: ManagedChild | undefined;
   const foreground = prepareForegroundCommand(command, args);
+
   try {
     const spawned = Bun.spawn({
       cmd: [foreground.command, ...foreground.args],
@@ -333,9 +367,11 @@ async function executeForeground(
       stdin: "inherit",
       stdout: "inherit"
     });
+
     child = spawned;
     foregroundChildren.add(child);
     registerAsyncChild(child);
+
     try {
       options.protectProcessGroup?.(spawned.pid);
       spawned.send("start");
@@ -344,17 +380,21 @@ async function executeForeground(
       await spawned.exited;
       throw error;
     }
+
     const exitCode = await spawned.exited;
     // The leader can exit on a terminal signal while a descendant ignores it.
     terminateChildProcessTree(spawned.pid, "SIGKILL", () => {
       // The direct child has exited; only surviving group members need termination.
     });
+
     return { exitCode, stderr: "", stdout: "" };
   } finally {
     foreground.restore();
+
     if (child) {
       unregisterAsyncChild(child);
     }
+
     detachParentTerminationHandlersIfIdle();
   }
 }
@@ -396,6 +436,7 @@ class AsyncCommandExecution {
       if (this.#timedOut) {
         return;
       }
+
       this.rejectOnce(
         new MonkeError(
           `Failed to run ${formatCommand(this.command, this.args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
@@ -417,6 +458,7 @@ class AsyncCommandExecution {
     if (this.#timeout !== undefined) {
       clearTimeout(this.#timeout);
     }
+
     if (this.#forceKill !== undefined) {
       clearTimeout(this.#forceKill);
     }
@@ -427,9 +469,11 @@ class AsyncCommandExecution {
       this.child.kill("SIGKILL");
     });
     await Promise.allSettled([this.child.exited, this.#output, this.#input]);
+
     if (this.child.pid !== undefined) {
       timedOutProcessGroups.delete(this.child.pid);
     }
+
     unregisterAsyncChild(this.child);
     this.settleTimeout();
     finishParentTerminationAfterEscalation();
@@ -441,17 +485,22 @@ class AsyncCommandExecution {
       if (this.#timedOut) {
         return;
       }
+
       const exitCode = code ?? -1;
+
       if (code !== 0 && this.options?.allowFailure !== true) {
         const reason =
           this.#stderr.trim() ||
           this.#stdout.trim() ||
           `terminated by signal ${signal ?? "unknown"}`;
+
         this.rejectOnce(
           new MonkeError(`Command failed: ${formatCommand(this.command, this.args)}\n${reason}`)
         );
+
         return;
       }
+
       if (this.#stdinError !== undefined && code === 0) {
         // A successful exit cannot be trusted when the input was never fully delivered.
         this.rejectOnce(
@@ -460,8 +509,10 @@ class AsyncCommandExecution {
             { cause: this.#stdinError }
           )
         );
+
         return;
       }
+
       this.resolveOnce({ exitCode, stderr: this.#stderr, stdout: this.#stdout });
     } finally {
       unregisterAsyncChild(this.child);
@@ -472,6 +523,7 @@ class AsyncCommandExecution {
     if (this.#settled) {
       return;
     }
+
     this.#settled = true;
     this.clearTimers();
     this.reject(error);
@@ -481,6 +533,7 @@ class AsyncCommandExecution {
     if (this.#settled) {
       return;
     }
+
     this.#settled = true;
     this.clearTimers();
     this.resolve(result);
@@ -494,8 +547,10 @@ class AsyncCommandExecution {
         stdout: this.#stdout,
         timedOut: true
       });
+
       return;
     }
+
     this.rejectOnce(new MonkeError(`Command timed out: ${formatCommand(this.command, this.args)}`));
   }
 
@@ -503,11 +558,14 @@ class AsyncCommandExecution {
     if (this.options?.timeoutSeconds === undefined) {
       return;
     }
+
     this.#timeout = setTimeout(() => {
       this.#timedOut = true;
+
       if (this.child.pid !== undefined) {
         timedOutProcessGroups.set(this.child.pid, this.child);
       }
+
       terminateChildProcessTree(this.child.pid, "SIGTERM", () => {
         this.child.kill("SIGTERM");
       });
@@ -522,6 +580,7 @@ class AsyncCommandExecution {
       if (this.options?.stdin !== undefined) {
         await this.child.stdin.write(this.options.stdin);
       }
+
       await this.child.stdin.end();
     } catch (error) {
       this.#stdinError = error instanceof Error ? error : new Error(String(error));
@@ -535,13 +594,17 @@ function registerAsyncChild(child: ManagedChild) {
 
 function unregisterAsyncChild(child: ManagedChild) {
   foregroundChildren.delete(child);
+
   if (!activeAsyncChildren.delete(child)) {
     return;
   }
+
   if (forwardedTerminationSignal !== undefined) {
     finishParentTerminationAfterEscalation();
+
     return;
   }
+
   detachParentTerminationHandlersIfIdle();
 }
 
@@ -581,6 +644,7 @@ function finishParentTerminationAfterEscalation() {
       forwardedTerminationSignal = undefined;
       parentExitScheduled = false;
       terminationEscalated = false;
+
       if (signal !== undefined) {
         process.kill(process.pid, signal);
       }
@@ -591,12 +655,15 @@ function finishParentTerminationAfterEscalation() {
 function forwardParentTermination(signal: NodeJS.Signals) {
   forwardedTerminationSignal ??= signal;
   terminationEscalated = true;
+
   for (const child of activeAsyncChildren) {
     terminateActiveChild(child.pid, child, signal);
   }
+
   for (const [pid, child] of timedOutProcessGroups) {
     terminateActiveChild(pid, child, signal);
   }
+
   finishParentTerminationAfterEscalation();
 }
 
@@ -608,12 +675,15 @@ function terminateActiveChild(
   terminateChildProcessTree(pid, signal, () => {
     child.kill(signal);
   });
+
   if (!foregroundChildren.has(child)) {
     terminateChildProcessTree(pid, "SIGKILL", () => {
       child.kill("SIGKILL");
     });
+
     return;
   }
+
   const escalation = setTimeout(() => {
     if (activeAsyncChildren.has(child)) {
       terminateChildProcessTree(pid, "SIGKILL", () => {
@@ -621,6 +691,7 @@ function terminateActiveChild(
       });
     }
   }, ASYNC_TERMINATION_GRACE_MS);
+
   escalation.unref();
 }
 
@@ -631,8 +702,10 @@ function terminateChildProcessTree(
 ) {
   if (pid === undefined || process.platform === "win32") {
     fallback();
+
     return;
   }
+
   try {
     process.kill(-pid, signal);
   } catch {
@@ -655,18 +728,22 @@ function handleCompletedCommand(
     if (allowFailure) {
       return { exitCode: -1, stderr, stdout, timedOut: true };
     }
+
     throw new MonkeError(
       `Failed to run ${formatCommand(command, args)}: spawnSync ${command} ETIMEDOUT`
     );
   }
+
   if (!allowFailure && result.signalCode !== undefined) {
     const reason = `terminated by signal ${result.signalCode}`;
     throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
   }
+
   if (!allowFailure && exitCode !== 0) {
     const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
     throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
   }
+
   return { exitCode, stderr, stdout };
 }
 
@@ -677,6 +754,7 @@ export function formatCommand(command: string, args: string[]) {
 /** Resolve the absolute Monke home path for this runtime. */
 export function getMonkeHome(runtime: Runtime) {
   const configuredHome = runtime.env.MONKE_HOME;
+
   return configuredHome === undefined
     ? path.join(homedir(), ".monke")
     : path.resolve(runtime.cwd, configuredHome);
@@ -693,9 +771,11 @@ export function hashKey(value: string) {
 
 export function findExecutable(command: string, env: Record<string, string | undefined>) {
   const pathValue = env.PATH;
+
   if (!pathValue) {
     return null;
   }
+
   return Bun.which(command, { PATH: pathValue });
 }
 
@@ -729,19 +809,24 @@ export async function withInstallationLockAsync<T>(home: string, callback: () =>
 
 function acquireLockPathAsync(lockPath: string) {
   const deadline = prepareLockAcquisition(lockPath);
+
   return new Promise<LockRelease>((resolve, reject) => {
     const poll = () => {
       try {
         const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
+
         if (attempt.release) {
           resolve(attempt.release);
+
           return;
         }
+
         setTimeout(poll, attempt.wait ? LOCK_RETRY_INTERVAL_MS : 0);
       } catch (error) {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     };
+
     poll();
   });
 }
@@ -756,15 +841,19 @@ export function acquireCheckoutResourceLock(home: string, checkoutPath: string) 
     "locks",
     `${hashKey(`checkout-resources\u0000${path.normalize(checkoutPath)}`)}.lock`
   );
+
   mkdirSync(path.dirname(lockPath), { recursive: true });
   const attempt = tryAcquireLockPath(lockPath);
+
   const release =
     attempt.release ?? (!attempt.wait ? tryAcquireLockPath(lockPath).release : undefined);
+
   if (!release) {
     throw new MonkeError(
       `Resources are in use at ${checkoutPath}; wait for the running command to exit.`
     );
   }
+
   return release;
 }
 
@@ -785,6 +874,7 @@ async function withLockPathAsync<T>(
   callback: (lock: OperationLock) => Promise<T>
 ) {
   const release = await acquireLockPathAsync(lockPath);
+
   try {
     return await callback(release.ownership);
   } finally {
@@ -794,6 +884,7 @@ async function withLockPathAsync<T>(
 
 function withLockPath<T>(lockPath: string, callback: () => T) {
   const release = acquireLockPath(lockPath);
+
   try {
     return callback();
   } finally {
@@ -803,11 +894,14 @@ function withLockPath<T>(lockPath: string, callback: () => T) {
 
 function acquireLockPath(lockPath: string) {
   const deadline = prepareLockAcquisition(lockPath);
+
   while (true) {
     const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
+
     if (attempt.release) {
       return attempt.release;
     }
+
     if (attempt.wait) {
       sleep(LOCK_RETRY_INTERVAL_MS);
     }
@@ -816,14 +910,17 @@ function acquireLockPath(lockPath: string) {
 
 function tryAcquireLockBeforeDeadline(lockPath: string, deadline: number) {
   const attempt = tryAcquireLockPath(lockPath);
+
   if (!attempt.release) {
     assertLockDeadline(lockPath, deadline);
   }
+
   return attempt;
 }
 
 function prepareLockAcquisition(lockPath: string) {
   mkdirSync(path.dirname(lockPath), { recursive: true });
+
   return Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
 }
 
@@ -831,12 +928,15 @@ function tryAcquireLockPath(lockPath: string) {
   if (existsSync(reclaimPathFor(lockPath))) {
     return { wait: true };
   }
+
   let fileDescriptor: number | null = null;
   let protectedGroup: number | undefined;
+
   let contents = JSON.stringify({
     acquiredAt: Date.now(),
     pid: process.pid
   });
+
   try {
     fileDescriptor = openSync(lockPath, "wx");
     writeFileSync(fileDescriptor, contents, "utf-8");
@@ -845,13 +945,16 @@ function tryAcquireLockPath(lockPath: string) {
       closeSync(fileDescriptor);
       rmSync(lockPath, { force: true });
     }
+
     if (!errorMessage(ThrownValueSchema.parse(error)).includes("EEXIST")) {
       throw error;
     }
+
     return { wait: !tryEvictStaleLock(lockPath) };
   }
 
   const identity = fstatSync(fileDescriptor);
+
   const ownership: OperationLock = {
     assertHeld() {
       if (!ownership.isHeld()) {
@@ -861,6 +964,7 @@ function tryAcquireLockPath(lockPath: string) {
     isHeld() {
       try {
         const current = lstatSync(lockPath);
+
         return (
           fileDescriptor !== null &&
           current.dev === identity.dev &&
@@ -873,13 +977,16 @@ function tryAcquireLockPath(lockPath: string) {
     },
     path: lockPath
   };
+
   const release = Object.assign(
     () => {
       const held = ownership.isHeld();
+
       if (fileDescriptor !== null) {
         closeSync(fileDescriptor);
         fileDescriptor = null;
       }
+
       if (
         held &&
         (protectedGroup === undefined ||
@@ -903,6 +1010,7 @@ function tryAcquireLockPath(lockPath: string) {
       }
     }
   );
+
   return { release, wait: false };
 }
 
@@ -925,6 +1033,7 @@ export function isPortAvailable(port: number) {
         }
       }
     });
+
     return true;
   } catch {
     return false;
@@ -943,14 +1052,17 @@ function readLineFromStdin() {
 
   while (true) {
     const bytesRead = readSync(0, buffer, 0, 1, null);
+
     if (bytesRead === 0) {
       break;
     }
 
     const byte = buffer.readUInt8(0);
+
     if (byte === 10) {
       break;
     }
+
     if (byte !== 13) {
       bytes.push(byte);
     }
@@ -961,12 +1073,14 @@ function readLineFromStdin() {
 
 function tryEvictStaleLock(lockPath: string) {
   const reclaimPath = reclaimPathFor(lockPath);
+
   try {
     mkdirSync(reclaimPath);
   } catch (error) {
     if (errorMessage(ThrownValueSchema.parse(error)).includes("EEXIST")) {
       return false;
     }
+
     throw error;
   }
 
@@ -985,6 +1099,7 @@ function evictStaleLockUnderClaim(lockPath: string) {
   const staleSince = Date.now() - STALE_LOCK_AGE_MS;
 
   let fileTimestamp = 0;
+
   try {
     fileTimestamp = statSync(lockPath).mtimeMs;
   } catch {
@@ -992,8 +1107,10 @@ function evictStaleLockUnderClaim(lockPath: string) {
   }
 
   let isStale = fileTimestamp <= staleSince;
+
   try {
     const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf-8")));
+
     if (parsed.success) {
       const metadata = parsed.data;
       const acquiredAt = LockTimestampSchema.safeParse(metadata.acquiredAt);
@@ -1030,16 +1147,19 @@ function evictStaleLockUnderClaim(lockPath: string) {
 export function isProcessRunning(pid: number) {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch (error) {
     if (error instanceof Error && "code" in error) {
       if (error.code === "EPERM") {
         return true;
       }
+
       if (error.code === "ESRCH") {
         return false;
       }
     }
+
     return true;
   }
 }

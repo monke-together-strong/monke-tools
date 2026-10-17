@@ -18,6 +18,7 @@ import { unwrapBoundaryResult } from "./validation.ts";
 const SkillFrontmatterSchema = z.looseObject({
   "disable-model-invocation": z.boolean().optional()
 });
+
 const CodexSkillMetadataSchema = z.looseObject({
   policy: z
     .looseObject({
@@ -34,28 +35,37 @@ export function setSkillMetadata(
   if (overrides.description === undefined && overrides.disableModelInvocation === undefined) {
     return;
   }
+
   const skillEntryPath = path.join(skillPath, "SKILL.md");
+
   if (!existsSync(skillEntryPath) || !lstatSync(skillEntryPath).isFile()) {
     throw new MonkeError(
       `Expected staged Skill entry document to be a regular file at ${skillEntryPath}`
     );
   }
+
   const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
+
   const frontmatterMatch = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
     skillMarkdown
   );
+
   if (!frontmatterMatch) {
     throw new MonkeError(`Expected leading YAML frontmatter at ${skillEntryPath}`);
   }
 
   const frontmatterLabel = `Skill frontmatter at ${skillEntryPath}`;
+
   const frontmatter = parseMutableYamlDocument(
     frontmatterMatch.groups?.frontmatter ?? "",
     frontmatterLabel
   );
+
   unwrapBoundaryResult(SkillFrontmatterSchema.safeParse(frontmatter.toJS()), frontmatterLabel);
+
   if (overrides.description !== undefined) {
     const description = frontmatter.get("description", true);
+
     if (isScalar(description)) {
       description.value = overrides.description;
       // Choose style from the new value while retaining anchors and comments.
@@ -64,9 +74,11 @@ export function setSkillMetadata(
       frontmatter.set("description", frontmatter.createNode(overrides.description));
     }
   }
+
   if (overrides.disableModelInvocation !== undefined) {
     frontmatter.set("disable-model-invocation", overrides.disableModelInvocation);
   }
+
   writeFileSync(
     skillEntryPath,
     `---\n${frontmatter.toString()}---\n${skillMarkdown.slice(frontmatterMatch[0].length)}`,
@@ -80,11 +92,13 @@ export function setSkillMetadata(
   const agentsPath = path.join(skillPath, "agents");
   const openaiMetadataPath = path.join(skillPath, "agents", "openai.yaml");
   const legacyOpenaiMetadataPath = path.join(skillPath, "agents", "openai.yml");
+
   if (existsSync(agentsPath) && !lstatSync(agentsPath).isDirectory()) {
     throw new MonkeError(
       `Expected staged Skill agents path to be a regular directory at ${agentsPath}`
     );
   }
+
   for (const metadataPath of [openaiMetadataPath, legacyOpenaiMetadataPath]) {
     if (existsSync(metadataPath) && !lstatSync(metadataPath).isFile()) {
       throw new MonkeError(
@@ -92,6 +106,7 @@ export function setSkillMetadata(
       );
     }
   }
+
   if (existsSync(legacyOpenaiMetadataPath)) {
     if (existsSync(openaiMetadataPath)) {
       unlinkSync(legacyOpenaiMetadataPath);
@@ -99,13 +114,16 @@ export function setSkillMetadata(
       renameSync(legacyOpenaiMetadataPath, openaiMetadataPath);
     }
   }
+
   const openaiMetadataLabel = `Codex metadata at ${openaiMetadataPath}`;
+
   const openaiMetadata = parseMutableYamlDocument(
     existsSync(openaiMetadataPath)
       ? readFileSync(openaiMetadataPath, "utf-8")
       : "policy:\n  allow_implicit_invocation: false\n",
     openaiMetadataLabel
   );
+
   unwrapBoundaryResult(
     CodexSkillMetadataSchema.safeParse(openaiMetadata.toJS()),
     openaiMetadataLabel
@@ -121,10 +139,12 @@ function parseMutableYamlDocument(text: string, label: string) {
     strict: true,
     uniqueKeys: true
   });
+
   if (document.errors.length > 0) {
     throw new MonkeError(
       `Invalid ${label}:\n${document.errors.map((error) => error.message).join("\n")}`
     );
   }
+
   return document;
 }

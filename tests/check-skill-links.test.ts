@@ -9,10 +9,13 @@ import { makeTempDir, write } from "./helpers.ts";
 
 function guidanceFixture() {
   const root = makeTempDir("skill-links");
+
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     mkdirSync(path.join(root, "skills", folder), { recursive: true });
   }
+
   write(root, "instructions/GLOBAL.md", "Global instructions.\n");
+
   return root;
 }
 

@@ -20,23 +20,29 @@ export function listLocalWorktreeTargets(runtime: Runtime, home: string, sourceR
   const worktrees = listWorktrees(runtime, sourceRoot).filter(
     (entry) => !entry.prunable && existsSync(entry.path)
   );
+
   const worktreeByPath = new Map(
     worktrees.map((entry) => [path.normalize(entry.path), entry] as const)
   );
+
   const branchCommitTimes = listBranchCommitTimes(runtime, sourceRoot);
   const candidates: LocalWorktreeTarget[] = [];
   const claimedPaths = new Set<string>();
 
   for (const state of listSessionStates(home)) {
     const repo = state.repos.find((candidate) => samePath(candidate.sourceRoot, sourceRoot));
+
     if (repo === undefined) {
       continue;
     }
+
     const normalizedPath = path.normalize(repo.worktreePath);
     const worktree = worktreeByPath.get(normalizedPath);
+
     if (worktree === undefined || normalizedPath === path.normalize(sourceRoot)) {
       continue;
     }
+
     claimedPaths.add(normalizedPath);
     candidates.push({
       branch: worktree.branch,
@@ -53,9 +59,11 @@ export function listLocalWorktreeTargets(runtime: Runtime, home: string, sourceR
 
   for (const worktree of worktrees) {
     const normalizedPath = path.normalize(worktree.path);
+
     if (normalizedPath === path.normalize(sourceRoot) || claimedPaths.has(normalizedPath)) {
       continue;
     }
+
     candidates.push({
       branch: worktree.branch,
       kind: "ordinary-worktree",
@@ -66,6 +74,7 @@ export function listLocalWorktreeTargets(runtime: Runtime, home: string, sourceR
   }
 
   const sourceWorktree = worktreeByPath.get(path.normalize(sourceRoot));
+
   const source = sourceWorktree
     ? [
         {
@@ -77,6 +86,7 @@ export function listLocalWorktreeTargets(runtime: Runtime, home: string, sourceR
         }
       ]
     : [];
+
   return [
     ...source,
     ...candidates.toSorted(
@@ -94,20 +104,24 @@ export function resolveLocalWorktreeTarget(
   selected: Pick<LocalWorktreeTarget, "branch" | "path">
 ) {
   let resolvedTarget: LocalWorktreeTarget | undefined;
+
   try {
     const context = resolveRepoContext(runtime, selected.path, null, { inferSessionName: false });
+
     if (
       !samePath(context.gitCommonDir, gitCommonDir) ||
       context.currentBranch !== (selected.branch ?? "HEAD")
     ) {
       return;
     }
+
     resolvedTarget = listLocalWorktreeTargets(runtime, home, sourceRoot).find(
       (target) => samePath(target.path, selected.path) && target.branch === selected.branch
     );
   } catch {
     // A stale or missing worktree has no resolvable target.
   }
+
   return resolvedTarget;
 }
 
@@ -124,17 +138,21 @@ function listBranchCommitTimes(runtime: Runtime, sourceRoot: string) {
     ["for-each-ref", "--format=%(refname:lstrip=2)\t%(committerdate:unix)", "refs/heads"],
     { allowFailure: true, cwd: sourceRoot }
   );
+
   if (result.exitCode !== 0) {
     return new Map<string, number>();
   }
 
   const activityByBranch = new Map<string, number>();
+
   for (const line of result.stdout.trim().split("\n").filter(Boolean)) {
     const [branch, seconds] = line.split("\t");
+
     if (branch !== undefined && seconds !== undefined) {
       activityByBranch.set(branch, Number(seconds) * 1000);
     }
   }
+
   return activityByBranch;
 }
 
@@ -144,5 +162,6 @@ function detachedLabel(runtime: Runtime, worktreePath: string) {
       cwd: worktreePath
     })
     .stdout.trim();
+
   return `detached ${commit}`;
 }

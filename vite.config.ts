@@ -7,9 +7,11 @@ import { createOxfmtConfig } from "./packages/oxc-config/src/oxfmt.ts";
 import { createOxlintConfig } from "./packages/oxc-config/src/oxlint.ts";
 
 const workspaceRoot = import.meta.dirname;
+
 const mtsFmt = createOxfmtConfig({
   ignorePatterns: [".tegami/publish-lock.yaml", "**/imported/**"]
 });
+
 const mtsLint = createOxlintConfig({
   ignorePatterns: ["**/imported/**"],
   jsPlugins: [

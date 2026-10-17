@@ -26,6 +26,7 @@ import { withInstallationLockAsync } from "./runtime.ts";
 import { unwrapBoundaryResult } from "./validation.ts";
 
 export const COLLISION_RECOVERY_FILENAME = ".monke-tools-collision.json";
+
 const CollisionRecoverySchema = strictObject({
   predecessorInstallId: nullable(string().min(1))
 });
@@ -34,6 +35,7 @@ const CollisionRecoverySchema = strictObject({
 export function withInstallMutationLockAsync<T>(home: string, callback: () => Promise<T>) {
   return withInstallationLockAsync(home, () => {
     reconcilePendingInstallBackups(home);
+
     return callback();
   });
 }
@@ -41,24 +43,30 @@ export function withInstallMutationLockAsync<T>(home: string, callback: () => Pr
 /** Restore or discard managed collision backups according to the current Active pointer. */
 export function reconcilePendingInstallBackups(monkeHome: string) {
   const backupsRoot = path.join(monkeHome, "install-backups");
+
   if (!existsSync(backupsRoot)) {
     return;
   }
+
   const rootStat = lstatSync(backupsRoot);
+
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
     throw new MonkeError(`Install backup root is invalid: ${backupsRoot}`);
   }
 
   const installsRoot = path.join(monkeHome, "installs");
+
   if (existsSync(installsRoot)) {
     resolveManagedDirectory(installsRoot, "Managed installs root");
   }
 
   const activeInstallRoot = resolveActiveInstallRoot(monkeHome);
+
   for (const entry of readdirSync(backupsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
       continue;
     }
+
     const backupRoot = path.join(backupsRoot, entry.name);
     assertDirectChildPath(backupRoot, backupsRoot, "collision backup");
     assertManagedInstallRoot(backupRoot, entry.name);
@@ -66,17 +74,21 @@ export function reconcilePendingInstallBackups(monkeHome: string) {
 
     const installRoot = path.join(monkeHome, "installs", entry.name);
     const installStat = lstatSync(installRoot, { throwIfNoEntry: false });
+
     if (!installStat) {
       mkdirSync(path.dirname(installRoot), { recursive: true });
       rmSync(path.join(backupRoot, COLLISION_RECOVERY_FILENAME));
       renameSync(backupRoot, installRoot);
       continue;
     }
+
     assertManagedInstallRoot(installRoot, entry.name);
+
     if (activeInstallRoot === realpathSync.native(installRoot)) {
       const predecessorRoot = recovery.predecessorInstallId
         ? path.join(monkeHome, "installs", recovery.predecessorInstallId)
         : null;
+
       if (predecessorRoot) {
         assertDirectChildPath(
           predecessorRoot,
@@ -84,6 +96,7 @@ export function reconcilePendingInstallBackups(monkeHome: string) {
           "activation predecessor"
         );
       }
+
       rmSync(backupRoot, { recursive: true });
       cleanupInactiveToolInstalls(
         monkeHome,
@@ -91,10 +104,12 @@ export function reconcilePendingInstallBackups(monkeHome: string) {
       );
       continue;
     }
+
     rmSync(installRoot, { recursive: true });
     rmSync(path.join(backupRoot, COLLISION_RECOVERY_FILENAME));
     renameSync(backupRoot, installRoot);
   }
+
   if (readdirSync(backupsRoot).length === 0) {
     rmdirSync(backupsRoot);
   }
@@ -112,6 +127,7 @@ export function writeCollisionRecovery(installRoot: string, predecessorInstallRo
 
 function loadCollisionRecovery(backupRoot: string) {
   const recoveryPath = path.join(backupRoot, COLLISION_RECOVERY_FILENAME);
+
   try {
     return unwrapBoundaryResult(
       CollisionRecoverySchema.safeParse(JSON.parse(readFileSync(recoveryPath, "utf-8"))),
@@ -124,13 +140,16 @@ function loadCollisionRecovery(backupRoot: string) {
 
 export function assertManagedInstallRoot(installRoot: string, installId: string) {
   const stat = lstatSync(installRoot, { throwIfNoEntry: false });
+
   if (!stat?.isDirectory() || stat.isSymbolicLink()) {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
   }
+
   try {
     const manifest = ToolInstallManifestSchema.parse(
       JSON.parse(readFileSync(path.join(installRoot, INSTALL_MANIFEST_FILENAME), "utf-8"))
     );
+
     if (installIdForManifest(manifest) !== installId) {
       throw new Error("install identity mismatch");
     }
@@ -142,20 +161,26 @@ export function assertManagedInstallRoot(installRoot: string, installId: string)
 /** Remove validated inactive installs except the explicitly retained roots. */
 export function cleanupInactiveToolInstalls(monkeHome: string, retainedRoots: Set<string>) {
   const installsRoot = path.join(monkeHome, "installs");
+
   if (!existsSync(installsRoot)) {
     return;
   }
+
   const canonicalInstallsRoot = resolveManagedDirectory(installsRoot, "Managed installs root");
+
   const canonicalRetainedRoots = new Set(
     [...retainedRoots].flatMap((retainedRoot) => {
       const retainedStat = lstatSync(retainedRoot, { throwIfNoEntry: false });
+
       return retainedStat?.isDirectory() && !retainedStat.isSymbolicLink()
         ? [realpathSync.native(retainedRoot)]
         : [];
     })
   );
+
   for (const entry of readdirSync(installsRoot, { withFileTypes: true })) {
     const installRoot = path.join(installsRoot, entry.name);
+
     if (
       !entry.isDirectory() ||
       entry.isSymbolicLink() ||
@@ -163,11 +188,13 @@ export function cleanupInactiveToolInstalls(monkeHome: string, retainedRoots: Se
     ) {
       continue;
     }
+
     try {
       assertManagedInstallRoot(installRoot, entry.name);
     } catch {
       continue;
     }
+
     rmSync(installRoot, { recursive: true });
   }
 }

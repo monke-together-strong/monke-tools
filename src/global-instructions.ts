@@ -38,9 +38,11 @@ export function preflightGlobalInstructions(
   options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const prepared = prepareGlobalInstructions(target, options);
+
   if (prepared === null) {
     return;
   }
+
   assertGlobalInstructionsWritable(prepared.filePath);
 }
 
@@ -50,9 +52,11 @@ export function preflightRemoveGlobalInstructions(
   options: GlobalInstructionsOptions
 ) {
   const prepared = prepareGlobalInstructionsRemoval(target, options);
+
   if (prepared === null) {
     return;
   }
+
   assertGlobalInstructionsWritable(prepared.filePath);
 }
 
@@ -62,9 +66,11 @@ export function reconcileGlobalInstructions(
   options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const prepared = prepareGlobalInstructions(target, options);
+
   if (prepared === null) {
     return;
   }
+
   mkdirSync(path.dirname(prepared.filePath), { recursive: true });
   writeFileSync(prepared.filePath, prepared.nextContent);
 }
@@ -74,15 +80,20 @@ function prepareGlobalInstructions(
   options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const destinationPath = globalInstructionsPath(target, options);
+
   if (destinationPath === null) {
     return null;
   }
+
   const filePath = resolveInstructionFile(destinationPath);
+
   const body = readFileSync(
     path.join(options.guidanceSourceRoot, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
     "utf-8"
   );
+
   const existingContent = existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;
+
   return {
     filePath,
     nextContent: reconcileManagedInstructions(existingContent, body, target.kind === "codex")
@@ -93,6 +104,7 @@ function assertGlobalInstructionsWritable(filePath: string) {
   if (existsSync(filePath)) {
     try {
       accessSync(filePath, fsConstants.W_OK);
+
       return;
     } catch {
       throw new MonkeError(`Global agent instructions are not writable: ${filePath}`);
@@ -108,9 +120,11 @@ export function removeGlobalInstructions(
   options: GlobalInstructionsOptions
 ) {
   const prepared = prepareGlobalInstructionsRemoval(target, options);
+
   if (prepared === null) {
     return;
   }
+
   writeFileSync(prepared.filePath, prepared.nextContent);
 }
 
@@ -119,18 +133,22 @@ function prepareGlobalInstructionsRemoval(
   options: GlobalInstructionsOptions
 ) {
   const destinationPath = globalInstructionsPath(target, options);
+
   if (
     destinationPath === null ||
     lstatSync(destinationPath, { throwIfNoEntry: false }) === undefined
   ) {
     return null;
   }
+
   const filePath = resolveInstructionFile(destinationPath);
   const existingContent = readFileSync(filePath, "utf-8");
   const markers = findManagedInstructionMarkers(existingContent);
+
   if (markers === null) {
     return null;
   }
+
   return {
     filePath,
     nextContent: `${existingContent.slice(0, markers.start)}${existingContent.slice(markers.end)}`
@@ -145,19 +163,23 @@ function reconcileManagedInstructions(
   if (existingContent === null) {
     return renderManagedInstructions(body);
   }
+
   if (existingContent.length === 0) {
     return renderManagedInstructions(body);
   }
+
   if (adoptWholeFileMatch && existingContent === body) {
     return renderManagedInstructions(body);
   }
 
   const markers = findManagedInstructionMarkers(existingContent);
+
   if (markers === null) {
     return `${existingContent}${renderManagedInstructions(body)}`;
   }
 
   const managedSection = renderManagedInstructions(body);
+
   return `${existingContent.slice(0, markers.start)}${managedSection}${existingContent.slice(markers.end)}`;
 }
 
@@ -174,9 +196,11 @@ function findManagedInstructionMarkers(content: string) {
   const ends = indexesOf(content, MANAGED_INSTRUCTIONS_END);
   const [start] = starts;
   const [endMarker] = ends;
+
   if (start === undefined && endMarker === undefined) {
     return null;
   }
+
   if (
     start === undefined ||
     endMarker === undefined ||
@@ -188,25 +212,31 @@ function findManagedInstructionMarkers(content: string) {
   }
 
   let end = endMarker + MANAGED_INSTRUCTIONS_END.length;
+
   if (content.startsWith("\r\n", end)) {
     end += 2;
   } else if (content[end] === "\n") {
     end += 1;
   }
+
   return { end, start };
 }
 
 function indexesOf(content: string, token: string) {
   const indexes: number[] = [];
   let offset = 0;
+
   while (offset < content.length) {
     const index = content.indexOf(token, offset);
+
     if (index === -1) {
       break;
     }
+
     indexes.push(index);
     offset = index + token.length;
   }
+
   return indexes;
 }
 
@@ -221,8 +251,10 @@ export function globalInstructionsPath(
       path.join(options.homeDirectory, ".codex"),
       "CODEX_HOME"
     );
+
     return path.join(configDirectory, "AGENTS.md");
   }
+
   if (target.kind === "claude") {
     const configDirectory = resolveAgentConfigDirectory(
       options.environment?.CLAUDE_CONFIG_DIR,
@@ -230,6 +262,7 @@ export function globalInstructionsPath(
       path.join(options.homeDirectory, ".claude"),
       "CLAUDE_CONFIG_DIR"
     );
+
     return path.join(configDirectory, "CLAUDE.md");
   }
 
@@ -250,24 +283,29 @@ function resolveAgentConfigDirectory(
     ConfiguredDirectorySchema.safeParse(configuredDirectory),
     `${environmentVariable} environment variable`
   );
+
   return path.resolve(cwd, validDirectory);
 }
 
 function resolveInstructionFile(destinationPath: string) {
   const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
+
   if (destinationStat === undefined) {
     return destinationPath;
   }
+
   if (!destinationStat.isSymbolicLink()) {
     if (!destinationStat.isFile()) {
       throw new MonkeError(
         `Refusing to modify Global agent instructions at ${destinationPath}: destination must be a regular file`
       );
     }
+
     return destinationPath;
   }
 
   let resolvedPath: string;
+
   try {
     resolvedPath = realpathSync.native(destinationPath);
   } catch {
@@ -275,10 +313,12 @@ function resolveInstructionFile(destinationPath: string) {
       `Refusing to modify Global agent instructions at ${destinationPath}: destination symlink must resolve to a regular file`
     );
   }
+
   if (!statSync(resolvedPath).isFile()) {
     throw new MonkeError(
       `Refusing to modify Global agent instructions at ${destinationPath}: destination symlink must resolve to a regular file`
     );
   }
+
   return resolvedPath;
 }

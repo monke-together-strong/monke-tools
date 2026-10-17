@@ -20,12 +20,15 @@ import {
 } from "./worktree-safety.ts";
 
 const OidSchema = z.string().regex(/^[\da-f]{40}$/u);
+
 const RepositorySchema = z.object({
   default_branch: z.string().min(1),
   full_name: z.string().min(1)
 });
+
 const RefSchema = z.object({ object: z.object({ sha: OidSchema }) });
 const PrRepositorySchema = z.object({ full_name: z.string().min(1) }).nullable();
+
 const PullRequestSchema = z.object({
   base: z.object({ ref: z.string(), repo: PrRepositorySchema }),
   head: z.object({ ref: z.string(), repo: PrRepositorySchema, sha: OidSchema }),
@@ -34,9 +37,11 @@ const PullRequestSchema = z.object({
   number: z.number().int().positive(),
   state: z.enum(["open", "closed"])
 });
+
 const CommitPullRequestSchema = PullRequestSchema.extend({
   merge_commit_sha: OidSchema.nullable()
 });
+
 const ComparisonSchema = z.object({
   behind_by: z.number().int().nonnegative(),
   merge_base_commit: z.object({ sha: OidSchema }),
@@ -158,33 +163,43 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   if (snapshot.localBlock) {
     return snapshot.localBlock;
   }
+
   const { branch, head, repository } = snapshot;
+
   if (!head || (!branch && !allowsDetached(snapshot.candidate))) {
     return decision("unknown", "local-evidence-unavailable");
   }
+
   if (!repository) {
     return decision("unknown", "repository-unavailable");
   }
+
   if (branch === repository.defaultBranch) {
     return decision("ineligible", "default-branch");
   }
+
   const branchPrs = repository.pullRequests.filter(
     (pr) =>
       pr.head.ref === (branch ?? snapshot.candidate.sessionBranch) &&
       pr.head.repo?.full_name === repository.name
   );
+
   if (hasOpenPullRequest(snapshot, repository)) {
     return decision("ineligible", "open-pr");
   }
+
   if (snapshot.pendingWork || !branch) {
     const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+
     if (ageBlock) {
       return ageBlock;
     }
   }
+
   if (!branch) {
     return decideDetached(snapshot, repository, head);
   }
+
   const merged = branchPrs.filter(
     (pr) =>
       pr.merged_at !== null &&
@@ -192,11 +207,15 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
       pr.base.ref === repository.defaultBranch &&
       pr.base.repo?.full_name === repository.name
   );
+
   const exact = merged.filter((pr) => pr.head.sha === head);
+
   if (exact.length > 1) {
     return decision("unknown", "ambiguous-pr");
   }
+
   const [match] = exact;
+
   if (match) {
     return decision("eligible", "exact-merged-pr", [
       localWorkDescription(snapshot),
@@ -204,15 +223,18 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
       `HEAD equals merged PR head: ${head}`
     ]);
   }
+
   // A clean worktree whose HEAD is already inside the verified default branch
   // holds no unique work, whatever its role or PR history. The local check
   // above already rejected any uncommitted change. A freshly spawned Session
   // looks the same, so this proof alone waits a day.
   if (snapshot.ancestorOfDefault) {
     const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+
     if (ageBlock) {
       return ageBlock;
     }
+
     return decision("eligible", "unchanged-branch", [
       localWorkDescription(snapshot),
       `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
@@ -220,19 +242,25 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
       "member proof only; whole-Session eligibility is still required"
     ]);
   }
+
   const alternate = decideAlternateCommittedWork(snapshot, repository, head);
+
   if (alternate) {
     return alternate;
   }
+
   if (branchPrs.some((pr) => !pr.merged_at && pr.head.sha === head)) {
     return decision("ineligible", "closed-unmerged-pr");
   }
+
   if (merged.length > 0) {
     return decision("ineligible", "head-mismatch");
   }
+
   if (snapshot.ancestorOfDefault === null) {
     return decision("unknown", "ancestry-unavailable");
   }
+
   // Both answers came back; unique commits without a merged PR is a settled fact.
   return decision("ineligible", "no-merged-pr");
 }
@@ -271,17 +299,21 @@ function decideDetached(
       "detached HEAD requires a durable preservation ref before removal; worktree is at least one day old"
     ]);
   }
+
   return decideDefaultTree(snapshot, repository) ?? decision("ineligible", "detached-head");
 }
 
 export function localWorkDescription(snapshot: CleanupEvidence): string {
   const proof = snapshot.pendingWork;
+
   if (!proof) {
     return "registered linked worktree; clean including submodules and untracked files";
   }
+
   if (proof.kind === "untracked-archive") {
     return `untracked files require archival before removal; fingerprint ${proof.fingerprint}`;
   }
+
   return proof.kind === "forward-bundle"
     ? `entire pending bundle preserved together at descendant ${proof.witness}; fingerprint ${proof.fingerprint}`
     : `only the exact pnpm 12.1.0 bootstrap deletion; application document unchanged; fingerprint ${proof.fingerprint}`;
@@ -298,10 +330,13 @@ function decideDefaultTree(
   ) {
     return null;
   }
+
   const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+
   if (ageBlock) {
     return ageBlock;
   }
+
   return decision("eligible", "matching-default-tree", [
     localWorkDescription(snapshot),
     `complete HEAD tree ${snapshot.defaultTree.tree} equals ${snapshot.defaultTree.witness} reachable from verified default HEAD ${repository.defaultHead}`,
@@ -318,35 +353,45 @@ function decideCommitPullRequests(
   if (snapshot.commitPullRequests === null) {
     return decision("unknown", "commit-pr-unavailable");
   }
+
   const matches =
     snapshot.commitPullRequests?.filter(
       ({ headContainsCurrent, pullRequest: pr }) =>
         isMergedToDefault(pr, repository) &&
         (pr.head.sha === head || (pr.head.ref === snapshot.branch && headContainsCurrent === true))
     ) ?? [];
+
   if (matches.length > 1) {
     return decision("unknown", "ambiguous-pr");
   }
+
   const [match] = matches;
+
   if (!match) {
     return null;
   }
+
   const mergeTree =
     match.pullRequest.head.sha === head &&
     match.mergeTree !== undefined &&
     match.mergeTree !== false
       ? match.mergeTree
       : null;
+
   if (match.ancestorOfDefault !== true && mergeTree === null) {
     return match.ancestorOfDefault === null || match.mergeTree === null
       ? decision("unknown", "ancestry-unavailable")
       : null;
   }
+
   const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+
   if (ageBlock) {
     return ageBlock;
   }
+
   const pr = match.pullRequest;
+
   return decision("eligible", pr.head.sha === head ? "merged-pr-head" : "merged-pr-ancestor", [
     localWorkDescription(snapshot),
     `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
@@ -369,13 +414,17 @@ function decideMatchingDiff(
     snapshot.commitPullRequests?.filter(({ pullRequest }) =>
       isMergedToDefault(pullRequest, repository)
     ) ?? [];
+
   const matches = candidates.filter(
     (pr) => pr.ancestorOfDefault === true && Boolean(pr.matchingDiff)
   );
+
   if (matches.length > 1) {
     return decision("unknown", "ambiguous-pr");
   }
+
   const [match] = matches;
+
   if (
     !match ||
     match.matchingDiff === undefined ||
@@ -385,15 +434,20 @@ function decideMatchingDiff(
     if (candidates.some((pr) => pr.ancestorOfDefault === null)) {
       return decision("unknown", "ancestry-unavailable");
     }
+
     return candidates.some((pr) => pr.matchingDiff === null)
       ? decision("unknown", "diff-unavailable")
       : null;
   }
+
   const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+
   if (ageBlock) {
     return ageBlock;
   }
+
   const { matchingDiff: diff, pullRequest: pr } = match;
+
   return decision("eligible", "matching-merged-diff", [
     localWorkDescription(snapshot),
     `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
@@ -409,6 +463,7 @@ function recentWorktreeDecision(ageMs: number | null | undefined): CleanupDecisi
   if (ageMs === undefined || ageMs === null) {
     return decision("unknown", "recent-worktree");
   }
+
   return ageMs < RECENT_WORKTREE_MS ? decision("ineligible", "recent-worktree") : null;
 }
 
@@ -435,6 +490,7 @@ function worktreeAge(worktreePath: string): number | null {
   try {
     const stat = statSync(path.join(worktreePath, ".git"));
     const created = stat.birthtimeMs > 0 ? Math.min(stat.birthtimeMs, stat.mtimeMs) : stat.mtimeMs;
+
     return Math.max(0, Date.now() - created);
   } catch {
     return null;
@@ -449,6 +505,7 @@ export async function collectCleanupEvidence(
 ): Promise<CleanupEvidence> {
   const readOnly = readOnlyCleanupRuntime(runtime);
   const local = inspectLocal(readOnly, candidate);
+
   const snapshot: CleanupEvidence = {
     ...local,
     ancestorOfDefault: null,
@@ -457,30 +514,41 @@ export async function collectCleanupEvidence(
     repository: null,
     worktreeAgeMs: worktreeAge(candidate.worktreePath)
   };
+
   const pending = inspectCandidatePending(readOnly, candidate, local);
   acceptArchiveCandidate(snapshot, pending);
+
   if (local.localBlock && !pending) {
     return snapshot;
   }
+
   snapshot.committedWorkAttempted = snapshot.localBlock === null;
   const repositoryName = readRepositoryName(readOnly, candidate.sourceRoot);
+
   if (!repositoryName) {
     return snapshot;
   }
+
   const cacheKey = `${candidate.sourceRoot}\0${repositoryName.toLowerCase()}`;
   let repository = cache.repositories.get(cacheKey);
+
   if (!repository) {
     repository = inspectRepository(readOnly, candidate.sourceRoot, repositoryName);
     cache.repositories.set(cacheKey, repository);
   }
+
   snapshot.repository = await repository;
+
   if (snapshot.repository && snapshot.head) {
     acceptPendingProof(readOnly, snapshot, pending, snapshot.head, snapshot.repository.defaultHead);
+
     if (snapshot.localBlock) {
       snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
       await inspectArchiveReadiness(runtime, snapshot, cache);
+
       return snapshot;
     }
+
     snapshot.committedWorkAttempted = true;
     snapshot.ancestorOfDefault = await inspectAncestry(
       readOnly,
@@ -488,6 +556,7 @@ export async function collectCleanupEvidence(
       snapshot.head,
       snapshot.repository
     );
+
     if (allowsDetached(candidate) && snapshot.ancestorOfDefault !== true) {
       snapshot.defaultTree = inspectDefaultTree(
         readOnly,
@@ -496,7 +565,9 @@ export async function collectCleanupEvidence(
         snapshot.repository.defaultHead
       );
     }
+
     const currentDecision = decideCleanupEligibility(snapshot);
+
     if (
       ["no-merged-pr", "head-mismatch", "closed-unmerged-pr", "ancestry-unavailable"].includes(
         currentDecision.code
@@ -504,6 +575,7 @@ export async function collectCleanupEvidence(
     ) {
       const commitKey = `${cacheKey}\0${snapshot.head}\0${snapshot.repository.defaultHead}`;
       let commitPullRequests = cache.commitPullRequests.get(commitKey);
+
       if (!commitPullRequests) {
         commitPullRequests = inspectCommitPullRequests(
           readOnly,
@@ -513,17 +585,21 @@ export async function collectCleanupEvidence(
         );
         cache.commitPullRequests.set(commitKey, commitPullRequests);
       }
+
       snapshot.commitPullRequests = await commitPullRequests;
     }
   }
+
   // Provider lookups can take seconds. Never attach old proof to a changed checkout.
   snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
+
   if (
     readRepositoryName(readOnly, candidate.sourceRoot)?.toLowerCase() !==
     repositoryName.toLowerCase()
   ) {
     snapshot.localBlock ??= decision("unknown", "repository-changed-during-inspection");
   }
+
   return snapshot;
 }
 
@@ -542,6 +618,7 @@ async function inspectArchiveReadiness(
       { ...snapshot.candidate, archiveUntracked: true },
       cache
     );
+
     snapshot.archiveReadiness = decideCleanupEligibility(archived);
   }
 }
@@ -560,6 +637,7 @@ function acceptArchiveCandidate(snapshot: CleanupEvidence, pending: PendingWork 
       paths: pending.paths.map((entry) => entry.path),
       witness: null
     };
+
     if (snapshot.candidate.archiveUntracked) {
       snapshot.pendingWork = snapshot.archiveCandidate;
       snapshot.localBlock = null;
@@ -577,6 +655,7 @@ function acceptPendingProof(
   if (!pending || snapshot.pendingWork?.kind === "untracked-archive") {
     return;
   }
+
   const proof = provePendingWork(
     runtime,
     snapshot.candidate.sourceRoot,
@@ -585,6 +664,7 @@ function acceptPendingProof(
     defaultHead,
     pending
   );
+
   if (proof !== null && proof !== false) {
     snapshot.pendingWork = proof;
     snapshot.localBlock = null;
@@ -608,25 +688,31 @@ export function revalidateCleanupEvidence(
 ): CleanupDecision | null {
   const readOnly = readOnlyCleanupRuntime(runtime);
   const current = inspectLocal(readOnly, snapshot.candidate);
+
   if (current.head !== snapshot.head || current.branch !== snapshot.branch) {
     return decision("unknown", "changed-during-inspection");
   }
+
   if (snapshot.pendingWork && !snapshot.localBlock) {
     if (current.localBlock?.code !== "dirty-worktree" || !current.head) {
       return current.localBlock ?? decision("unknown", "changed-during-inspection");
     }
+
     const pending = inspectPendingWork(readOnly, snapshot.candidate.worktreePath, current.head);
+
     if (pending?.fingerprint !== snapshot.pendingWork.fingerprint) {
       return decision("unknown", "changed-during-inspection");
     }
   } else if (current.localBlock?.code !== snapshot.localBlock?.code) {
     return current.localBlock ?? decision("unknown", "changed-during-inspection");
   }
+
   // An unchanged local blocker still explains a skipped member. No remote
   // identity was established for that member, so do not invent a remote change.
   if (snapshot.localBlock) {
     return null;
   }
+
   if (
     snapshot.repository &&
     readRepositoryName(readOnly, snapshot.candidate.sourceRoot)?.toLowerCase() !==
@@ -634,6 +720,7 @@ export function revalidateCleanupEvidence(
   ) {
     return decision("unknown", "repository-changed-during-inspection");
   }
+
   return null;
 }
 
@@ -643,31 +730,42 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
     head: null,
     localBlock: null
   };
+
   if (samePath(candidate.sourceRoot, candidate.worktreePath)) {
     local.localBlock = decision("ineligible", "source-checkout");
+
     return local;
   }
+
   if (!existsSync(candidate.worktreePath)) {
     local.localBlock = decision("unknown", "missing-worktree");
+
     return local;
   }
+
   try {
     assertCanonicalSourceCheckout(runtime, candidate.sourceRoot);
     validateRegisteredWorktreeForRemoval(runtime, candidate.sourceRoot, candidate.worktreePath);
   } catch {
     local.localBlock = decision("unknown", "identity-unverified");
+
     return local;
   }
+
   try {
     const git = (args: string[]) =>
       runtime.exec("git", args, { cwd: candidate.worktreePath }).stdout.trim();
+
     const grafts = git(["rev-parse", "--path-format=absolute", "--git-path", "info/grafts"]);
+
     if (existsSync(grafts)) {
       throw new Error("Grafted history cannot prove cleanup eligibility");
     }
+
     const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
     local.branch = branch === "HEAD" ? null : branch;
     local.head = OidSchema.parse(git(["rev-parse", "HEAD"]));
+
     if (!local.branch && !allowsDetached(candidate)) {
       local.localBlock = decision("ineligible", "detached-head");
     } else {
@@ -680,6 +778,7 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
         )
         .stdout.split("\n")
         .filter(Boolean);
+
       if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
         local.localBlock = decision("unknown", "hidden-index-entries");
       } else if (changes.length > 0) {
@@ -689,6 +788,7 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
   } catch {
     local.localBlock = decision("unknown", "local-evidence-unavailable");
   }
+
   return local;
 }
 
@@ -696,6 +796,7 @@ const DIRTY_PATH_LIMIT = 5;
 
 function summarizeChanges(lines: string[]) {
   const shown = lines.slice(0, DIRTY_PATH_LIMIT);
+
   return lines.length > shown.length
     ? [...shown, `and ${lines.length - shown.length} more`]
     : shown;
@@ -710,6 +811,7 @@ type StructureMemo = { ok: true; result: ExecResult } | { error: unknown; ok: fa
  */
 export function memoizeRepoStructure(runtime: Runtime): Runtime {
   const cache = new Map<string, StructureMemo>();
+
   return {
     ...runtime,
     exec(command, args, options) {
@@ -719,22 +821,28 @@ export function memoizeRepoStructure(runtime: Runtime): Runtime {
         (args.includes("--show-toplevel") ||
           args.includes("--git-common-dir") ||
           (args.includes("worktree") && args.includes("list")));
+
       if (!structural) {
         return runtime.exec(command, args, options);
       }
+
       const key = JSON.stringify([args, options?.cwd]);
       let memo = cache.get(key);
+
       if (!memo) {
         try {
           memo = { ok: true, result: runtime.exec(command, args, options) };
         } catch (error) {
           memo = { error, ok: false };
         }
+
         cache.set(key, memo);
       }
+
       if (!memo.ok) {
         throw memo.error;
       }
+
       return memo.result;
     }
   };
@@ -785,8 +893,10 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
     ["api", endpoint, "--hostname", "github.com", ...(paginate ? ["--paginate", "--slurp"] : [])],
     { allowFailure: true, cwd: sourceRoot, timeoutSeconds: 30 }
   );
+
   if (result.exitCode !== 0) {
     const commit = /\/commits\/(?<sha>[\da-f]{40})\/pulls(?:\?|$)/u.exec(endpoint)?.groups?.sha;
+
     if (
       /\bHTTP 404\b/u.test(result.stderr) ||
       (commit !== undefined &&
@@ -795,9 +905,12 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
     ) {
       throw new GitHubNotFoundError("GitHub resource not found");
     }
+
     throw new Error("GitHub evidence unavailable");
   }
+
   const parsed: unknown = JSON.parse(result.stdout);
+
   return parsed;
 }
 
@@ -806,11 +919,13 @@ function readRepositoryName(runtime: Runtime, sourceRoot: string) {
     const remote = runtime
       .exec("git", ["remote", "get-url", "origin"], { cwd: sourceRoot })
       .stdout.trim();
+
     // Bind API calls to this checkout's remote, never gh's default repo or GH_REPO.
     const match =
       /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)(?<repository>[\w.-]+\/[\w.-]+?)(?:\.git)?$/u.exec(
         remote
       );
+
     return match?.groups?.repository ?? null;
   } catch {
     return null;
@@ -820,9 +935,11 @@ function readRepositoryName(runtime: Runtime, sourceRoot: string) {
 async function inspectRepository(runtime: Runtime, sourceRoot: string, name: string) {
   try {
     const metadata = RepositorySchema.parse(await github(runtime, sourceRoot, `repos/${name}`));
+
     if (metadata.full_name.toLowerCase() !== name.toLowerCase()) {
       return null;
     }
+
     const [ref, pages] = await Promise.all([
       github(
         runtime,
@@ -831,6 +948,7 @@ async function inspectRepository(runtime: Runtime, sourceRoot: string, name: str
       ),
       github(runtime, sourceRoot, `repos/${name}/pulls?state=all&per_page=100`, true)
     ]);
+
     return {
       defaultBranch: metadata.default_branch,
       defaultHead: RefSchema.parse(ref).object.sha,
@@ -857,9 +975,11 @@ async function inspectAncestry(
         cwd: sourceRoot
       }
     );
+
     if (result.exitCode === 0) {
       return true;
     }
+
     // Exit 1 means both commits are present and unrelated. Trust it unless history is
     // shallow, where a cut-off could hide the ancestry.
     if (
@@ -870,6 +990,7 @@ async function inspectAncestry(
     ) {
       return false;
     }
+
     // Remote comparison handles a missing default commit or shallow history without fetching.
     try {
       const comparison = ComparisonSchema.parse(
@@ -879,6 +1000,7 @@ async function inspectAncestry(
           `repos/${repository.name}/compare/${head}...${repository.defaultHead}`
         )
       );
+
       return comparison.behind_by === 0 && comparison.merge_base_commit.sha === head;
     } catch (error) {
       // defaultHead was just resolved on GitHub, so a 404 means GitHub has never
@@ -886,6 +1008,7 @@ async function inspectAncestry(
       if (error instanceof GitHubNotFoundError) {
         return false;
       }
+
       throw error;
     }
   } catch {
@@ -906,17 +1029,20 @@ async function inspectCommitPullRequests(
       `repos/${repository.name}/commits/${head}/pulls?per_page=100`,
       true
     );
+
     const matches = z
       .array(z.array(CommitPullRequestSchema))
       .parse(pages)
       .flat()
       .filter((pr) => isMergedToDefault(pr, repository));
+
     return await Promise.all(
       matches.map(async (pr) => {
         const ancestorOfDefault =
           pr.merge_commit_sha === null
             ? null
             : await inspectAncestry(runtime, sourceRoot, pr.merge_commit_sha, repository);
+
         const headContainsCurrent =
           ancestorOfDefault === true && pr.head.sha !== head
             ? (await inspectAncestry(runtime, sourceRoot, head, {
@@ -924,10 +1050,12 @@ async function inspectCommitPullRequests(
                 defaultHead: pr.head.sha
               })) === true
             : false;
+
         const mergeTree =
           ancestorOfDefault !== true && pr.head.sha === head && pr.merge_commit_sha !== null
             ? inspectDefaultTree(runtime, sourceRoot, pr.merge_commit_sha, repository.defaultHead)
             : undefined;
+
         const matchingDiff =
           ancestorOfDefault === true && pr.head.sha !== head && pr.merge_commit_sha !== null
             ? inspectMatchingMergeDiff(
@@ -938,6 +1066,7 @@ async function inspectCommitPullRequests(
                 pr.merge_commit_sha
               )
             : undefined;
+
         return { ancestorOfDefault, headContainsCurrent, matchingDiff, mergeTree, pullRequest: pr };
       })
     );

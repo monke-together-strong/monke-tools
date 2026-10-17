@@ -25,6 +25,7 @@ const RELEASE_BUNDLE_BUILD_TIMEOUT_MS = 120_000;
 
 const RELEASE_VERSION = "1.2.3";
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
 interface ManifestOverrides {
   artifactDigest?: string;
   createdAt?: string;
@@ -34,6 +35,7 @@ interface ManifestOverrides {
   schemaVersion?: number;
   toolBuildIdentity?: string;
 }
+
 interface ReleaseFixtureOptions {
   executableContents?: string;
   executableVersion?: string;
@@ -54,6 +56,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const archivePath = path.join(sandbox, archiveName);
   const skillContents = "# Example skill\n";
   const referenceContents = "# Example reference\n";
+
   const executableContents =
     options.executableContents ??
     `#!/bin/sh\nprintf '%s\\n' '${options.executableVersion ?? RELEASE_VERSION}'\n`;
@@ -78,9 +81,11 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   writeFileSync(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
+
   if (options.legacySkillLock !== undefined) {
     writeFileSync(path.join(bundleRoot, "skills.lock.json"), options.legacySkillLock);
   }
+
   writeFileSync(
     path.join(bundleRoot, "install-manifest.json"),
     `${JSON.stringify(
@@ -111,14 +116,17 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     )}\n`,
     "utf-8"
   );
+
   if (options.extraPath) {
     const extraPath = path.join(bundleRoot, options.extraPath);
     mkdirSync(path.dirname(extraPath), { recursive: true });
     writeFileSync(extraPath, "unexpected\n", "utf-8");
   }
+
   if (options.tamperGlobalInstructions) {
     writeFileSync(path.join(bundleRoot, "instructions", "GLOBAL.md"), "# Stale Global\n", "utf-8");
   }
+
   if (options.missingPath) {
     rmSync(path.join(bundleRoot, options.missingPath), { force: true, recursive: true });
   }
@@ -126,15 +134,18 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const tar = spawnSync("tar", ["-czf", archivePath, "-C", bundleRoot, "."], {
     encoding: "utf-8"
   });
+
   if (tar.status !== 0) {
     throw new Error(`Could not create Release fixture: ${tar.stderr}`);
   }
+
   const checksumPath = path.join(sandbox, `monke-tools-v${RELEASE_VERSION}-checksums.txt`);
   writeFileSync(
     checksumPath,
     `${hash("sha256", readFileSync(archivePath), "hex")}  ${archiveName}\n`,
     "utf-8"
   );
+
   return { archivePath, bundleRoot, checksumPath };
 }
 
@@ -161,6 +172,7 @@ describe("Release bundle verifier", () => {
     const fixture = makeReleaseArchive({
       legacySkillLock: '{"recipes":[],"version":3}\n'
     });
+
     const manifest = verifyReleaseArchive({
       archivePath: fixture.archivePath,
       checksumPath: fixture.checksumPath,
@@ -360,6 +372,7 @@ describe("Release bundle verifier", () => {
     async () => {
       const platform = process.platform === "darwin" ? "macos-arm64" : "linux-x64";
       const outputDirectory = makeTempDir("release-build");
+
       const archivePath = await buildReleaseBundle({
         outputDirectory,
         platform,
@@ -378,15 +391,18 @@ describe("Release bundle verifier", () => {
       expect(manifest.guidanceHashes["monke.yml"]).toBe(
         hash("sha256", readFileSync(path.join(import.meta.dirname, "..", "monke.yml")), "hex")
       );
+
       for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
         const content = spawnSync("tar", ["-xOzf", archivePath, `./${file}`], {
           encoding: "utf-8"
         });
+
         expect(content.status).toBe(0);
         expect(content.stdout).toBe(
           readFileSync(path.join(import.meta.dirname, "..", file), "utf-8")
         );
       }
+
       expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
       expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
       expect(Date.parse(manifest.createdAt)).not.toBeNaN();

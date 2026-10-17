@@ -143,9 +143,11 @@ describe("Local install refresh script", () => {
     const activation = readFileSync(monkeToolsLog, "utf-8").trim();
     const [command, stagedInstall, sourceCheckout] = activation.split(" ");
     expect(command).toBe("activate-local-install");
+
     if (stagedInstall === undefined) {
       throw new Error("activation did not include a staged install path");
     }
+
     expect(path.dirname(stagedInstall)).toBe(path.join(monkeHome, "install-staging"));
     expect(path.basename(stagedInstall)).toMatch(/^local-0123456-/u);
     expect(sourceCheckout).toBe(checkout);
@@ -164,6 +166,7 @@ describe("Local install refresh script", () => {
     const bunLog = path.join(sandbox, "bun.log");
     const monkeToolsLog = path.join(sandbox, "monke-tools.log");
     prepareInstallFixture(checkout, binDirectory, false);
+
     const environment = {
       ...process.env,
       BUN_LOG: bunLog,
@@ -179,6 +182,7 @@ describe("Local install refresh script", () => {
         encoding: "utf-8",
         env: environment
       });
+
       expect(result.status).toBe(0);
     }
 
@@ -186,6 +190,7 @@ describe("Local install refresh script", () => {
       .trim()
       .split("\n")
       .map((line) => INSTALL_ID_ARGUMENT_PATTERN.exec(line)?.groups?.identity);
+
     expect(new Set(installIdentities).size).toBe(2);
   });
 
@@ -219,6 +224,7 @@ describe("Local install refresh script", () => {
   test("compiled Local executables report their Tool build identity", () => {
     const sandbox = makeTempDir("install-local-version");
     const executablePath = path.join(sandbox, "mt");
+
     const build = spawnSync(
       "bun",
       [
@@ -232,6 +238,7 @@ describe("Local install refresh script", () => {
       ],
       { cwd: projectRoot, encoding: "utf-8" }
     );
+
     expect(build.status).toBe(0);
 
     const version = spawnSync(executablePath, ["--version"], { encoding: "utf-8" });
@@ -265,15 +272,18 @@ describe("Local install refresh script", () => {
         }
       }
     );
+
     expect(install.status).toBe(0);
 
     const stableCommand = path.join(home, ".local", "bin", "mt");
     expect(readlinkSync(stableCommand)).toBe(path.join(monkeHome, "current", "mt"));
     const activeRoot = realpathSync(path.join(monkeHome, "current"));
     expect(realpathSync(stableCommand)).toBe(path.join(activeRoot, "mt"));
+
     const manifest = object({ sourceCheckout: string(), toolBuildIdentity: string() }).parse(
       JSON.parse(readFileSync(path.join(activeRoot, "install-manifest.json"), "utf-8"))
     );
+
     const version = spawnSync(stableCommand, ["--version"], { encoding: "utf-8" });
     expect(version.status).toBe(0);
     expect(version.stdout.trim()).toBe(manifest.toolBuildIdentity);

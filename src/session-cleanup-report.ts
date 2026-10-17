@@ -115,6 +115,7 @@ function committedWorkCheck(
       status: "not-checked"
     };
   }
+
   if (!evidence.archiveReadiness && evidence.localBlock) {
     return {
       code: evidence.localBlock.code,
@@ -125,24 +126,31 @@ function committedWorkCheck(
       status: "unknown"
     };
   }
+
   const proof = evidence.archiveReadiness ?? decision;
+
   const report = check(
     proof.eligible ? "passed" : proof.status === "ineligible" ? "blocked" : "unknown",
     proof.code
   );
+
   if (proof.evidence.length > 0) {
     report.details = proof.evidence;
   }
+
   return report;
 }
 
 function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMember) {
   const decision = decideSessionCleanupMember(snapshot.rootSourceRoot, member);
+
   const problems = (snapshot.problems ?? []).filter(
     (problem) => problem.worktreePath === member.worktreePath
   );
+
   let local: CleanupCheckReport;
   let committedWork: CleanupCheckReport;
+
   if (problems.length > 0 || member.mode === "unverified") {
     const code = problems[0]?.code ?? "member-identity-unverified";
     local = check(SETTLED_BLOCKERS.has(code) ? "blocked" : "unknown", code);
@@ -167,8 +175,10 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
     };
   } else if (member.evidence) {
     const block = member.evidence.localBlock;
+
     if (block) {
       local = check(block.status === "ineligible" ? "blocked" : "unknown", block.code);
+
       if (block.evidence.length > 0) {
         local.details = block.evidence;
       }
@@ -180,6 +190,7 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
         status: "passed"
       };
     }
+
     committedWork = committedWorkCheck(member.evidence, decision);
   } else {
     local = check("unknown", "member-missing-or-unverified");
@@ -189,6 +200,7 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
       status: "not-checked"
     };
   }
+
   return {
     checks: { committedWork, local },
     problems,
@@ -200,17 +212,21 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
 function cleanupReadiness(snapshot: SessionCleanupEvidence, eligible: boolean) {
   const membersReady = snapshot.members.every((member) => {
     const decision = decideSessionCleanupMember(snapshot.rootSourceRoot, member);
+
     return (
       decision.eligible ||
       (decision.code === "dirty-worktree" && member.evidence?.archiveReadiness?.eligible === true)
     );
   });
+
   if (!membersReady || snapshot.blockers.some((code) => code !== "resource-recovery-required")) {
     return "blocked";
   }
+
   if (snapshot.blockers.includes("resource-recovery-required")) {
     return "resource-recovery-required";
   }
+
   if (
     snapshot.members.some(
       (member) =>
@@ -220,6 +236,7 @@ function cleanupReadiness(snapshot: SessionCleanupEvidence, eligible: boolean) {
   ) {
     return "archive-required";
   }
+
   return eligible ? "ready" : "blocked";
 }
 
@@ -231,6 +248,7 @@ export function createSessionCleanupReport(
 ) {
   const eligibility = decideSessionCleanupEligibility(snapshot);
   const members = snapshot.members.map((member) => memberReport(snapshot, member));
+
   // Eligibility can be conclusively false while another check still lacks evidence.
   const inspectionFailed =
     snapshot.blockers.some((blocker) => !SETTLED_BLOCKERS.has(blocker)) ||
@@ -238,6 +256,7 @@ export function createSessionCleanupReport(
       (member) =>
         member.checks.local.status === "unknown" || member.checks.committedWork.status === "unknown"
     );
+
   return {
     eligibility,
     execution,
@@ -264,6 +283,7 @@ export function createSessionCleanupReport(
 export function formatSessionCleanupReport(report: ReturnType<typeof createSessionCleanupReport>) {
   const root = report.rootSourceRoot ? path.basename(report.rootSourceRoot) : "unknown Root repo";
   const label = report.session ?? report.stateFile;
+
   const labels = {
     cleaned: "Cleaned",
     eligible: "Eligible (not attempted)",
@@ -271,18 +291,23 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
     skipped: "Skipped",
     "would-clean": "Would clean"
   };
+
   const lines = [`${labels[report.outcome]}: ${root} / ${label} (${report.readiness})`];
+
   if (report.execution.outcome === "failed" || report.execution.outcome === "skipped") {
     lines.push(
       `  ${report.execution.step} failed in ${report.execution.sourceRoot}: ${report.execution.message}`
     );
   }
+
   for (const reason of report.reasons) {
     lines.push(`  ${reason.code}: ${reason.message}`);
   }
+
   for (const problem of report.problems) {
     lines.push(`  ${problem.message}`);
   }
+
   for (const member of report.members) {
     lines.push(
       `  ${member.sourceRoot} — ${member.worktreePath}`,
@@ -292,35 +317,45 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
       ...(member.checks.committedWork.details ?? []).map((detail) => `      ${detail}`)
     );
   }
+
   if (report.outcome === "skipped") {
     lines.push("  Entire Session retained; no removal attempted.");
   }
+
   if (report.outcome === "failed") {
     lines.push("  Cleanup was attempted and did not complete; earlier steps may have succeeded.");
   }
+
   lines.push(...formatProgress(report));
+
   return `${lines.join("\n")}\n`;
 }
 
 function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
   const lines: string[] = [];
+
   for (const action of report.plannedActions) {
     lines.push(`  Planned: ${formatAction(action)}`);
   }
+
   for (const action of report.execution.completedActions ?? []) {
     lines.push(`  Completed this attempt: ${formatAction(action)}`);
   }
+
   for (const action of report.execution.remainingActions ?? []) {
     lines.push(`  Remaining: ${formatAction(action)}`);
   }
+
   if (report.execution.attemptedAction && report.outcome === "failed") {
     lines.push("  The failed action may have produced effects; its completion is unverified.");
   }
+
   if (report.outcome === "failed" && (report.execution.retryCleanupCommands?.length ?? 0) > 0) {
     lines.push(
       "  Retry runs recorded Cleanup commands from the beginning, including earlier successes."
     );
   }
+
   return lines;
 }
 

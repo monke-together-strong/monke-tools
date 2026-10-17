@@ -19,19 +19,23 @@ export async function summarizeSkillChanges(options: {
 }) {
   const { after, before, runtime, writeMessage } = options;
   const output = path.join(after, SKILL_SUMMARY_FILE);
+
   try {
     const changed = ["", ...(options.collections ?? [])].flatMap((collection) => {
       const previous = path.join(before, collection);
       const next = path.join(after, collection);
+
       const guidance = new Map(
         [previous, next]
           .flatMap((root) => readImportRecipeStore(root).recipes.flatMap((recipe) => recipe.skills))
           .map((item) => [`${item.kind}:${item.slug}`, item])
       );
+
       return [...guidance.values()]
         .filter((item) => {
           const had = existsSync(importedGuidancePath(previous, item));
           const has = existsSync(importedGuidancePath(next, item));
+
           return (
             had !== has ||
             (had && guidanceDigest(previous, [item]) !== guidanceDigest(next, [item]))
@@ -42,10 +46,13 @@ export async function summarizeSkillChanges(options: {
           before: importedGuidancePath(previous, item)
         }));
     });
+
     if (changed.length === 0) {
       return;
     }
+
     writeMessage("Summarizing skill changes with Codex...\n");
+
     const result = await runtime.execAsync(
       "codex",
       [
@@ -76,6 +83,7 @@ export async function summarizeSkillChanges(options: {
         timeoutSeconds: 120
       }
     );
+
     if (result.exitCode !== 0 || result.timedOut) {
       throw new MonkeError(
         result.timedOut
@@ -83,11 +91,14 @@ export async function summarizeSkillChanges(options: {
           : result.stderr.trim() || `Codex exited with ${result.exitCode}`
       );
     }
+
     const contents = await Bun.file(output).text();
     const summary = contents.trim();
+
     if (!summary) {
       throw new MonkeError("Codex returned an empty summary");
     }
+
     writeMessage(`${summary}\n`);
   } catch (error) {
     rmSync(output, { force: true });

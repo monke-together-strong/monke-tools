@@ -21,18 +21,22 @@ import type { RepoConfig, RepoReservation, SessionRepoState, SessionState } from
 import { unwrapBoundaryResult, parseOwnedYamlFile, parseOwnedYamlText } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
+
 // Reserve a generous flat block per repo so multiple concurrent sessions can each allocate
 // their full port set without exhausting the block. Sized for the heaviest realistic repo
 // (tens of ports per session) times comfortable concurrency headroom; blocks stack from
 // GLOBAL_PORT_FLOOR, so even ~50 repos at this width fit under the 65535 ceiling.
 const MIN_REPO_RESERVATION_SIZE = 1000;
+
 const SessionStateIdentitySchema = z.object({
   rootSourceRoot: z.string(),
   session: z.string()
 });
+
 const SessionStateWorktreePathsSchema = z.object({
   repos: z.array(z.object({ worktreePath: z.string() }))
 });
+
 const SessionStateVersionSchema = z.object({ version: z.number().int() });
 
 export function loadSessionState(
@@ -41,6 +45,7 @@ export function loadSessionState(
   session: string
 ): SessionState {
   const filePath = getSessionStateFilePath(home, rootSourceRoot, session);
+
   if (!existsSync(filePath)) {
     throw new MonkeError(`Missing retained Session state for ${session} at ${rootSourceRoot}`);
   }
@@ -50,19 +55,23 @@ export function loadSessionState(
 
 export function saveSessionState(home: string, state: SessionState) {
   const identity = SessionStateIdentitySchema.safeParse(state);
+
   const label = identity.success
     ? getSessionStateFilePath(home, identity.data.rootSourceRoot, identity.data.session)
     : "session state";
+
   const parsed = unwrapBoundaryResult(SessionStateSchema.safeParse(state), label);
   const filePath = getSessionStateFilePath(home, parsed.rootSourceRoot, parsed.session);
   mkdirSync(path.dirname(filePath), { recursive: true });
   const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+
   try {
     writeFileSync(temporaryPath, stringify(parsed), { encoding: "utf-8", flag: "wx", mode: 0o600 });
     renameSync(temporaryPath, filePath);
   } finally {
     rmSync(temporaryPath, { force: true });
   }
+
   return parsed;
 }
 
@@ -77,25 +86,32 @@ export function listSessionStates(home: string) {
 /** Tolerant, read-only discovery. Invalid records are evidence, never silently discarded. */
 export function scanSessionStates(home: string) {
   let files: string[];
+
   try {
     files = listSessionStateFiles(home).toSorted();
   } catch {
     files = [path.join(home, "sessions")];
   }
+
   const records = files.map((filePath) => {
     let text = "";
+
     try {
       text = readFileSync(filePath, "utf-8");
       const state = parseOwnedYamlText(text, filePath, SessionStateSchema);
+
       if (!samePath(filePath, getSessionStateFilePath(home, state.rootSourceRoot, state.session))) {
         throw new MonkeError("Session state storage key mismatch");
       }
+
       const references: string[] = [];
+
       return { filePath, fingerprint: hashKey(text), references, state };
     } catch {
       // Bound corrupt ownership only when the complete identity/path shape can
       // still be read. An arbitrary scalar in broken YAML cannot prove isolation.
       const references: string[] = [];
+
       try {
         const partial = parseOwnedYamlText(
           text,
@@ -111,6 +127,7 @@ export function scanSessionStates(home: string) {
             session: z.string().min(1)
           })
         );
+
         references.push(
           partial.rootSourceRoot,
           ...partial.repos.flatMap((repo) => [
@@ -122,9 +139,11 @@ export function scanSessionStates(home: string) {
       } catch {
         /* Unreadable ownership blocks all Sessions. */
       }
+
       return { filePath, fingerprint: hashKey(text), references, state: null };
     }
   });
+
   return {
     fingerprint: hashKey(
       JSON.stringify(records.map(({ filePath, fingerprint }) => [filePath, fingerprint]))
@@ -156,12 +175,14 @@ export class SessionStateStore {
 
   checkpoint(state: SessionState) {
     const updated = structuredClone(state);
+
     for (const repo of updated.repos) {
       if (existsSync(checkoutResourceFile(this.home, repo.sourceRoot, repo.worktreePath))) {
         delete repo.resourceValues;
         delete repo.resourceCommandOutputs;
       }
     }
+
     const committed = saveSessionState(this.home, updated);
     this.#states.set(this.key(committed), committed);
   }
@@ -177,16 +198,19 @@ export class SessionStateStore {
     sourceRoot: string;
   }) {
     const ports = new Set<number>();
+
     for (const state of this.#states.values()) {
       for (const repo of state.repos) {
         if (this.key(state) === this.key(current) && repo.sourceRoot === current.sourceRoot) {
           continue;
         }
+
         for (const assignment of repo.assignedPorts) {
           ports.add(assignment.value);
         }
       }
     }
+
     return ports;
   }
 
@@ -203,6 +227,7 @@ export class SessionStateStore {
  */
 export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths: string[]) {
   const states: SessionState[] = [];
+
   for (const filePath of listSessionStateFiles(home)) {
     try {
       states.push(parseSessionStateFile(home, filePath));
@@ -212,15 +237,18 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
       }
     }
   }
+
   return states;
 }
 
 function parseSessionStateFile(home: string, filePath: string) {
   const state = parseSupportedSessionState(filePath);
   const expectedFilePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
+
   if (path.normalize(expectedFilePath) !== path.normalize(filePath)) {
     throw new MonkeError(`Session state identity does not match its storage key: ${filePath}`);
   }
+
   return state;
 }
 
@@ -235,17 +263,20 @@ function parseSupportedSessionState(filePath: string) {
     return parseOwnedYamlFile(filePath, SessionStateSchema);
   } catch (error) {
     const { version } = parseOwnedYamlFile(filePath, SessionStateVersionSchema);
+
     if (version !== 2) {
       throw new MonkeError(
         `Unsupported Session state version ${version} in ${filePath}; monke-tools requires strict v2 Session state`
       );
     }
+
     throw error;
   }
 }
 
 export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]) {
   const recordedRoots = state.repos.map((repo) => repo.sourceRoot);
+
   for (const [index, recordedRoot] of recordedRoots.entries()) {
     if (expectedOrder[index] !== recordedRoot) {
       throw new MonkeError(
@@ -261,21 +292,26 @@ export function getOrCreateReservation(home: string, sourceRoot: string, size: n
   }
 
   const filePath = getReservationFilePath(home, sourceRoot);
+
   if (existsSync(filePath)) {
     const existing = parseOwnedYamlFile(filePath, RepoReservationSchema);
+
     if (size > existing.size) {
       throw new MonkeError(
         `Repo ${sourceRoot} owns ${size} local ports but its reservation only has room for ${existing.size}`
       );
     }
+
     return existing;
   }
 
   let highestReservedPort = GLOBAL_PORT_FLOOR - 1;
+
   for (const reservation of listReservations(home)) {
     const blockEnd = reservation.blockStart + reservation.size - 1;
     highestReservedPort = Math.max(highestReservedPort, blockEnd);
   }
+
   const nextReservation: RepoReservation = {
     blockStart: Math.max(GLOBAL_PORT_FLOOR, highestReservedPort + 1),
     size: Math.max(size, MIN_REPO_RESERVATION_SIZE),
@@ -286,6 +322,7 @@ export function getOrCreateReservation(home: string, sourceRoot: string, size: n
   mkdirSync(path.dirname(filePath), { recursive: true });
   const parsed = unwrapBoundaryResult(RepoReservationSchema.safeParse(nextReservation), filePath);
   writeFileSync(filePath, stringify(parsed), "utf-8");
+
   return parsed;
 }
 
@@ -301,6 +338,7 @@ export function allocateLocalPorts(options: {
   const assignments = new Map<string, number>(
     (options.existingRepoState?.assignedPorts ?? []).map((entry) => [entry.key, entry.value])
   );
+
   if (options.repoConfig.localPortOrder.length === 0) {
     return assignments;
   }
@@ -324,19 +362,24 @@ export function allocateLocalPorts(options: {
     }
 
     let nextPort: number | null = null;
+
     for (let port = options.reservation.blockStart; port <= blockEnd; port += 1) {
       if (usedInRepo.has(port)) {
         continue;
       }
+
       if (globallyManagedPorts.has(port)) {
         continue;
       }
+
       if (options.baselinePorts.has(port)) {
         continue;
       }
+
       if (!isPortAvailable(port)) {
         continue;
       }
+
       nextPort = port;
       break;
     }
@@ -372,9 +415,11 @@ export function getSessionStateFilePath(home: string, rootSourceRoot: string, se
 
 function listSessionStateFiles(home: string) {
   const directoryPath = path.join(home, "sessions");
+
   if (!existsSync(directoryPath)) {
     return [];
   }
+
   return readdirSync(directoryPath)
     .filter((entry) => entry.endsWith(".yml"))
     .map((entry) => path.join(directoryPath, entry));
@@ -383,20 +428,24 @@ function listSessionStateFiles(home: string) {
 function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: string[]) {
   try {
     const partial = parseOwnedYamlFile(filePath, SessionStateWorktreePathsSchema);
+
     return partial.repos.some((repo) =>
       worktreePaths.some((worktreePath) => samePath(repo.worktreePath, worktreePath))
     );
   } catch {
     const text = readFileSync(filePath, "utf-8");
+
     const document = parseDocument(text, {
       merge: false,
       strict: false,
       uniqueKeys: false
     });
+
     let referencesWorktree = false;
     visit(document, {
       Scalar(key, scalar) {
         const scalarValue = z.string().safeParse(scalar.value);
+
         if (
           key !== "key" &&
           scalarValue.success &&
@@ -404,9 +453,11 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
         ) {
           referencesWorktree = true;
         }
+
         return referencesWorktree ? visit.BREAK : visit.SKIP;
       }
     });
+
     return referencesWorktree;
   }
 }
@@ -417,6 +468,7 @@ function getReservationFilePath(home: string, sourceRoot: string) {
 
 function listReservations(home: string) {
   const directoryPath = path.join(home, "repo-reservations");
+
   if (!existsSync(directoryPath)) {
     return [];
   }
@@ -428,8 +480,10 @@ function listReservations(home: string) {
 
 function requireAssignment(assignments: Map<string, number>, key: string, repoRoot: string) {
   const value = assignments.get(key);
+
   if (value === undefined) {
     throw new MonkeError(`Missing assigned port ${key} for ${repoRoot}`);
   }
+
   return value;
 }

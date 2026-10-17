@@ -41,6 +41,7 @@ describe("Better Stack content I/O", () => {
         }));`
         )
       ]);
+
       const child = Bun.spawn(
         [
           process.execPath,
@@ -77,11 +78,13 @@ describe("Better Stack content I/O", () => {
           stdout: "pipe"
         }
       );
+
       const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
         new Response(child.stderr).text()
       ]);
+
       expect(stderr).toBe("");
       expect(exitCode).toBe(0);
       expect(JSON.parse(stdout)).toStrictEqual({

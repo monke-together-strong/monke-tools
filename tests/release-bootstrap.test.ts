@@ -54,14 +54,17 @@ printf '%s\n' \
 printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
 `
   );
+
   if (options.invalidArchive) {
     write(responses, archiveName, "not a tar archive\n");
   } else {
     const tar = Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
+
     if (tar.exitCode !== 0) {
       throw new Error(`Could not create Release bootstrap fixture: ${tar.stderr.toString()}`);
     }
   }
+
   const archiveHash = hash("sha256", readFileSync(archivePath), "hex");
   write(
     responses,
@@ -112,6 +115,7 @@ esac
 if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
 `
   );
+
   return {
     archiveName,
     bin,
@@ -150,6 +154,7 @@ describe("public Release bootstrap", () => {
   test("uses the published stable catalog and verifies its Release", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "github-token-must-not-be-logged";
+
     const result = runBootstrap(fixture, {
       args: ["--targets", "codex"],
       env: { GH_TOKEN: secret }

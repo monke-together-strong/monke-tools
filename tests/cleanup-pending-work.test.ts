@@ -15,15 +15,18 @@ import { createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const sandboxes: string[] = [];
+
 // Raw text fixtures preserve the exact pnpm bytes required by this recognizer.
 const before = readFileSync(
   new URL("fixtures/cleanup-pnpm-bootstrap-before.txt", import.meta.url),
   "utf-8"
 );
+
 const after = readFileSync(
   new URL("fixtures/cleanup-pnpm-bootstrap-after.txt", import.meta.url),
   "utf-8"
 );
+
 const manifest = { packageManager: "pnpm@12.1.0" };
 
 function fixture(files: Record<string, string> = { "a.txt": "old a\n", "b.txt": "old b\n" }) {
@@ -35,14 +38,18 @@ function fixture(files: Record<string, string> = { "a.txt": "old a\n", "b.txt": 
   const root = path.join(sandbox, "member");
   git(source, ["worktree", "add", "-b", "member", root, head]);
   const runtime = readOnlyCleanupRuntime(createTestRuntime({ cwd: source }));
+
   const commit = () => {
     git(source, ["add", "."]);
     git(source, ["commit", "-m", "advance default"]);
+
     return git(source, ["rev-parse", "HEAD"]);
   };
+
   const proof = () => {
     const pending = inspectPendingWork(runtime, root, head);
     ok(pending, "Expected supported pending work");
+
     return provePendingWork(
       runtime,
       source,
@@ -52,6 +59,7 @@ function fixture(files: Record<string, string> = { "a.txt": "old a\n", "b.txt": 
       pending
     );
   };
+
   return { commit, head, proof, root, runtime, source };
 }
 
@@ -70,6 +78,7 @@ describe("cleanup preservation proofs", () => {
         "nested/deleted.txt": "gone\n",
         "run.sh": "exit 0\n"
       });
+
       for (const root of [f.source, f.root]) {
         write(root, "a.txt", "new a\n");
         write(root, "renamed.txt", "old b\n");
@@ -79,6 +88,7 @@ describe("cleanup preservation proofs", () => {
         chmodSync(path.join(root, "run.sh"), 0o755);
         symlinkSync("a.txt", path.join(root, "link"));
       }
+
       const witness = f.commit();
       git(f.root, ["add", "a.txt", "renamed.txt", "b.txt"]);
       expect(f.proof()).toMatchObject({ kind: "forward-bundle", witness });
@@ -156,17 +166,21 @@ describe("cleanup preservation proofs", () => {
       git(f.root, ["reset", "--hard"]);
       // macOS rejects invalid UTF-8 disk names; put the actual raw filename in a Git tree.
       const blob = git(f.source, ["rev-parse", "HEAD:a.txt"]);
+
       const invalidTree = Bun.spawnSync(["git", "mktree", "-z"], {
         cwd: f.source,
         stdin: Buffer.concat([Buffer.from(`100644 blob ${blob}\tbad-`), Buffer.from([255, 0])])
       });
+
       expect(invalidTree.exitCode).toBe(0);
+
       const invalidHead = git(f.source, [
         "commit-tree",
         invalidTree.stdout.toString().trim(),
         "-m",
         "raw invalid filename"
       ]);
+
       write(f.root, "a.txt", "pending\n");
       expect(inspectPendingWork(f.runtime, f.root, invalidHead)).toBeNull();
     });

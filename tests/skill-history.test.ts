@@ -19,14 +19,17 @@ const skillPath = "skills/imported/example/SKILL.md";
 
 function historyFixture() {
   const sandbox = makeTempDir("skill-history");
+
   const repo = createRepo(path.join(sandbox, "consumer"), {
     "monke.yml": "apps: {}\n",
     [skillPath]: "---\nname: example\n---\nBefore recipes.\n",
     "skills/references/imported/guide/MAIN.md": "Committed reference.\n"
   });
+
   const bin = path.join(sandbox, "bin");
   const reviewLog = installFakeCodiff(bin);
   const monkeHome = path.join(sandbox, "monke-home");
+
   const run = async (base: string, head = "HEAD") => {
     const child = Bun.spawn([process.execPath, reviewScript, base, head, "--adapter", "codiff"], {
       cwd: repo,
@@ -39,20 +42,26 @@ function historyFixture() {
       stderr: "pipe",
       stdout: "pipe"
     });
+
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
       child.exited
     ]);
+
     return { exitCode, stderr, stdout };
   };
+
   const openedComparison = () => {
     const [flag, commit, repository] = read(bin, path.basename(reviewLog)).trim().split("\n");
+
     if (flag !== "--commit" || !commit || !repository) {
       throw new Error("Expected one complete comparison delivered to Codiff");
     }
+
     return { commit, repository };
   };
+
   return { bin, monkeHome, openedComparison, repo, run, sandbox };
 }
 
@@ -93,10 +102,12 @@ describe("historical skill review CLI", () => {
 
   test("rebuilds old v3 locks and repo recipes from accepted pins with current tooling", async () => {
     const fixture = historyFixture();
+
     const upstream = createRepo(path.join(fixture.sandbox, "upstream"), {
       "skills/example/SKILL.md":
         "---\nname: example\ndescription: Original trigger.\n---\nAccepted upstream bytes.\n"
     });
+
     const accepted = git(upstream, ["rev-parse", "HEAD"]);
     write(upstream, "skills/example/SKILL.md", "---\nname: example\n---\nUnaccepted HEAD.\n");
     git(upstream, ["add", "."]);

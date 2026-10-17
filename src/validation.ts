@@ -25,6 +25,7 @@ export function parseOwnedYamlText<T extends z.ZodType>(text: string, label: str
   }
 
   const value: unknown = document.toJS();
+
   return unwrapBoundaryResult(schema.safeParse(value), label);
 }
 
@@ -37,14 +38,17 @@ export function unwrapBoundaryResult<T>(result: z.ZodSafeParseResult<T>, label: 
   const message = result.error.issues
     .map((issue) => {
       const location = formatIssuePath(issue.path);
+
       return location ? `${location}: ${issue.message}` : issue.message;
     })
     .join("\n");
+
   throw new MonkeError(`Invalid ${label}:\n${message}`);
 }
 
 function formatIssuePath(issuePath: PropertyKey[]) {
   let result = "";
+
   for (const segment of issuePath) {
     if (isNumber(segment)) {
       result += `[${segment}]`;
@@ -52,5 +56,6 @@ function formatIssuePath(issuePath: PropertyKey[]) {
       result += result ? `.${String(segment)}` : String(segment);
     }
   }
+
   return result;
 }

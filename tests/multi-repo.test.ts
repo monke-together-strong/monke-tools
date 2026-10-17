@@ -31,6 +31,7 @@ const SIBLING_START_BARRIER_DELAY_SECONDS = 0.01;
 function makeRepoTempDir(prefix: string) {
   const testTempRoot = path.join(projectRoot, "tmp", "tests");
   mkdirSync(testTempRoot, { recursive: true });
+
   return realpathSync.native(mkdtempSync(path.join(testTempRoot, `${prefix}-`)));
 }
 
@@ -97,6 +98,7 @@ external:
   test("missing Root config cannot discard retained dependency Cleanup obligations", () => {
     const sandbox = makeTempDir("multi-repo-missing-root-config");
     const home = path.join(sandbox, "home");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "app/.env": "PORT=4100\n",
       "monke.yml": `bootstrapCommand: "true"
@@ -110,6 +112,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "DEP_PORT=4100\n",
       "monke.yml": `bootstrapCommand: "true"
@@ -211,6 +214,7 @@ external:
 
   test("spawn --no-dirty fails dirty dependency source checkouts before creating any worktrees", () => {
     const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
+
     try {
       const binDirectory = path.join(sandbox, "bin");
       const home = path.join(sandbox, "home");
@@ -238,6 +242,7 @@ external:
 `,
         "services/db/.env.local": "PORT=5432\n"
       });
+
       write(dirtyDepRoot, "untracked.txt", "dirty\n");
 
       const root = createRepo(path.join(sandbox, "root"), {
@@ -330,6 +335,7 @@ external:
 `,
       "root.txt": "clean root\n"
     });
+
     write(depRoot, "dep.txt", "dirty dep\n");
     write(root, "root.txt", "dirty root\n");
 
@@ -444,6 +450,7 @@ external:
         env: DATABASE_URL
 `
     });
+
     git(root, ["switch", "-c", "feature"]);
     write(
       root,
@@ -491,12 +498,14 @@ external:
 
     git(root, ["worktree", "remove", "--force", rootWorktree]);
     git(depRoot, ["worktree", "remove", "--force", depWorktree]);
+
     const cleanupResult = runMonke({
       args: ["cleanup"],
       binDirectory,
       cwd: root,
       monkeHome: home
     });
+
     expect(cleanupResult.stdout).toContain("Cleaned: root / default-graph");
     expect(cleanupResult.stderr).toBe("");
   });
@@ -517,6 +526,7 @@ external:
 `,
       "services/db/.env.local": "PORT=5432\nDEFAULT_ONLY=1\n"
     });
+
     write(depRoot, "services/db/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -536,6 +546,7 @@ external:
         env: DATABASE_URL
 `
     });
+
     git(root, ["switch", "-c", "feature"]);
 
     runMonke({
@@ -572,6 +583,7 @@ external:
 `,
       "services/db/.env.local": "PORT=5432\nMASTER_DEFAULT=1\n"
     });
+
     git(depRoot, ["branch", "-m", "master"]);
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -603,9 +615,11 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "mixed-defaults");
     // Another worker can temporarily occupy the first port in the reservation.
     const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+
     const assignedPort = state.repos
       .find((repo) => repo.sourceRoot === depRoot)
       ?.assignedPorts.find((port) => port.key === "DEP_POSTGRES_PORT")?.value;
+
     expect(assignedPort).toBeDefined();
     expect(read(depWorktree, "services/db/.env.local")).toBe(
       `PORT=${String(assignedPort)}\nMASTER_DEFAULT=1\n`
@@ -718,6 +732,7 @@ external:
         env: DATABASE_URL
 `
       });
+
       const rootB = createRepo(path.join(sandbox, "root-b"), {
         "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
         "monke.yml": `apps:
@@ -755,9 +770,11 @@ external:
       });
       expect(read(secondDepWorktree, "command-runs.log")).toBe("run\n");
       expect(read(secondDepWorktree, ".env")).not.toContain("E2E_FLOW1_SYMBOL=");
+
       const record = new CheckoutResourceStore(home).get(
         resourceOwner(depRoot, secondDepWorktree, secondSession)
       );
+
       expect(record.resourceCommandOutputs).toMatchObject([
         { name: "e2e-symbols", outputs: [{ env: "E2E_FLOW1_SYMBOL", value: symbol }] }
       ]);
@@ -854,9 +871,11 @@ external:
     expect(read(rootWorktree, ".env")).toBe(
       `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`
     );
+
     const record = new CheckoutResourceStore(home).get(
       resourceOwner(root, rootWorktree, "partial")
     );
+
     expect(record.resourceCommandOutputs).toMatchObject([
       { name: "e2e-channel", outputs: [{ env: "E2E_CHANNEL_ID", value: "123" }] }
     ]);
@@ -1003,6 +1022,7 @@ external:
 `,
       "services/leaf/.env.local": "PORT=9000\n"
     });
+
     const dep = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
   dep:
@@ -1022,6 +1042,7 @@ external:
 `,
       "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
       "monke.yml": `apps:
@@ -1233,6 +1254,7 @@ apps:
 `,
       "scripts/bootstrap.sh": "exit 9\n"
     });
+
     const successfulRoot = createRepo(path.join(sandbox, "successful"), {
       "app/.env": "PORT=4200\n",
       "monke.yml": `bootstrapCommand: sleep ${INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS}; printf x >> "${successfulRuns}"; touch "${settledMarker}"
@@ -1247,6 +1269,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "FAILING_PORT=4100\nSUCCESSFUL_PORT=4200\n",
       "monke.yml": `bootstrapCommand: touch root-materialized
@@ -1330,6 +1353,7 @@ external:
     const sandbox = makeTempDir("multi-repo-invalid-materialized-dependency");
     const home = path.join(sandbox, "home");
     const depRuns = path.join(sandbox, "dep-runs");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "app/.env": "PORT=4100\n",
       "monke.yml": `bootstrapCommand: printf x >> "${depRuns}"
@@ -1342,6 +1366,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "DEP_PORT=4100\n",
       "monke.yml": `bootstrapCommand: printf x >> root-runs
@@ -1418,6 +1443,7 @@ apps:
         env: PORT
 `
     });
+
     const slowRoot = createRepo(path.join(sandbox, "slow"), {
       "app/.env": "PORT=4200\n",
       "monke.yml": `bootstrapCommand: test -f "${slowPreparationDone}"
@@ -1430,6 +1456,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "READY_PORT=4100\nSLOW_PORT=4200\n",
       "monke.yml": `apps:
@@ -1454,6 +1481,7 @@ external:
         env: SLOW_PORT
 `
     });
+
     const slowWorktree = getExpectedWorktreePath(home, slowRoot, "overlap");
     installGitShim(binDirectory, {
       afterCommand: {
@@ -1483,6 +1511,7 @@ external:
     const home = path.join(sandbox, "home");
     const firstStarted = path.join(sandbox, "first-started");
     const secondStarted = path.join(sandbox, "second-started");
+
     const waitForSibling = (ownMarker: string, siblingMarker: string) =>
       `touch "${ownMarker}"; attempts=0; while [ ! -f "${siblingMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt ${SIBLING_START_BARRIER_ATTEMPTS} ] || exit 91; sleep ${SIBLING_START_BARRIER_DELAY_SECONDS}; done`;
 
@@ -1498,6 +1527,7 @@ apps:
         env: PORT
 `
     });
+
     const secondRoot = createRepo(path.join(sandbox, "second"), {
       "app/.env": "PORT=4200\n",
       "monke.yml": `bootstrapCommand: ${waitForSibling(secondStarted, firstStarted)}
@@ -1510,6 +1540,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "FIRST_PORT=4100\nSECOND_PORT=4200\n",
       "monke.yml": `apps:
@@ -1570,6 +1601,7 @@ external:
     const sandbox = makeTempDir("multi-repo-default-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `bootstrapCommand: sh scripts/bootstrap.sh
 apps:
@@ -1583,6 +1615,7 @@ apps:
       "scripts/bootstrap.sh": "exit 9\n",
       "services/db/.env.local": "DEP=1\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "API=1\n",
@@ -1647,6 +1680,7 @@ external:
     const sandbox = makeTempDir("multi-repo-preparation-failure-settlement");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       ".gitignore": "seed-data/\n",
       "monke.yml": `seedPaths:
@@ -1662,6 +1696,7 @@ apps:
       "seed-data/fixture": "dependency fixture\n",
       "services/db/.env.local": "DEP=1\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "API=1\n",
@@ -1712,6 +1747,7 @@ external:
       // fail on an unreadable directory and mask the original failure.
       chmodSync(protectedSourcePath, 0o700);
     }
+
     expect(read(rootWorktree, "seed-data/new")).toBe("new Root material\n");
     expect(read(rootWorktree, "bootstrap-runs")).toBe("x");
   });
@@ -1732,6 +1768,7 @@ external:
 `,
       "services/db/.env.local": "DEP=9000\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "API=http://localhost:9000\n",
       "monke.yml": `apps:

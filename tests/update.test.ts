@@ -167,9 +167,11 @@ describe("Release update", () => {
             if (url.endsWith(candidate.archiveName)) {
               return releaseAssetResponse(candidate.archive);
             }
+
             if (url.endsWith(candidate.checksumsName)) {
               return releaseAssetResponse(candidate.checksums);
             }
+
             throw new Error(`Unexpected Release asset URL: ${url}`);
           },
           async listReleases(page) {
@@ -222,6 +224,7 @@ describe("Release update", () => {
                 release("1.2.4")
               ];
             }
+
             return [];
           }
         },
@@ -285,9 +288,11 @@ describe("Release update", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
     const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
+
     const candidate = prepareReleaseAsset(sandbox, "1.2.4", {
       minimumCodiffVersion: "2.0.0"
     });
+
     const stagingRoot = path.join(monkeHome, "install-staging");
     mkdirSync(path.join(stagingRoot, "update-interrupted"), { recursive: true });
     mkdirSync(path.join(stagingRoot, "release-interrupted"), { recursive: true });
@@ -319,9 +324,11 @@ describe("Release update", () => {
             if (url.endsWith(candidate.archiveName)) {
               return releaseAssetResponse(candidate.archive);
             }
+
             if (url.endsWith(candidate.checksumsName)) {
               return releaseAssetResponse(candidate.checksums);
             }
+
             throw new Error(`Unexpected Release asset URL: ${url}`);
           },
           async listReleases(page) {
@@ -374,6 +381,7 @@ describe("Release update", () => {
           },
           async listReleases() {
             catalogCalled = true;
+
             return [];
           }
         },
@@ -407,6 +415,7 @@ describe("Release update", () => {
         releaseDistribution: {
           async downloadReleaseAsset(url) {
             write(installRoot, "skills/internal/example/SKILL.md", "edited during download\n");
+
             return releaseAssetResponse(
               url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
             );
@@ -441,10 +450,12 @@ describe("Release update", () => {
       const sourceCheckout = path.join(sandbox, "source checkout");
       write(sourceCheckout, "unfinished.txt", "maintainer work\n");
       prepareActiveRelease(monkeHome, "1.2.4", false);
+
       const localInstall = prepareActiveLocal(monkeHome, sourceCheckout, {
         sourceCommit,
         sourceDirty
       });
+
       const candidate = prepareReleaseAsset(sandbox, "1.2.4");
       let stderr = "";
 
@@ -640,15 +651,19 @@ describe("Release update", () => {
     let downloads = 0;
     let releaseFirstCatalog!: () => void;
     let markFirstCatalogStarted!: () => void;
+
     const firstCatalogStarted = new Promise<void>((resolve) => {
       markFirstCatalogStarted = resolve;
     });
+
     const firstCatalogGate = new Promise<void>((resolve) => {
       releaseFirstCatalog = resolve;
     });
+
     const distribution = {
       async downloadReleaseAsset(url: string) {
         downloads += 1;
+
         return releaseAssetResponse(
           url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
         );
@@ -657,14 +672,18 @@ describe("Release update", () => {
         if (page !== 1) {
           return [];
         }
+
         catalogCalls += 1;
+
         if (catalogCalls === 1) {
           markFirstCatalogStarted();
           await firstCatalogGate;
         }
+
         return [candidate.metadata];
       }
     };
+
     const runtime = () =>
       createTestRuntime({
         architecture: "x64",
@@ -712,6 +731,7 @@ describe("Release update", () => {
           },
           async listReleases() {
             catalogCalled = true;
+
             return [];
           }
         },
@@ -739,25 +759,31 @@ describe("Release update", () => {
     const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
     const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
     let fixtureOptions: Parameters<typeof prepareReleaseAsset>[2] = {};
+
     if (failure === "manifest provenance") {
       fixtureOptions = { manifestSourceCommit: "f".repeat(40) };
     } else if (failure === "manifest platform") {
       fixtureOptions = { manifestPlatform: "macos-arm64" };
     }
+
     const candidate = prepareReleaseAsset(sandbox, "1.2.4", fixtureOptions);
     const [archiveAsset, checksumsAsset] = candidate.metadata.assets;
+
     if (!archiveAsset || !checksumsAsset) {
       throw new Error("Release test fixture assets are missing");
     }
+
     if (failure === "GitHub digest") {
       archiveAsset.digest = `sha256:${"0".repeat(64)}`;
     }
+
     if (failure === "published checksum") {
       candidate.checksums = new TextEncoder().encode(
         `${"0".repeat(64)}  ${candidate.archiveName}\n`
       );
       checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
     }
+
     if (failure === "archive structure") {
       candidate.archive = new TextEncoder().encode("not a Release archive\n");
       candidate.checksums = new TextEncoder().encode(
@@ -786,6 +812,7 @@ describe("Release update", () => {
             if (failure === "catalog lookup") {
               throw new Error("injected catalog failure");
             }
+
             return page === 1 ? [candidate.metadata] : [];
           }
         },
@@ -814,17 +841,21 @@ describe("Release update", () => {
       const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
       const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
       const sameReleasePredecessor = prepareActiveRelease(monkeHome, "1.2.4", false);
+
       const strandedBackup = path.join(
         monkeHome,
         "install-backups",
         path.basename(sameReleasePredecessor)
       );
+
       mkdirSync(path.dirname(strandedBackup), { recursive: true });
+
       if (phase === "final-rename") {
         renameSync(sameReleasePredecessor, strandedBackup);
       } else {
         cpSync(sameReleasePredecessor, strandedBackup, { recursive: true });
       }
+
       writeCollisionRecovery(strandedBackup, predecessor);
       const candidate = prepareReleaseAsset(sandbox, "1.2.4");
 
@@ -878,6 +909,7 @@ describe("Release update", () => {
   ])("the v1 CLI rejects %s", async (_feature, arguments_) => {
     const sandbox = makeTempDir("release-update-cli-surface");
     let catalogCalled = false;
+
     const command = runCliAsync(
       arguments_,
       createTestRuntime({
@@ -891,6 +923,7 @@ describe("Release update", () => {
           },
           async listReleases() {
             catalogCalled = true;
+
             return [];
           }
         }

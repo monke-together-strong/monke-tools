@@ -13,13 +13,16 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 describe("resources", () => {
   test("resource runner output with a BOM is a protocol violation", async () => {
     const sourceRoot = makeTempDir("resources-output-bom");
+
     const runtime: Runtime = {
       ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
       async execAsync(_command, args) {
         await Bun.write(args?.[5] ?? "", '\uFEFF{"value":{"VALUE":"allocated"}}');
+
         return { exitCode: 0, stderr: "", stdout: "" };
       }
     };
+
     await expect(
       runResourceCommand({
         command: { name: "example", outputs: ["VALUE"], run: "example.ts", timeoutSeconds: 60 },
@@ -40,6 +43,7 @@ describe("resources", () => {
       const sourceRoot = path.join(sandbox, "repo");
       const store = new CheckoutResourceStore(path.join(sandbox, "home"));
       const record = store.get(resourceOwner(sourceRoot, sourceRoot));
+
       const original = {
         legacy,
         name: "retained",
@@ -50,8 +54,10 @@ describe("resources", () => {
         run: "retained.ts",
         timeoutSeconds: 60
       };
+
       record.resourceCommandOutputs = [original];
       store.save(record);
+
       const repoConfig: RepoConfig = {
         appsInOrder: [],
         configPath: path.join(sourceRoot, "monke.yml"),
@@ -66,14 +72,17 @@ describe("resources", () => {
         seedPaths: [],
         sourceRoot
       };
+
       const runtime: Runtime = {
         ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
         async execAsync(_command, args) {
           expect(args?.[4]).toBe(path.join(sourceRoot, "new.ts"));
           writeFileSync(args?.[5] ?? "", JSON.stringify({ value: { NEW: "new" } }));
+
           return { exitCode: 0, stderr: "", stdout: "" };
         }
       };
+
       let checkpointed = false;
       await resolveResourceCommands({
         existingRepoState: record,
@@ -105,11 +114,13 @@ describe("resources", () => {
     const sandbox = makeTempDir("resources-command-lock");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");
+
     const lockPath = path.join(
       home,
       "locks",
       `${hashKey(`resource-command\u0000${sourceRoot}\u0000e2e-symbols`)}.lock`
     );
+
     let commandSawLock = false;
     let persistenceSawLock = false;
 
@@ -131,6 +142,7 @@ describe("resources", () => {
       seedPaths: [],
       sourceRoot
     };
+
     const runtime: Runtime = {
       ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
       async execAsync(command, args, options) {
@@ -150,6 +162,7 @@ describe("resources", () => {
           JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
           "utf-8"
         );
+
         return {
           exitCode: 0,
           stderr: "",
@@ -195,6 +208,7 @@ describe("resources", () => {
     const sourceRoot = path.join(sandbox, "repo");
     mkdirSync(sourceRoot, { recursive: true });
     writeFileSync(path.join(sourceRoot, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf-8");
+
     const repoConfig: RepoConfig = {
       appsInOrder: [],
       configPath: path.join(sourceRoot, "monke.yml"),
@@ -213,6 +227,7 @@ describe("resources", () => {
       seedPaths: [],
       sourceRoot
     };
+
     const invocations: { args: string[] | undefined; command: string }[] = [];
 
     const runtime: Runtime = {
@@ -224,6 +239,7 @@ describe("resources", () => {
           JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
           "utf-8"
         );
+
         return {
           exitCode: 0,
           stderr: "",

@@ -51,6 +51,7 @@ function makeCodeRabbitRepo(name: string) {
   write(repoRoot, "config/coderabbit/sources.yaml", "excerpts: []\n");
   write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
   write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
+
   return repoRoot;
 }
 
@@ -353,9 +354,11 @@ reviews:
   test("accepts a generated instruction at CodeRabbit's 20,000-character limit", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-exact-size-limit");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "");
+
     const [emptyBaseline] = BaselineConfigSchema.parse(
       parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
     ).reviews.path_instructions;
+
     expect(emptyBaseline).toBeDefined();
     write(
       repoRoot,
@@ -379,6 +382,7 @@ reviews:
         sources
       })
     ).toBeFalsy();
+
     for (const changedPath of [
       "skills/references/internal/CODING_STANDARDS.md",
       "skills/references/imported/code-review/MAIN.md",
@@ -402,6 +406,7 @@ reviews:
       "skills/references/imported/unrelated.md": "# Unrelated\n",
       "skills/references/internal/CODING_STANDARDS.md": "Read [shared](../imported/shared.md).\n"
     });
+
     const beforeRelevant = git(repoRoot, ["rev-parse", "HEAD"]);
     write(repoRoot, "skills/references/imported/shared.md", "# Shared\n\nChanged.\n");
     git(repoRoot, ["add", "."]);
@@ -450,6 +455,7 @@ reviews:
       "0".repeat(beforeRelevant.length),
       "f".repeat(beforeRelevant.length)
     ];
+
     const fallbackOutputs = await Promise.all(
       fallbackBeforeCommits.map(async (before) => {
         let fallbackOutput = "";
@@ -459,9 +465,11 @@ reviews:
             fallbackOutput += message;
           }
         );
+
         return fallbackOutput;
       })
     );
+
     expect(fallbackOutputs).toStrictEqual(["true\n", "true\n"]);
   });
 });

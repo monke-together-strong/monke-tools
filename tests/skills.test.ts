@@ -97,13 +97,16 @@ describe("skills", () => {
       { path: path.join(sandbox, ".cursor", "skills", "monke-tools"), seesCodex: false },
       { path: path.join(customSkillRoot, "monke-tools"), seesCodex: false }
     ];
+
     for (const projection of projections) {
       expect(lstatSync(projection.path).isDirectory()).toBeTruthy();
+
       for (const sourceFolder of ["imported", "internal", "references"]) {
         const installedPath = path.join(projection.path, sourceFolder);
         expect(lstatSync(installedPath).isSymbolicLink()).toBeTruthy();
         expect(readlinkSync(installedPath)).toBe(path.join(sourceCheckout, "skills", sourceFolder));
       }
+
       expect(existsSync(path.join(projection.path, "codex"))).toBe(projection.seesCodex);
     }
   });
@@ -218,6 +221,7 @@ describe("skills", () => {
       path.join(customSkillRoot, "monke-tools", "internal", "code-review"),
       path.join(sandbox, ".claude", "skills", "code-review")
     ];
+
     for (const wrapperDirectory of installedWrapperDirectories) {
       expect(readFileSync(path.join(wrapperDirectory, upstreamRelativePath), "utf-8")).toBe(
         "upstream review workflow\n"
@@ -226,6 +230,7 @@ describe("skills", () => {
         "team coding baseline\n"
       );
     }
+
     expect(
       JSON.parse(
         readFileSync(

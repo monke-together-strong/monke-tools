@@ -17,6 +17,7 @@ export function assertNoOverlappingCheckouts(
     if (containsPath(worktreePath, source)) {
       throw new MonkeError(`Worktree ${worktreePath} contains Source checkout ${source}`);
     }
+
     for (const worktree of listWorktrees(runtime, source)) {
       if (
         !samePath(worktree.path, source) &&
@@ -36,6 +37,7 @@ export function assertWorktreeUnlocked(entry: WorktreeEntry) {
   if (entry.locked === null) {
     return;
   }
+
   const reason = entry.locked === "" ? "" : `: ${entry.locked}`;
   throw new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
 }
@@ -45,11 +47,13 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
   if (!path.isAbsolute(sourceRoot) || !existsSync(sourceRoot)) {
     throw new MonkeError(`Recorded Source checkout does not exist at canonical path ${sourceRoot}`);
   }
+
   if (!samePath(realpathSync.native(sourceRoot), sourceRoot)) {
     throw new MonkeError(`Recorded Source checkout path is not canonical: ${sourceRoot}`);
   }
 
   let context: ReturnType<typeof resolveRepoContext>;
+
   try {
     context = resolveRepoContext(runtime, sourceRoot, null, {
       inferSessionName: false
@@ -59,6 +63,7 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
       `Cannot verify Source checkout ${sourceRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`
     );
   }
+
   if (
     !context.isSourceCheckout ||
     !samePath(context.sourceRoot, sourceRoot) ||
@@ -77,24 +82,30 @@ export function preflightWorktreeRemoval(
   authorizePreservedWork?: () => boolean
 ) {
   const worktree = validateRegisteredWorktreeForRemoval(runtime, sourceRoot, targetPath);
+
   if (options.force) {
     return { forceGitRemoval: true, worktree };
   }
+
   if (authorizePreservedWork?.()) {
     if (hasHiddenWorktreeIndexEntries(runtime, worktree.path)) {
       throw new MonkeError(
         `Cannot remove preserved worktree with hidden index entries: ${worktree.path}`
       );
     }
+
     return { forceGitRemoval: true, worktree };
   }
+
   assertCleanWorktree(runtime, worktree.path);
   const forceGitRemoval = hasInitializedSubmodules(runtime, worktree.path);
+
   if (forceGitRemoval) {
     // Git needs an internal force flag for initialized submodules. Revalidate
     // cleanliness immediately before authorizing that structural workaround.
     assertCleanWorktree(runtime, worktree.path);
   }
+
   return { forceGitRemoval, worktree };
 }
 
@@ -107,25 +118,32 @@ export function validateRegisteredWorktreeForRemoval(
   const target = path.normalize(targetPath);
   const worktrees = listWorktrees(runtime, sourceRoot);
   const entry = worktrees.find((worktree) => path.normalize(worktree.path) === target);
+
   if (entry === undefined || entry.prunable || !existsSync(entry.path)) {
     throw new MonkeError(`No removable registered worktree exists at ${targetPath}`);
   }
+
   assertWorktreeUnlocked(entry);
+
   if (samePath(entry.path, sourceRoot)) {
     throw new MonkeError(`Cannot Chop the Source checkout at ${sourceRoot}`);
   }
+
   const nested = worktrees.find(
     (other) =>
       !samePath(other.path, entry.path) &&
       !samePath(other.path, sourceRoot) &&
       worktreePathsOverlap(other.path, entry.path)
   );
+
   if (nested) {
     throw new MonkeError(
       `Worktree ${entry.path} overlaps another registered worktree ${nested.path}`
     );
   }
+
   assertWorktreeIdentity(runtime, sourceRoot, entry.path);
+
   return entry;
 }
 
@@ -138,11 +156,13 @@ function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
       cwd: worktreePath
     }
   ).stdout;
+
   if (status.trim() !== "") {
     throw new MonkeError(
       `Cannot Chop dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`
     );
   }
+
   if (hasHiddenWorktreeIndexEntries(runtime, worktreePath)) {
     throw new MonkeError(
       `Cannot prove clean worktree ${worktreePath}: hidden index entries may conceal edits, including in submodules.`
@@ -157,17 +177,21 @@ export function hasHiddenWorktreeIndexEntries(runtime: Runtime, worktreePath: st
       cwd: worktreePath
     })
     .stdout.split("\0");
+
   if (entries.some((entry) => /^[a-zS] /u.test(entry))) {
     return true;
   }
+
   if (!entries.some((entry) => /^[A-Z] 160000 /u.test(entry))) {
     return false;
   }
+
   const submodules = runtime.exec(
     "git",
     ["submodule", "foreach", "--quiet", "--recursive", "git ls-files -v -z"],
     { cwd: worktreePath }
   ).stdout;
+
   return submodules.split("\0").some((entry) => /^[a-zS] /u.test(entry));
 }
 
@@ -175,11 +199,13 @@ function hasInitializedSubmodules(runtime: Runtime, worktreePath: string) {
   const status = runtime.exec("git", ["submodule", "status", "--recursive"], {
     cwd: worktreePath
   }).stdout;
+
   return status.split("\n").some((line) => line !== "" && !line.startsWith("-"));
 }
 
 function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePath: string) {
   let context: ReturnType<typeof resolveRepoContext>;
+
   try {
     context = resolveRepoContext(runtime, worktreePath, null, {
       inferSessionName: false
@@ -195,6 +221,7 @@ function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePa
       `Worktree ${worktreePath} belongs to ${context.sourceRoot}; expected ${sourceRoot}`
     );
   }
+
   if (context.isSourceCheckout || !samePath(context.worktreeRoot, worktreePath)) {
     throw new MonkeError(`Registered path ${worktreePath} is not that linked worktree's root`);
   }

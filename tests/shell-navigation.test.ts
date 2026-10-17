@@ -18,9 +18,11 @@ function runGeneratedAdapter(shell: SupportedShell, mtStatus: number, targetExis
   const sandbox = makeTempDir(`shell-adapter-${shell}-${mtStatus}-${targetExists}`);
   const targetPath = path.join(sandbox, targetExists ? "target" : "missing");
   const binaryPath = path.join(sandbox, "fake-mt");
+
   if (targetExists) {
     mkdirSync(targetPath);
   }
+
   writeFileSync(
     binaryPath,
     `#!/bin/sh
@@ -30,11 +32,13 @@ exit ${mtStatus}
     "utf-8"
   );
   chmodSync(binaryPath, 0o755);
+
   const adapter = runMonke({
     args: ["shell", "init", shell, "--binary", binaryPath],
     cwd: sandbox,
     monkeHome: path.join(sandbox, "monke-home")
   }).stdout;
+
   const result = spawnSync(
     shell,
     [
@@ -54,10 +58,13 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
       }
     }
   );
+
   if (result.error !== undefined || result.stdout === null) {
     throw new Error(`Could not run ${shell}: ${String(result.error ?? "no output")}`);
   }
+
   const [reportedPath = "", reportedStatus = ""] = result.stdout.trim().split("\n");
+
   return {
     processStatus: result.status,
     reportedPath,
@@ -73,6 +80,7 @@ describe("shell navigation", () => {
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
@@ -99,6 +107,7 @@ describe("shell navigation", () => {
     const sandbox = makeTempDir("shell-spawn-configured-inactive");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
@@ -137,10 +146,12 @@ describe("shell navigation", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
     const startupFile = path.join(shellHome, ".zshrc");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     mkdirSync(shellHome, { recursive: true });
     writeFileSync(startupFile, "# >>> monke-tools shell integration >>>\n", "utf-8");
     chmodSync(startupFile, 0o000);
@@ -170,6 +181,7 @@ describe("shell navigation", () => {
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env": "PORT=3000\n",
       "monke.yml": `bootstrapCommand: |
@@ -184,6 +196,7 @@ apps:
         env: PORT
 `
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
@@ -267,6 +280,7 @@ apps:
       expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
       expect(contents).toContain(`'${stableBinary}' shell init`);
       expect(existsSync(path.join(shellHome, otherStartupFile))).toBeFalsy();
+
       for (const result of results) {
         expect(result.stderr).toContain(
           `Installed shell integration in ${path.join(shellHome, startupFile)}`
@@ -280,11 +294,14 @@ apps:
     const sandbox = makeTempDir("shell-install-zdotdir");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     const startupFile = path.join(repoRoot, "config", "zsh", ".zshrc");
+
     const shellEnvironment = {
       HOME: shellHome,
       SHELL: "/bin/zsh",
@@ -297,6 +314,7 @@ apps:
       extraEnv: shellEnvironment,
       monkeHome
     });
+
     const result = runMonke({
       args: ["spawn", "banana"],
       cwd: repoRoot,

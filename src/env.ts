@@ -45,11 +45,13 @@ export function collectBaselinePortsFromRoot(options: CollectBaselinePortsFromRo
       path.relative(options.config.sourceRoot, app.absoluteAppPath),
       app.relativeEnvFile
     );
+
     if (!existsSync(envPath)) {
       continue;
     }
 
     const values = readActiveAssignments(envPath);
+
     for (const mapping of app.localMappings) {
       for (const rawValue of values.get(mapping.targetEnv) ?? []) {
         ports.add(extractPort(rawValue, `${envPath}:${mapping.targetEnv}`));
@@ -69,12 +71,16 @@ export function rewriteManagedEnvFiles(
   const externalValuesByKey = new Map(
     externalAssignments.map((assignment) => [assignment.key, assignment.value])
   );
+
   const externalByApp = new Map<string, { env: string; value: number }[]>();
+
   for (const mapping of config.externalMappingsInOrder) {
     const value = externalValuesByKey.get(mapping.portKey);
+
     if (value === undefined) {
       continue;
     }
+
     const targetEntries = externalByApp.get(mapping.targetApp) ?? [];
     targetEntries.push({ env: mapping.targetEnv, value });
     externalByApp.set(mapping.targetApp, targetEntries);
@@ -118,6 +124,7 @@ export function syncRootEnvFileWithRemovals(
   }
 
   const envPath = path.join(worktreeRoot, ".env");
+
   if (!existsSync(envPath) && assignments.length === 0) {
     return;
   }
@@ -131,12 +138,14 @@ export function syncRootEnvFileWithRemovals(
 
   for (const line of lines) {
     const parsed = parseAssignmentLine(line);
+
     if (!parsed) {
       rewritten.push(line);
       continue;
     }
 
     const nextValue = requests.get(parsed.key);
+
     if (nextValue !== undefined) {
       touched.add(parsed.key);
       rewritten.push(`${parsed.prefix}${nextValue}${parsed.comment}`);
@@ -164,21 +173,25 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>) 
 
   const rewritten = lines.map((line) => {
     const parsed = parseAssignmentLine(line);
+
     if (!parsed) {
       return line;
     }
 
     const newPort = requests.get(parsed.key);
+
     if (newPort === undefined) {
       return line;
     }
 
     touched.add(parsed.key);
     const nextValue = replacePortInValue(parsed.rawValue, newPort, `${filePath}:${parsed.key}`);
+
     return `${parsed.prefix}${nextValue}${parsed.comment}`;
   });
 
   const missing = [...requests.keys()].filter((key) => !touched.has(key));
+
   if (missing.length > 0) {
     throw new MonkeError(`Missing mapped env vars in ${filePath}: ${missing.join(", ")}`);
   }
@@ -203,25 +216,31 @@ function seedRelativePath(
   onWarning?: (message: string) => void
 ) {
   const normalizedRelativePath = path.normalize(relativePath);
+
   if (seededPaths.has(normalizedRelativePath)) {
     return;
   }
+
   seededPaths.add(normalizedRelativePath);
 
   const sourcePath = path.join(sourceRoot, normalizedRelativePath);
+
   if (!existsSync(sourcePath)) {
     if (warnIfMissing) {
       onWarning?.(
         `Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`
       );
     }
+
     return;
   }
 
   const targetPath = path.join(worktreeRoot, normalizedRelativePath);
+
   if (samePath(sourcePath, targetPath)) {
     return;
   }
+
   copySeedEntry(sourcePath, targetPath);
 }
 
@@ -241,15 +260,19 @@ function copySeedEntry(sourcePath: string, targetPath: string) {
 
 function readActiveAssignments(filePath: string) {
   const values = new Map<string, string[]>();
+
   for (const line of readFileSync(filePath, "utf-8").split("\n")) {
     const parsed = parseAssignmentLine(line);
+
     if (!parsed) {
       continue;
     }
+
     const next = values.get(parsed.key) ?? [];
     next.push(parsed.rawValue);
     values.set(parsed.key, next);
   }
+
   return values;
 }
 
@@ -262,12 +285,14 @@ function parseAssignmentLine(line: string) {
     /^(?<prefixStart>\s*(?:export\s+)?)(?<key>[A-Za-z_][A-Za-z0-9_]*)(?<separator>\s*=\s*)(?<remainder>.*)$/u.exec(
       line
     );
+
   if (!match?.groups) {
     return null;
   }
 
   const { key = "", prefixStart = "", remainder = "", separator = "=" } = match.groups;
   const { comment, value } = splitValueAndComment(remainder);
+
   return {
     comment,
     key,
@@ -285,6 +310,7 @@ function splitValueAndComment(value: string) {
 
   for (let index = 0; index < value.length; index += 1) {
     const char = value[index];
+
     if ((char === "'" || char === '"') && (quote === null || quote === char)) {
       quote = quote === char ? null : char;
       continue;
@@ -292,6 +318,7 @@ function splitValueAndComment(value: string) {
 
     if (char === "#" && quote === null) {
       const previous = index === 0 ? "" : value[index - 1];
+
       if (!previous || /\s/u.test(previous)) {
         return {
           comment: value.slice(index),
@@ -313,6 +340,7 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
   const leadingWhitespace = /^\s*/u.exec(rawValue)?.[0] ?? "";
   const trailingWhitespace = /\s*$/u.exec(rawValue)?.[0] ?? "";
   const trimmed = rawValue.trim();
+
   if (!trimmed) {
     throw new MonkeError(`Empty env value at ${location}`);
   }
@@ -323,12 +351,15 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
       : trimmed.startsWith("'") && trimmed.endsWith("'")
         ? "'"
         : null;
+
   const innerValue = quote ? trimmed.slice(1, -1) : trimmed;
+
   if (!innerValue) {
     throw new MonkeError(`Empty env value at ${location}`);
   }
 
   let nextInnerValue: string;
+
   if (/^\d+$/u.test(innerValue)) {
     nextInnerValue = String(newPort);
   } else if (innerValue.includes("://")) {
@@ -340,11 +371,13 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
   }
 
   const nextCore = quote ? `${quote}${nextInnerValue}${quote}` : nextInnerValue;
+
   return `${leadingWhitespace}${nextCore}${trailingWhitespace}`;
 }
 
 function replaceUrlPort(value: string, newPort: number, location: string) {
   let parsed: URL;
+
   try {
     parsed = new URL(value);
   } catch {
@@ -357,36 +390,45 @@ function replaceUrlPort(value: string, newPort: number, location: string) {
 
   const schemeIndex = value.indexOf("://");
   const authorityStart = schemeIndex + 3;
+
   const authorityEndCandidates = [
     value.indexOf("/", authorityStart),
     value.indexOf("?", authorityStart),
     value.indexOf("#", authorityStart)
   ].filter((index) => index >= 0);
+
   const authorityEnd =
     authorityEndCandidates.length > 0 ? Math.min(...authorityEndCandidates) : value.length;
+
   const authority = value.slice(authorityStart, authorityEnd);
   const lastAt = authority.lastIndexOf("@");
   const hostPort = lastAt === -1 ? authority : authority.slice(lastAt + 1);
 
   let portStartInHostPort = -1;
   let currentPort = "";
+
   if (hostPort.startsWith("[")) {
     const bracketIndex = hostPort.indexOf("]");
+
     if (bracketIndex === -1 || hostPort[bracketIndex + 1] !== ":") {
       throw new MonkeError(
         `Expected explicit port at ${location}: ${describeRedactedValue(value)}`
       );
     }
+
     portStartInHostPort = bracketIndex + 2;
   } else {
     const colonIndex = hostPort.lastIndexOf(":");
+
     if (colonIndex === -1) {
       throw new MonkeError(
         `Expected explicit port at ${location}: ${describeRedactedValue(value)}`
       );
     }
+
     portStartInHostPort = colonIndex + 1;
   }
+
   currentPort = hostPort.slice(portStartInHostPort);
 
   if (!/^\d+$/u.test(currentPort)) {
@@ -395,11 +437,13 @@ function replaceUrlPort(value: string, newPort: number, location: string) {
 
   const absolutePortStart = authorityStart + (lastAt === -1 ? 0 : lastAt + 1) + portStartInHostPort;
   const absolutePortEnd = absolutePortStart + currentPort.length;
+
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
 
 function extractPort(rawValue: string, location: string) {
   const trimmed = rawValue.trim();
+
   if (!trimmed) {
     throw new MonkeError(`Empty env value at ${location}`);
   }
@@ -410,6 +454,7 @@ function extractPort(rawValue: string, location: string) {
       : trimmed.startsWith("'") && trimmed.endsWith("'")
         ? trimmed.slice(1, -1)
         : trimmed;
+
   if (/^\d+$/u.test(unwrapped)) {
     return Number(unwrapped);
   }
@@ -421,6 +466,7 @@ function extractPort(rawValue: string, location: string) {
   }
 
   let parsed: URL;
+
   try {
     parsed = new URL(unwrapped);
   } catch {
@@ -440,8 +486,10 @@ function extractPort(rawValue: string, location: string) {
 
 function requireAssignedPort(assignments: Map<string, number>, key: string, appLabel: string) {
   const value = assignments.get(key);
+
   if (value === undefined) {
     throw new MonkeError(`Missing assigned local port ${key} for ${appLabel}`);
   }
+
   return value;
 }

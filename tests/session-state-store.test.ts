@@ -29,16 +29,19 @@ describe("Session state store", () => {
   test("checkpoints atomically replace disk state and expose only committed snapshots", () => {
     const home = makeTempDir("session-state-store-atomic");
     const store = new SessionStateStore(home);
+
     const original = completeSessionState({
       repos: [materializedRepoState({ sourceRoot: "/repo", worktreePath: "/worktree" })],
       rootSourceRoot: "/repo",
       session: "atomic"
     });
+
     store.checkpoint(original);
     const filePath = getSessionStateFilePath(home, "/repo", "atomic");
     const originalText = readFileSync(filePath, "utf-8");
     const openReader = openSync(filePath, "r");
     const updated = { ...original, copyDirty: false };
+
     try {
       store.checkpoint(updated);
       // A reader of the previous inode sees the complete old checkpoint, never an overwritten file.
@@ -46,6 +49,7 @@ describe("Session state store", () => {
     } finally {
       closeSync(openReader);
     }
+
     expect(loadSessionState(home, "/repo", "atomic")).toStrictEqual(updated);
     expect(store.get("/repo", "atomic")).toStrictEqual(updated);
     expect(readdirSync(path.dirname(filePath))).toStrictEqual([path.basename(filePath)]);
@@ -59,9 +63,11 @@ describe("Session state store", () => {
 
     updated.copyDirty = true;
     const borrowed = store.get("/repo", "atomic");
+
     if (!borrowed) {
       throw new Error("expected retained checkpoint");
     }
+
     borrowed.copyDirty = true;
     expect(store.get("/repo", "atomic")?.copyDirty).toBeFalsy();
   });
@@ -827,9 +833,11 @@ repos:
     getOrCreateReservation(home, sourceRoot, 1);
     const reservationDirectory = path.join(home, "repo-reservations");
     const [reservationName] = readdirSync(reservationDirectory);
+
     if (reservationName === undefined) {
       throw new Error("expected a reservation file");
     }
+
     write(
       reservationDirectory,
       reservationName,
@@ -874,9 +882,11 @@ size: 1000
     getOrCreateReservation(home, sourceRoot, 1);
     const reservationDirectory = path.join(home, "repo-reservations");
     const [reservationName] = readdirSync(reservationDirectory);
+
     if (reservationName === undefined) {
       throw new Error("expected a reservation file");
     }
+
     write(reservationDirectory, reservationName, contents(sourceRoot));
 
     expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(expected);
@@ -893,10 +903,13 @@ size: 1000
       hostname: "127.0.0.1",
       port: 0
     });
+
     const occupiedPort = listener.port;
+
     if (occupiedPort === undefined) {
       throw new Error("expected Bun.serve to bind a TCP port");
     }
+
     const reservation = makeReservation(repoConfig.sourceRoot, occupiedPort, 2);
 
     try {
@@ -956,6 +969,7 @@ size: 1000
     const reservation = getOrCreateReservation(home, sourceRoot, repoConfig.localPortOrder.length);
 
     const store = new SessionStateStore(home);
+
     const firstSession = allocateLocalPorts({
       baselinePorts: new Set(),
       existingRepoState: undefined,
@@ -965,6 +979,7 @@ size: 1000
       session: "one",
       store
     });
+
     store.checkpoint({
       generation: { number: 1, status: "complete" },
       repos: [
@@ -981,6 +996,7 @@ size: 1000
       session: "one",
       version: 2
     });
+
     const secondSession = allocateLocalPorts({
       baselinePorts: new Set(),
       existingRepoState: undefined,

@@ -44,6 +44,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".env.shared": "ROOT_ONLY=true\n",
       "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\nOTHER=keep\n",
@@ -92,10 +93,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-codex");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     const openLogPath = installCodexUrlOpenShim(binDirectory);
 
     const result = runMonke({
@@ -118,10 +121,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-codex-windows");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     const cmdLogPath = installWindowsCmdShim(binDirectory);
 
     const result = withPlatform("win32", () =>
@@ -146,6 +151,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-root-app");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".env": "PORT=3000\nOTHER=keep\n",
       "monke.yml": `apps:
@@ -176,6 +182,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-no-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
@@ -221,9 +228,11 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-no-config-codex");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     const openLogPath = installCodexUrlOpenShim(binDirectory);
 
     const result = runMonkeCapturingFailure({
@@ -248,9 +257,11 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-no-config-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n"
     });
+
     write(repoRoot, "README.md", "dirty\n");
     write(repoRoot, "notes.txt", "untracked\n");
 
@@ -270,10 +281,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-carry-interruption");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     write(repoRoot, "README.md", "dirty\n");
     write(repoRoot, "notes.txt", "untracked\n");
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
@@ -313,6 +326,7 @@ describe("single-repo sessions", () => {
       configured: true,
       name: "single-repo-dirty-carry-local-edit"
     });
+
     write(worktreeRoot, "session-tracked.txt", "Session-local tracked\n");
     write(worktreeRoot, "session-only.txt", "keep me\n");
     write(worktreeRoot, "ignored.local", "ignored but important\n");
@@ -335,6 +349,7 @@ describe("single-repo sessions", () => {
       configured: true,
       name: "single-repo-dirty-carry-ignored-local"
     });
+
     write(worktreeRoot, "ignored.local", "ignored but important\n");
 
     runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home });
@@ -349,6 +364,7 @@ describe("single-repo sessions", () => {
       configured: true,
       name: "single-repo-dirty-carry-tracked-conflict"
     });
+
     write(worktreeRoot, "README.md", "Session-local README\n");
 
     expect(() =>
@@ -362,6 +378,7 @@ describe("single-repo sessions", () => {
       configured: true,
       name: "single-repo-dirty-carry-branch-switch"
     });
+
     git(worktreeRoot, ["switch", "-c", "session-local"]);
 
     expect(() =>
@@ -405,9 +422,11 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-configless-dirty-carry-interruption");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n"
     });
+
     write(repoRoot, "README.md", "dirty\n");
     write(repoRoot, "notes.txt", "untracked\n");
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
@@ -454,6 +473,7 @@ describe("single-repo sessions", () => {
       configured: false,
       name: "single-repo-configless-dirty-carry-local-edit"
     });
+
     write(worktreeRoot, "session-tracked.txt", "Session-local tracked\n");
     write(worktreeRoot, "session-only.txt", "keep me\n");
     write(worktreeRoot, "ignored.local", "ignored but important\n");
@@ -483,6 +503,7 @@ describe("single-repo sessions", () => {
       configured: false,
       name: "single-repo-configless-dirty-carry-ignored-local"
     });
+
     write(worktreeRoot, "ignored.local", "ignored but important\n");
 
     runMonkeCapturingFailure({
@@ -501,6 +522,7 @@ describe("single-repo sessions", () => {
       configured: false,
       name: "single-repo-configless-dirty-carry-untracked-conflict"
     });
+
     write(worktreeRoot, "notes.txt", "Session-local notes\n");
 
     expect(() =>
@@ -514,6 +536,7 @@ describe("single-repo sessions", () => {
       configured: false,
       name: "single-repo-configless-dirty-carry-branch-switch"
     });
+
     git(worktreeRoot, ["switch", "-c", "session-local"]);
 
     expect(() =>
@@ -577,6 +600,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-no-config-existing-no-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n"
     });
@@ -603,10 +627,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-modified");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     write(repoRoot, "README.md", "dirty\n");
 
     runMonke({
@@ -625,6 +651,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-diverged-branch");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
@@ -659,6 +686,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-same-tip-branch");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
@@ -683,10 +711,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-staged");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     write(repoRoot, "README.md", "staged\n");
     git(repoRoot, ["add", "README.md"]);
 
@@ -706,10 +736,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-layered");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "a\n"
     });
+
     write(repoRoot, "README.md", "b\n");
     git(repoRoot, ["add", "README.md"]);
     write(repoRoot, "README.md", "c\n");
@@ -728,10 +760,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-delete");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     rmSync(path.join(repoRoot, "README.md"));
 
     runMonke({
@@ -750,10 +784,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-untracked");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     write(repoRoot, "notes/nested.txt", "carry me\n");
 
     runMonke({
@@ -772,10 +808,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-untracked-symlink");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     const outsideFile = path.join(sandbox, "outside-secret.txt");
     write(sandbox, "outside-secret.txt", "do not copy\n");
     symlinkSync(outsideFile, path.join(repoRoot, "secret-link"));
@@ -791,6 +829,7 @@ describe("single-repo sessions", () => {
       getExpectedWorktreePath(home, repoRoot, "dirty-untracked-link"),
       "secret-link"
     );
+
     expect(lstatSync(copiedLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(copiedLink)).toBe(outsideFile);
     expect(readFileSync(copiedLink, "utf-8")).toBe("do not copy\n");
@@ -800,11 +839,13 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-dirty-ignored");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "ignored.txt\n",
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     write(repoRoot, "ignored.txt", "leave behind\n");
 
     runMonke({
@@ -823,10 +864,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-no-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
     });
+
     write(repoRoot, "README.md", "dirty\n");
 
     expect(() =>
@@ -844,6 +887,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-existing-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
@@ -856,6 +900,7 @@ describe("single-repo sessions", () => {
       monkeHome: home
     });
     write(repoRoot, "README.md", "dirty\n");
+
     const result = runMonke({
       args: ["spawn", "existing"],
       binDirectory,
@@ -873,6 +918,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-global-path-collision");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoFiles = {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:
@@ -884,6 +930,7 @@ describe("single-repo sessions", () => {
         env: PORT
 `
     };
+
     const firstRepo = createRepo(path.join(sandbox, "client-a", "api"), repoFiles);
     const secondRepo = createRepo(path.join(sandbox, "client-b", "api"), repoFiles);
 
@@ -914,10 +961,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-main-ignores-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "main\n"
     });
+
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "dirty feature\n");
     write(repoRoot, "notes.txt", "untracked\n");
@@ -938,10 +987,12 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-main-no-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "main\n"
     });
+
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "dirty feature\n");
 
@@ -961,9 +1012,11 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-main-no-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "feature\n");
 
@@ -997,6 +1050,7 @@ describe("single-repo sessions", () => {
       cwd: repoRoot,
       monkeHome: home
     });
+
     expect(retry.error?.message).toContain("Retry: mt spawn fresh -m");
     expect(loadSessionState(home, repoRoot, "fresh").spawnSource).toBe("default-branch");
   });
@@ -1004,6 +1058,7 @@ describe("single-repo sessions", () => {
   test("config-less default-branch retry recreates a missing branch and worktree from retained pinnedRef", () => {
     const sandbox = makeTempDir("single-repo-main-no-config-pinned-recovery");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "version.txt": "pinned\n"
     });
@@ -1039,6 +1094,7 @@ describe("single-repo sessions", () => {
     const sandbox = makeTempDir("single-repo-main-seed-default");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "local-only.txt": "default seed\n",
@@ -1053,6 +1109,7 @@ apps:
         env: PORT
 `
     });
+
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "local-only.txt", "dirty source only\n");
 
@@ -1071,6 +1128,7 @@ apps:
     const sandbox = makeTempDir("single-repo-main-local-env");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": ".env.demo\n.envrc\napps/api/.env.demo\n",
       "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
@@ -1083,6 +1141,7 @@ apps:
         env: PORT
 `
     });
+
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, ".env.demo", "DEMO=true\n");
     write(repoRoot, ".envrc", "dotenv\n");
@@ -1109,6 +1168,7 @@ apps:
     const sandbox = makeTempDir("single-repo-origin-main");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
       "monke.yml": `apps:
@@ -1120,6 +1180,7 @@ apps:
         env: PORT
 `
     });
+
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
     git(repoRoot, ["remote", "add", "origin", origin]);
@@ -1147,6 +1208,7 @@ apps:
     const sandbox = makeTempDir("single-repo-pruned-origin-main");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
       "monke.yml": `apps:
@@ -1158,6 +1220,7 @@ apps:
         env: PORT
 `
     });
+
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
     git(repoRoot, ["remote", "add", "origin", origin]);
@@ -1190,6 +1253,7 @@ apps:
     const sandbox = makeTempDir("single-repo-fetch-fallback");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
       "monke.yml": `apps:
@@ -1201,6 +1265,7 @@ apps:
         env: PORT
 `
     });
+
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
     git(repoRoot, ["remote", "add", "origin", origin]);
@@ -1229,6 +1294,7 @@ apps:
     const sandbox = makeTempDir("single-repo-main-rollback");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/package.json": "{}\n",
       "monke.yml": `apps:
@@ -1276,6 +1342,7 @@ apps:
   test("spawn -m finalizes an interrupted generation whose repo checkpoints all completed", () => {
     const sandbox = makeTempDir("single-repo-main-final-checkpoint-retry");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": `bootstrapCommand: printf x >> bootstrap-runs
 apps: {}
@@ -1303,6 +1370,7 @@ apps: {}
     const sandbox = makeTempDir("single-repo-missing-materialized-root");
     const home = path.join(sandbox, "home");
     const bootstrapRuns = path.join(sandbox, "bootstrap-runs");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": `bootstrapCommand: printf x >> "${bootstrapRuns}"
 apps: {}
@@ -1344,10 +1412,12 @@ apps: {}
     const sandbox = makeTempDir("single-repo-main-early-checkpoint-retry");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "version.txt": "pinned\n"
     });
+
     const pinnedRef = git(repoRoot, ["rev-parse", "refs/heads/main"]);
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted");
     installGitShim(binDirectory, {
@@ -1381,10 +1451,12 @@ apps: {}
   test("spawn -m retry retains its pinned generation after origin main advances", () => {
     const sandbox = makeTempDir("single-repo-remote-default-retry-pin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "bootstrapCommand: test -f allow-bootstrap\napps: {}\n",
       "version.txt": "pinned\n"
     });
+
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
     git(repoRoot, ["remote", "add", "origin", origin]);
@@ -1422,6 +1494,7 @@ apps: {}
   test("Materialize rejects malformed pinned state before reading advanced Source config", () => {
     const sandbox = makeTempDir("single-repo-malformed-pinned-materialize");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "bootstrapCommand: exit 9\napps: {}\n"
     });
@@ -1454,10 +1527,12 @@ apps: {}
   test("plain spawn retry preserves a retained default-branch source policy", () => {
     const sandbox = makeTempDir("single-repo-main-plain-retry");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "bootstrapCommand: test -f allow-bootstrap\napps: {}\n",
       "version.txt": "pinned\n"
     });
+
     const pinnedRef = git(repoRoot, ["rev-parse", "refs/heads/main"]);
 
     expect(() =>
@@ -1482,6 +1557,7 @@ apps: {}
   test("plain spawn cannot replace a completed default-branch Session identity", () => {
     const sandbox = makeTempDir("single-repo-complete-main-policy");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "version.txt": "main\n"
@@ -1502,6 +1578,7 @@ apps: {}
   test("changing only dirty carry re-spawns a completed current-HEAD Session", () => {
     const sandbox = makeTempDir("single-repo-complete-dirty-policy");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "clean\n"
@@ -1518,6 +1595,7 @@ apps: {}
   test("plain spawn retry preserves --no-dirty and reports the exact retry command", () => {
     const sandbox = makeTempDir("single-repo-no-dirty-policy-retry");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "bootstrapCommand: test -f allow-bootstrap\napps: {}\n",
       "README.md": "clean\n"
@@ -1544,10 +1622,12 @@ apps: {}
     const sandbox = makeTempDir("single-repo-main-graph-pin");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "version.txt": "pinned\n"
     });
+
     const pinnedRef = git(repoRoot, ["rev-parse", "refs/heads/main"]);
     git(repoRoot, ["switch", "-c", "newer"]);
     write(repoRoot, "version.txt", "newer\n");
@@ -1580,6 +1660,7 @@ apps: {}
     const sandbox = makeTempDir("single-repo-main-existing-state");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:
@@ -1591,6 +1672,7 @@ apps: {}
         env: PORT
 `
     });
+
     saveSessionState(
       home,
       completeSessionState({
@@ -1618,9 +1700,11 @@ apps: {}
   test("Spawn rejects v1 Session state through the production loader", () => {
     const sandbox = makeTempDir("single-repo-v1-session-state");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n"
     });
+
     const statePath = getSessionStateFilePath(home, repoRoot, "legacy");
     write(
       home,
@@ -1641,6 +1725,7 @@ repos: []
     const sandbox = makeTempDir("single-repo-main-current-head-state");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `bootstrapCommand: exit 9
@@ -1677,6 +1762,7 @@ apps:
     const sandbox = makeTempDir("single-repo-main-existing-branch");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:
@@ -1688,6 +1774,7 @@ apps:
         env: PORT
 `
     });
+
     git(repoRoot, ["branch", "fresh"]);
 
     expect(() =>
@@ -1704,6 +1791,7 @@ apps:
     const sandbox = makeTempDir("single-repo-main-aliases");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:
@@ -1735,6 +1823,7 @@ apps:
     const sandbox = makeTempDir("single-repo-shared-port");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "apps/web/.env.local": "API_URL=http://localhost:3000\n",
@@ -1771,6 +1860,7 @@ apps:
     const sandbox = makeTempDir("single-repo-resources");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nOTHER=keep\n",
       "monke.yml": `resources:
@@ -1843,6 +1933,7 @@ apps:
     const sandbox = makeTempDir("single-repo-resource-collision");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
@@ -1873,6 +1964,7 @@ apps:
         monkeHome: home
       });
     });
+
     expect(message).toContain("Resource value collision for DISCORD_CHANNEL=<redacted length=6>");
     expect(message).toContain(`in ${repoRoot}; retained session first already owns that value`);
     expect(message).not.toContain("DISCORD_CHANNEL=shared");
@@ -1883,6 +1975,7 @@ apps:
     const sandbox = makeTempDir("single-materialize");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
       "monke.yml": `apps:
@@ -1937,6 +2030,7 @@ apps:
     const binDirectory = path.join(sandbox, "bin");
     const shLogPath = installShShim(binDirectory);
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
       "monke.yml": `bootstrapCommand: grep -q 'PORT=10000' apps/api/.env.local && grep -q 'DB_PORT=10001' .env && pwd >> bootstrap-runs
@@ -1991,6 +2085,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "apps/frostbite-crawler/data/sessions/hoangbn/Cookies": "cookie-jar\n",
@@ -2030,6 +2125,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths-merge");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "apps/frostbite-crawler/data/sessions/hoangbn/Cookies\n",
       "apps/api/.env.local": "PORT=3000\n",
@@ -2046,6 +2142,7 @@ apps:
         env: PORT
 `
     });
+
     write(repoRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies", "cookie-jar\n");
 
     runMonke({
@@ -2069,6 +2166,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths-no-clobber");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": '{ "theme": "dark" }\n',
@@ -2121,6 +2219,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths-fill-missing");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "PORT=3000\n",
@@ -2164,6 +2263,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths-copy-retry");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "PORT=3000\n",
@@ -2213,6 +2313,7 @@ apps:
       // fail on an unreadable directory and mask the original failure.
       chmodSync(protectedSourcePath, 0o700);
     }
+
     expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
     const failedState = loadSessionState(home, repoRoot, "banana");
     expect(failedState.repos[0]).toMatchObject({
@@ -2236,6 +2337,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths-dangling-symlink");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "PORT=3000\n",
@@ -2281,6 +2383,7 @@ apps:
     const sandbox = makeTempDir("single-seedpaths-missing");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `seedPaths:
@@ -2322,6 +2425,7 @@ apps:
 `,
       "services/db/.env.local": "PORT=5432\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
       "monke.yml": `apps:
@@ -2363,6 +2467,7 @@ external:
 `,
       "services/db/.env.local": "PORT=5432\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       ".env": "KEEP_ME=1\nDEP_DIR=../old-location\n",
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -2406,6 +2511,7 @@ external:
 `,
       "services/db/.env.local": "PORT=5432\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
       "monke.yml": `apps:
@@ -2443,6 +2549,7 @@ external:
     const sandbox = makeTempDir("single-repo-main-untracked-seeds");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": ".env\n.env.local\nseed-data/\n",
       "apps/api/.env.local": "PORT=3000\n",
@@ -2460,6 +2567,7 @@ apps:
       "seed-data/fixture.txt": "fixture\n",
       "tracked.txt": "committed\n"
     });
+
     write(repoRoot, "tracked.txt", "dirty\n");
 
     runMonke({
@@ -2480,6 +2588,7 @@ apps:
   test("session-branch respawn seeds untracked env files from the source checkout", async () => {
     const sandbox = makeTempDir("single-repo-session-branch-seeds");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": ".env\n.env.local\nseed-data/\n",
       "apps/api/.env.local": "PORT=3000\n",
@@ -2498,12 +2607,14 @@ apps:
     });
 
     git(repoRoot, ["branch", "respawned"]);
+
     const runtime = createTestRuntime({
       cwd: repoRoot,
       env: { MONKE_HOME: home, PATH: process.env.PATH ?? "" },
       onStderr() {},
       onStdout() {}
     });
+
     await spawnSessionLocked({
       home,
       rootSourceRoot: repoRoot,
@@ -2533,6 +2644,7 @@ function interruptDirtyCarryAfterWorktreeCreation(options: { configured: boolean
   const sandbox = makeTempDir(options.name);
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
+
   const repoRoot = createRepo(
     path.join(sandbox, "root"),
     options.configured
@@ -2548,6 +2660,7 @@ function interruptDirtyCarryAfterWorktreeCreation(options: { configured: boolean
           "session-tracked.txt": "clean Session content\n"
         }
   );
+
   write(repoRoot, "README.md", "dirty\n");
   write(repoRoot, "notes.txt", "untracked\n");
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
@@ -2565,11 +2678,13 @@ function interruptDirtyCarryAfterWorktreeCreation(options: { configured: boolean
     cwd: repoRoot,
     monkeHome: home
   });
+
   expect(interrupted.error).not.toBeNull();
   expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
     dirtyCarryStatus: "pending",
     preparationStatus: "pending"
   });
+
   return { home, repoRoot, worktreeRoot };
 }
 
@@ -2577,12 +2692,14 @@ function interruptDirtyCarryAfterTrackedPatch(options: { configured: boolean; na
   const sandbox = makeTempDir(options.name);
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
+
   const repoRoot = createRepo(
     path.join(sandbox, "root"),
     options.configured
       ? { "monke.yml": "apps: {}\n", "README.md": "clean\n" }
       : { "README.md": "clean\n" }
   );
+
   write(repoRoot, "README.md", "dirty\n");
   write(repoRoot, "notes.txt", "untracked\n");
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
@@ -2600,6 +2717,7 @@ function interruptDirtyCarryAfterTrackedPatch(options: { configured: boolean; na
     cwd: repoRoot,
     monkeHome: home
   });
+
   expect(interrupted.error).not.toBeNull();
   expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
   expect(existsSync(path.join(worktreeRoot, "notes.txt"))).toBeFalsy();
@@ -2607,6 +2725,7 @@ function interruptDirtyCarryAfterTrackedPatch(options: { configured: boolean; na
     dirtyCarryStatus: "pending",
     preparationStatus: "pending"
   });
+
   return { home, repoRoot, worktreeRoot };
 }
 
@@ -2617,12 +2736,14 @@ function interruptDirtyCarryAfterPartialUntrackedCopy(options: {
   const sandbox = makeTempDir(options.name);
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
+
   const repoRoot = createRepo(
     path.join(sandbox, "root"),
     options.configured
       ? { "monke.yml": "apps: {}\n", "README.md": "clean\n" }
       : { "README.md": "clean\n" }
   );
+
   write(repoRoot, "README.md", "dirty\n");
   write(repoRoot, "a-first.txt", "first\n");
   write(repoRoot, "z-last.txt", "last\n");
@@ -2641,10 +2762,12 @@ function interruptDirtyCarryAfterPartialUntrackedCopy(options: {
     cwd: repoRoot,
     monkeHome: home
   });
+
   expect(interrupted.error).not.toBeNull();
   expect(read(worktreeRoot, "a-first.txt")).toBe("first\n");
   expect(existsSync(path.join(worktreeRoot, "z-last.txt"))).toBeFalsy();
   write(repoRoot, "z-last.txt", "last\n");
+
   return { home, repoRoot, worktreeRoot };
 }
 

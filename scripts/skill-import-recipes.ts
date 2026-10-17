@@ -15,6 +15,7 @@ import { writeSkillImportState } from "./skill-import-state.ts";
 export const SKILL_LOCK_PATH = "skills.lock.json";
 const SKILL_IMPORT_RECIPE_STORE_VERSION = 4 as const;
 const LEGACY_IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
+
 const SkillImportRecipeSkillSchema = z.strictObject(
   {
     adoptedPaths: z.array(z.string().refine(path.isAbsolute)).optional(),
@@ -35,6 +36,7 @@ const SkillImportRecipeSkillSchema = z.strictObject(
   },
   { error: "Skill import recipe skill must be a JSON object" }
 );
+
 const SkillImportRecipeSchema = z.strictObject(
   {
     acceptOpenClawRisks: z
@@ -80,6 +82,7 @@ const SkillImportRecipeSchema = z.strictObject(
   },
   { error: "Skill import recipe must be a JSON object" }
 );
+
 const SkillImportRecipeStoreSchema = z.strictObject(
   {
     recipes: z.array(SkillImportRecipeSchema, {
@@ -128,6 +131,7 @@ const RecipeSelectionSchema = z
   .transform((selection) => {
     const item = is.string(selection) ? { slug: selection } : selection;
     const { modelInvocation, ...skill } = item;
+
     return {
       ...skill,
       kind: skill.kind ?? ("skill" as const),
@@ -137,6 +141,7 @@ const RecipeSelectionSchema = z
         : { disableModelInvocation: modelInvocation === "deny" })
     };
   });
+
 const RecipeFields = {
   acceptOpenClawRisks: z.literal(true).optional(),
   commit: z
@@ -147,6 +152,7 @@ const RecipeFields = {
   skills: z.array(RecipeSelectionSchema).min(1),
   source: z.string().trim().min(1)
 };
+
 const CompactRecipeSchema = z
   .strictObject({
     ...RecipeFields,
@@ -158,6 +164,7 @@ const CompactRecipeSchema = z
     ...recipe,
     ...(modelInvocation === undefined ? {} : { disableModelInvocation: modelInvocation === "deny" })
   }));
+
 export const RepoImportRecipesSchema = z
   .array(
     z.strictObject(RecipeFields).transform(({ modelInvocation, ...recipe }) => ({
@@ -169,9 +176,11 @@ export const RepoImportRecipesSchema = z
   )
   .superRefine((recipes, context) => {
     const owners = new Map<string, string>();
+
     for (const [recipeIndex, recipe] of recipes.entries()) {
       for (const [selectionIndex, skill] of recipe.skills.entries()) {
         const owner = owners.get(skill.slug);
+
         if (owner !== undefined) {
           context.addIssue({
             code: "custom",
@@ -179,15 +188,18 @@ export const RepoImportRecipesSchema = z
             path: [recipeIndex, "skills", selectionIndex]
           });
         }
+
         owners.set(skill.slug, recipe.source);
       }
     }
   });
+
 const CompactStoreSchema = z.strictObject({
   recipes: z.array(CompactRecipeSchema),
   removedSources: z.array(z.string().min(1)).optional(),
   version: z.literal(SKILL_IMPORT_RECIPE_STORE_VERSION)
 });
+
 const LegacyStoreSchema = z
   .object({
     recipes: z.array(
@@ -222,47 +234,61 @@ const LegacyStoreSchema = z
 /** Read repo declarations or machine recipes, migrating legacy machine JSON by default. */
 export function readImportRecipeStore(repoRoot: string, migrate = true): SkillImportRecipeStore {
   const config = path.join(repoRoot, "monke.yml");
+
   if (existsSync(config) && parseDocument(readFileSync(config, "utf-8")).has("skills")) {
     return readRepoImportRecipeStore(repoRoot);
   }
+
   const storePath = existsSync(path.join(repoRoot, SKILL_LOCK_PATH))
     ? path.join(repoRoot, SKILL_LOCK_PATH)
     : path.join(repoRoot, LEGACY_IMPORT_RECIPE_STORE_PATH);
+
   if (!existsSync(storePath)) {
     return readRepoImportRecipeStore(repoRoot);
   }
+
   const input: unknown = JSON.parse(readFileSync(storePath, "utf-8"));
+
   const store = normalizeImportRecipeStore(
     unwrapBoundaryResult(
       z.union([CompactStoreSchema, LegacyStoreSchema]).safeParse(input),
       "Skill import recipe store"
     )
   );
+
   if (migrate && LegacyStoreSchema.safeParse(input).success) {
     writeImportRecipeStore(repoRoot, store);
   }
+
   return store;
 }
 
 export function readRepoImportRecipeStore(repoRoot: string): SkillImportRecipeStore {
   const file = path.join(repoRoot, "monke.yml");
+
   if (!existsSync(file)) {
     return { recipes: [], version: SKILL_IMPORT_RECIPE_STORE_VERSION };
   }
+
   const document = parseDocument(readFileSync(file, "utf-8"));
+
   if (document.errors.length) {
     throw new MonkeError(`Invalid ${file}: ${document.errors[0]?.message}`);
   }
+
   const skills = document.get("skills", true);
+
   const recipes = unwrapBoundaryResult(
     RepoImportRecipesSchema.safeParse(isNode(skills) ? skills.toJS(document) : []),
     `Repo import recipes in ${file}`
   );
+
   return normalizeImportRecipeStore({ recipes, version: SKILL_IMPORT_RECIPE_STORE_VERSION });
 }
 
 function compactRecipe(recipe: SkillImportRecipe) {
   const { disableModelInvocation, skills, ...fields } = recipe;
+
   return {
     ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)),
     ...(disableModelInvocation === undefined
@@ -278,6 +304,7 @@ function compactRecipe(recipe: SkillImportRecipe) {
         ) {
           return slug;
         }
+
         return {
           slug,
           ...(selector === slug ? {} : { selector }),
@@ -306,26 +333,35 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
   const file = path.join(repoRoot, "monke.yml");
   const original = existsSync(file) ? readFileSync(file, "utf-8") : "";
   const document = parseDocument(original, { keepSourceTokens: true });
+
   if (document.errors.length) {
     throw new MonkeError(`Invalid ${file}: ${document.errors[0]?.message}`);
   }
+
   const { contents } = document;
+
   const empty =
     isScalar(contents) && contents.value === null && contents.range?.[0] === contents.range?.[1];
+
   if (contents && !isMap(contents) && !empty) {
     throw new MonkeError(`${file} must be a YAML mapping`);
   }
+
   const normalized = normalizeImportRecipeStore(store);
+
   if (existsSync(file) && isDeepStrictEqual(readRepoImportRecipeStore(repoRoot), normalized)) {
     return;
   }
+
   const recipes = normalized.recipes.map(compactRecipe);
   unwrapBoundaryResult(RepoImportRecipesSchema.safeParse(recipes), "Repo import recipes");
   const updated = editRepoSkillsYaml(original, document, recipes);
   const updatedDocument = parseDocument(updated);
+
   if (updatedDocument.errors.length) {
     throw new MonkeError(`Invalid ${file}: ${updatedDocument.errors[0]?.message}`);
   }
+
   try {
     if (
       !isDeepStrictEqual(
@@ -341,11 +377,13 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
       { cause: error }
     );
   }
+
   writeSkillImportState(file, updated);
 }
 
 function repoConfigWithoutSkills(document: Document.Parsed) {
   const config: unknown = document.toJS();
+
   return is.plainObject(config)
     ? Object.fromEntries(Object.entries(config).filter(([key]) => key !== "skills"))
     : {};
@@ -359,31 +397,42 @@ function editRepoSkillsYaml(
   const { contents } = document;
   const previous = document.get("skills", true);
   const replacement = new Document(recipes);
+
   if (isSeq(replacement.contents)) {
     replacement.contents.flow =
       (isSeq(previous) && previous.flow === true) || (isMap(contents) && contents.flow === true);
   }
+
   const value = replacement.toString({ lineWidth: 0 }).replace(/\n$/u, "");
+
   if (isNode(previous) && previous.range) {
     const [start, end] = previous.range;
     const indent = original.slice(original.lastIndexOf("\n", start - 1) + 1, start);
+
     const rendered =
       isSeq(previous) && previous.flow !== true ? value.replaceAll("\n", `\n${indent}`) : value;
+
     const newline = original.slice(start, end).endsWith("\n") ? "\n" : "";
+
     return `${original.slice(0, start)}${rendered}${newline}${original.slice(end)}`;
   }
+
   if (isMap(contents) && contents.flow === true) {
     return appendFlowSkillsYaml(original, contents, value);
   }
+
   const [, end] = document.range;
   const prefix = original.slice(0, end);
   const newline = prefix.length > 0 && !prefix.endsWith("\n") ? "\n" : "";
+
   const indent = isMap(contents)
     ? original.slice(original.lastIndexOf("\n", contents.range[0] - 1) + 1, contents.range[0])
     : "";
+
   const addition = new Document({ skills: recipes })
     .toString({ lineWidth: 0 })
     .replaceAll(/^(?=.)/gmu, indent);
+
   return `${prefix}${newline}${addition}${original.slice(end)}`;
 }
 
@@ -391,11 +440,14 @@ function appendFlowSkillsYaml(original: string, contents: YAMLMap.Parsed, value:
   const end = contents.range[1] - 1;
   const token = contents.srcToken;
   const last = token?.type === "flow-collection" ? token.items.at(-1) : undefined;
+
   const trailingComma =
     last?.key === undefined &&
     last?.value === undefined &&
     last?.start.some((item) => item.type === "comma") === true;
+
   const separator = contents.items.length > 0 && !trailingComma ? ", " : "";
+
   return `${original.slice(0, end)}${separator}skills: ${value}${original.slice(end)}`;
 }
 
@@ -409,18 +461,23 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
     if (!recipe.localSource) {
       assertUniqueRecipeSkillSelectors(recipe.source, recipe.skills);
     }
+
     assertUniqueRecipeSkillSlugs(recipe.source, recipe.skills);
+
     return {
       ...recipe,
       skills: recipe.skills.toSorted((left, right) => {
         const slugOrder = compareSkillLockStrings(left.slug, right.slug);
+
         return slugOrder === 0 ? compareSkillLockStrings(left.selector, right.selector) : slugOrder;
       })
     };
   });
+
   assertUniqueRecipeSources(recipes);
   assertUniqueImportedSkillOwners({ recipes, version: SKILL_IMPORT_RECIPE_STORE_VERSION });
   const activeSources = new Set(recipes.map((recipe) => recipe.source));
+
   const removedSources = [...new Set(store.removedSources)]
     .filter((source) => !activeSources.has(source))
     .toSorted(compareSkillLockStrings);
@@ -428,6 +485,7 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
   return {
     recipes: recipes.toSorted((left, right) => {
       const sourceOrder = compareSkillLockStrings(left.source, right.source);
+
       if (sourceOrder !== 0) {
         return sourceOrder;
       }
@@ -442,19 +500,23 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
 function assertUniqueRecipeSources(recipes: readonly SkillImportRecipe[]) {
   const sources = new Set<string>();
   const aliases = new Map<string, string>();
+
   for (const recipe of recipes) {
     if (sources.has(recipe.source)) {
       throw new MonkeError(`Duplicate skill import recipe source: ${recipe.source}`);
     }
 
     sources.add(recipe.source);
+
     for (const alias of new Set(
       [recipe.source, recipe.name].filter((name) => name !== undefined)
     )) {
       const owner = aliases.get(alias);
+
       if (owner !== undefined && owner !== recipe.source) {
         throw new MonkeError(`Duplicate Skill source name: ${alias}`);
       }
+
       aliases.set(alias, recipe.source);
     }
   }
@@ -465,6 +527,7 @@ function assertUniqueRecipeSkillSelectors(
   skills: readonly SkillImportRecipeSkill[]
 ) {
   const selectors = new Set<string>();
+
   for (const skill of skills) {
     if (selectors.has(skill.selector)) {
       throw new MonkeError(`Duplicate skill selector in recipe ${source}: ${skill.selector}`);
@@ -476,6 +539,7 @@ function assertUniqueRecipeSkillSelectors(
 
 function assertUniqueRecipeSkillSlugs(source: string, skills: readonly SkillImportRecipeSkill[]) {
   const slugs = new Set<string>();
+
   for (const skill of skills) {
     if (slugs.has(skill.slug)) {
       throw new MonkeError(`Duplicate imported slug in recipe ${source}: ${skill.slug}`);
@@ -492,6 +556,7 @@ function assertUniqueImportedSkillOwners(store: SkillImportRecipeStore) {
     for (const skill of recipe.skills) {
       const ownershipKey = `${skill.kind}:${skill.slug}`;
       const existingOwner = owners.get(ownershipKey);
+
       if (existingOwner !== undefined) {
         throw new MonkeError(
           `Imported ${skill.kind} slug ${skill.slug} is owned by both ${existingOwner} and ${recipe.source}`

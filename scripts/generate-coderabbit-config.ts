@@ -26,6 +26,7 @@ const ROOT_DOCUMENT = path.join(SOURCE_ROOT, "internal", "CODING_STANDARDS.md");
 const SOURCES_PATH = path.join("config", "coderabbit", "sources.yaml");
 const TEMPLATE_PATH = path.join("config", "coderabbit", "template.yaml");
 const MAX_INSTRUCTION_CHARACTERS = 20_000;
+
 export const CODE_RABBIT_SYNC_INPUTS = new Set([
   ".github/workflows/sync-coderabbit.yaml",
   "bun.lock",
@@ -74,6 +75,7 @@ const SourceManifestSchema = strictObject({
 
 export function isCodeRabbitSyncRelevant(options: output<typeof RelevanceOptionsSchema>) {
   const sources = new Set(options.sources);
+
   return options.changedPaths.some(
     (changedPath) => CODE_RABBIT_SYNC_INPUTS.has(changedPath) || sources.has(changedPath)
   );
@@ -81,6 +83,7 @@ export function isCodeRabbitSyncRelevant(options: output<typeof RelevanceOptions
 
 export function listChangedPaths(repoRoot: string, before: string, after: string) {
   let hasBeforeCommit = false;
+
   if (!/^0+$/u.test(before)) {
     try {
       hasBeforeCommit =
@@ -94,10 +97,13 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
       hasBeforeCommit = false;
     }
   }
+
   const args = hasBeforeCommit
     ? ["diff", "--name-only", "--no-renames", "-z", before, after, "--"]
     : ["ls-tree", "-r", "-z", "--name-only", after];
+
   let result: Bun.ReadableSyncSubprocess;
+
   try {
     result = Bun.spawnSync({
       cmd: ["git", ...args],
@@ -113,11 +119,14 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
       }
     );
   }
+
   const stdout = result.stdout.toString();
   const stderr = result.stderr.toString();
+
   if (result.exitCode !== 0) {
     throw new MonkeError(`Could not inspect changed paths: ${(stderr || stdout).trim()}`);
   }
+
   return stdout.split("\0").filter(Boolean);
 }
 
@@ -126,8 +135,10 @@ export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchem
     ...readLinkedDocuments(options.repoRoot),
     ...readConfiguredExcerpts(options.repoRoot)
   ];
+
   const templatePath = path.join(options.repoRoot, TEMPLATE_PATH);
   const template = CodeRabbitTemplateSchema.parse(parse(readFileSync(templatePath, "utf-8")));
+
   const instructions = [
     "This Team coding baseline is required for all reviews.",
     "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team baseline takes precedence on conflicts.",
@@ -137,6 +148,7 @@ export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchem
         : `Source: ${document.source}\n\n${document.contents}`
     )
   ].join("\n\n");
+
   if (instructions.length > MAX_INSTRUCTION_CHARACTERS) {
     throw new MonkeError(
       "Generated reviews.path_instructions instructions exceed CodeRabbit's 20,000-character limit"
@@ -145,17 +157,20 @@ export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchem
 
   template.reviews ??= {};
   template.reviews.path_instructions ??= [];
+
   if (template.reviews.path_instructions.some((instruction) => instruction.path === "**/*")) {
     throw new MonkeError(
       'Template reviews.path_instructions must not contain the generated path "**/*"'
     );
   }
+
   template.reviews.path_instructions.unshift({
     instructions,
     path: "**/*"
   });
 
   const generated = stringify(template, { lineWidth: 0 });
+
   return {
     sources: [...new Set(documents.map((document) => document.source))],
     yaml: `# Generated from monke-together-strong/monke-tools@${options.sourceCommit}. Do not edit.\n${generated}`
@@ -173,6 +188,7 @@ function readLinkedDocuments(repoRoot: string) {
       relativePath,
       "Linked"
     );
+
     if (documents.has(absolutePath)) {
       return;
     }
@@ -184,20 +200,26 @@ function readLinkedDocuments(repoRoot: string) {
     visit(tree, "definition", (node) => {
       definitions.set(node.identifier, node.url);
     });
+
     const readLinkedDocument = (url: string) => {
       if (!isTraversableMarkdownLink(url)) {
         return;
       }
+
       const linkedPath = url.split(/[?#]/u, 1)[0] ?? url;
       readDocument(path.join(path.dirname(relativePath), decodeURIComponent(linkedPath)));
     };
+
     visit(tree, (node) => {
       if (node.type === "link") {
         readLinkedDocument(node.url);
+
         return;
       }
+
       if (node.type === "linkReference") {
         const url = definitions.get(node.identifier);
+
         if (url) {
           readLinkedDocument(url);
         }
@@ -206,6 +228,7 @@ function readLinkedDocuments(repoRoot: string) {
   };
 
   readDocument(ROOT_DOCUMENT);
+
   return [...documents.values()];
 }
 
@@ -221,8 +244,10 @@ function readConfiguredExcerpts(repoRoot: string) {
       excerpt.source,
       "Configured excerpt"
     );
+
     const tree = fromMarkdown(contents);
     const normalizedAnchor = normalizeSemanticText(excerpt.anchor);
+
     const matches = tree.children
       .map((node, index) => ({ index, node }))
       .filter(
@@ -230,6 +255,7 @@ function readConfiguredExcerpts(repoRoot: string) {
           node.type === "paragraph" &&
           normalizeSemanticText(markdownToString(node)).includes(normalizedAnchor)
       );
+
     if (matches.length !== 1) {
       throw new MonkeError(
         `Configured excerpt anchor must match exactly one paragraph in ${excerpt.source}: ${JSON.stringify(excerpt.anchor)} (matched ${matches.length})`
@@ -237,18 +263,22 @@ function readConfiguredExcerpts(repoRoot: string) {
     }
 
     const [match] = matches;
+
     if (!match) {
       throw new MonkeError(`Configured excerpt anchor was not found in ${excerpt.source}`);
     }
+
     const endIndex = tree.children.findIndex(
       (node, index) =>
         index > match.index && node.type === "heading" && node.depth <= excerpt.stopAtHeadingDepth
     );
+
     const excerptNodes = tree.children.slice(match.index, endIndex === -1 ? undefined : endIndex);
     const [firstNode] = excerptNodes;
     const lastNode = excerptNodes.at(-1);
     const startOffset = firstNode?.position?.start.offset;
     const endOffset = lastNode?.position?.end.offset;
+
     if (startOffset === undefined || endOffset === undefined) {
       throw new MonkeError(`Could not locate configured excerpt in ${excerpt.source}`);
     }
@@ -269,13 +299,17 @@ function readOwnedMarkdown(
 ) {
   const candidatePath = path.resolve(repoRoot, relativePath);
   const normalizedSource = toRepoPath(repoRoot, candidatePath);
+
   if (!existsSync(candidatePath)) {
     throw new MonkeError(`${description} Markdown file does not exist: ${normalizedSource}`);
   }
+
   const absolutePath = realpathSync.native(candidatePath);
+
   if (absolutePath !== sourceRoot && !absolutePath.startsWith(`${sourceRoot}${path.sep}`)) {
     throw new MonkeError(`${description} Markdown file is outside ${SOURCE_ROOT}: ${relativePath}`);
   }
+
   return {
     absolutePath,
     contents: readFileSync(absolutePath, "utf-8").trimEnd(),
@@ -299,10 +333,13 @@ function isTraversableMarkdownLink(url: string) {
   if (url.startsWith("#") || url.startsWith("/") || url.startsWith("//")) {
     return false;
   }
+
   if (/^[a-z][a-z\d+.-]*:/iu.test(url)) {
     return false;
   }
+
   const pathname = url.split(/[?#]/u, 1)[0] ?? "";
+
   return pathname.toLowerCase().endsWith(".md");
 }
 
@@ -326,6 +363,7 @@ export async function runCodeRabbitConfigGenerator(
         repoRoot: options.repoRoot,
         sourceCommit: options.sourceCommit
       });
+
       mkdirSync(path.dirname(options.output), { recursive: true });
       writeFileSync(options.output, rendered.yaml, "utf-8");
       writeMessage(`${rendered.sources.join("\n")}\n`);
@@ -341,11 +379,14 @@ export async function runCodeRabbitConfigGenerator(
         repoRoot: options.repoRoot,
         sourceCommit: options.after
       });
+
       const changedPaths = listChangedPaths(options.repoRoot, options.before, options.after);
+
       const relevant = isCodeRabbitSyncRelevant({
         changedPaths,
         sources: rendered.sources
       });
+
       writeMessage(`${String(relevant)}\n`);
     });
 

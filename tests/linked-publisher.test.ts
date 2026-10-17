@@ -20,13 +20,16 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 function fixture() {
   const sandbox = makeTempDir("linked-publisher");
   const consumer = createRepo(path.join(sandbox, "consumer"), { "README.md": "Consumer.\n" });
+
   const upstream = createRepo(path.join(sandbox, "upstream"), {
     "skills/base/SKILL.md":
       "---\nname: base\ndescription: Upstream trigger.\n---\nBase instructions.\n"
   });
+
   const publisher = createRepo(path.join(sandbox, "publisher"), {
     "skills/own/SKILL.md": "---\nname: own\ndescription: Own trigger.\n---\nOwn instructions.\n"
   });
+
   const bin = path.join(sandbox, "bin");
   installFakeCodiff(bin);
   installFakeCodexSummary(bin);
@@ -47,6 +50,7 @@ while [ "$1" = --skill ]; do
 done
 `
   );
+
   const runtime = createTestRuntime({
     cwd: consumer,
     env: {
@@ -57,6 +61,7 @@ done
     onStderr() {},
     onStdout() {}
   });
+
   function declare(kind: "reference" | "skill", slug = "base", selector = "base") {
     write(
       publisher,
@@ -73,8 +78,10 @@ done
       })
     );
   }
+
   declare("reference");
   const installed = path.join(consumer, ".agents/skills/monke-tools");
+
   return { consumer, declare, installed, publisher, runtime, upstream };
 }
 
@@ -165,6 +172,7 @@ describe("linked publisher collections", () => {
 
   test("linked publisher imports isolate consumer overrides from publisher restores", async () => {
     const { consumer, declare, installed, publisher, runtime } = fixture();
+
     const runtimeAt = (cwd: string) =>
       createTestRuntime({
         cwd,
@@ -172,6 +180,7 @@ describe("linked publisher collections", () => {
         onStderr: runtime.writeStderr,
         onStdout: runtime.writeStdout
       });
+
     declare("skill");
     await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
     const publisherSkill = read(publisher, "skills/imported/base/SKILL.md");
@@ -246,10 +255,12 @@ describe("linked publisher collections", () => {
         ["skills", "add", publisher, "--link", "--project", "--skill", "BASE SKILL"],
         runtime
       );
+
       const entry =
         kind === "skill"
           ? "imported/base-skill/SKILL.md"
           : "references/imported/base-skill/MAIN.md";
+
       expect(read(installed, entry)).toContain("Base instructions.");
       await runCliAsync(
         ["skills", "add", publisher, "--link", "--project", "--skill", "Base Skill", "base-skill"],
@@ -257,6 +268,7 @@ describe("linked publisher collections", () => {
       );
       expect(read(installed, entry)).toContain("Base instructions.");
       expect(existsSync(path.join(installed, "imported/own"))).toBeFalsy();
+
       if (kind === "skill") {
         await runCliAsync(
           [
@@ -273,6 +285,7 @@ describe("linked publisher collections", () => {
           runtime
         );
       }
+
       write(
         upstream,
         "skills/base-skill/SKILL.md",
@@ -282,12 +295,14 @@ describe("linked publisher collections", () => {
       git(upstream, ["commit", "-m", "Change selector without changing slug"]);
       declare(kind, "base-skill", "base-skill");
       await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
+
       const expected = [
         "Changed instructions.",
         ...(kind === "skill"
           ? ["description: Consumer trigger.", "disable-model-invocation: false"]
           : [])
       ];
+
       for (const text of expected) {
         expect(read(installed, entry)).toContain(text);
       }
@@ -304,6 +319,7 @@ describe("linked publisher collections", () => {
         `skills/${slug}/SKILL.md`,
         `---\nname: ${slug}\ndescription: Exact own skill.\n---\nExact own instructions.\n`
       );
+
       if (other === "guide") {
         write(
           publisher,
@@ -320,7 +336,9 @@ describe("linked publisher collections", () => {
         git(upstream, ["commit", "-m", "Publish alias"]);
         declare("skill", "base-skill", "Base Skill");
       }
+
       const otherSlug = other === "guide" ? "guide" : "base-skill";
+
       const probes =
         other === "guide"
           ? [
@@ -332,6 +350,7 @@ describe("linked publisher collections", () => {
               { expected: [otherSlug], selected: ["BASE SKILL"] },
               { expected: [slug], selected: [slug] }
             ];
+
       for (const probe of probes) {
         await runCliAsync(
           [
@@ -348,6 +367,7 @@ describe("linked publisher collections", () => {
           [slug, otherSlug].filter((name) => existsSync(path.join(installed, "imported", name)))
         ).toStrictEqual(probe.expected);
       }
+
       await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
       expect(read(installed, `imported/${slug}/SKILL.md`)).toContain("Exact own instructions.");
       expect(existsSync(path.join(installed, "imported", otherSlug))).toBeFalsy();
@@ -409,11 +429,13 @@ describe("linked publisher collections", () => {
       const add = ["skills", "add", publisher, "--link", "--project"];
       declare("skill");
       await runCliAsync(add, runtime);
+
       if (removeConfig) {
         rmSync(path.join(publisher, "monke.yml"));
       } else {
         write(publisher, "monke.yml", "skills: []\n");
       }
+
       write(
         publisher,
         "skills/base/SKILL.md",
@@ -433,11 +455,13 @@ describe("linked publisher collections", () => {
       expect(read(installed, "imported/base/SKILL.md")).toContain(
         "description: Publisher trigger."
       );
+
       if (removeConfig) {
         rmSync(path.join(publisher, "monke.yml"));
       } else {
         write(publisher, "monke.yml", "skills: []\n");
       }
+
       await runCliAsync(action === "readd" ? add : ["skills", "update", "--project"], runtime);
       expect(existsSync(path.join(installed, "imported/base"))).toBeFalsy();
       expect(existsSync(path.join(publisher, "skills/imported/base"))).toBeFalsy();

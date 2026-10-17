@@ -38,17 +38,22 @@ function fixture(installKind: "local" | "release" = "local") {
   const monkeHome = path.join(sandbox, "monke");
   const home = path.join(sandbox, "home");
   const install = path.join(monkeHome, "installs", "fixture");
+
   const checkout = createRepo(path.join(sandbox, "monke-source"), {
     "skills/internal/core/SKILL.md": "---\nname: core\ndescription: Core.\n---\nCore.\n"
   });
+
   writeGlobalInstructionsSource(checkout, "Team instructions.\n");
+
   const upstream = createRepo(path.join(sandbox, "upstream"), {
     "skills/base/SKILL.md": "---\nname: base\ndescription: Base.\n---\nFirst version.\n",
     "skills/extra/SKILL.md": "---\nname: extra\ndescription: Extra.\n---\nExtra first.\n"
   });
+
   const caller = createRepo(path.join(sandbox, "caller"), {
     "monke.yml": "# Unconnected caller.\nskills: []\n"
   });
+
   write(
     install,
     "install-manifest.json",
@@ -76,10 +81,12 @@ function fixture(installKind: "local" | "release" = "local") {
       toolBuildIdentity: "fixture"
     })
   );
+
   if (installKind === "release") {
     cpSync(path.join(checkout, "skills"), path.join(install, "skills"), { recursive: true });
     writeGlobalInstructionsSource(install, "Team instructions.\n");
   }
+
   symlinkSync(path.join("installs", "fixture"), path.join(monkeHome, "current"), "dir");
   saveGlobalMonkeConfig(monkeHome, {
     diffAdapter: "codiff",
@@ -104,6 +111,7 @@ done
 `
   );
   let output = "";
+
   const runtime = createTestRuntime({
     cwd: caller,
     env: { HOME: home, MONKE_HOME: monkeHome, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
@@ -112,6 +120,7 @@ done
       output += message;
     }
   });
+
   function advance() {
     write(
       upstream,
@@ -125,8 +134,10 @@ done
     );
     git(upstream, ["add", "."]);
     git(upstream, ["commit", "-m", "Advance upstream"]);
+
     return git(upstream, ["rev-parse", "HEAD"]);
   }
+
   return {
     advance,
     bin,
@@ -146,12 +157,14 @@ done
 function reviewDiff(log: string) {
   const launch = readFileSync(log, "utf-8").trim().split("\n");
   expect(launch).toHaveLength(3);
+
   return git(launch[2] ?? "", ["diff", `${launch[1]}^`, launch[1] ?? ""]);
 }
 
 function pauseCommand(runtime: Runtime, command = "codex") {
   const entered = Promise.withResolvers<undefined>();
   const released = Promise.withResolvers<undefined>();
+
   return {
     entered: entered.promise,
     release: () => {
@@ -164,6 +177,7 @@ function pauseCommand(runtime: Runtime, command = "codex") {
           entered.resolve(undefined);
           await released.promise;
         }
+
         return await runtime.execAsync(...args);
       }
     }
@@ -206,9 +220,11 @@ describe("updates through connected local repositories", () => {
 
   test.each([false, true])("updates linked publishers once with project=%s", async (project) => {
     const f = fixture();
+
     const publisher = createRepo(path.join(f.sandbox, "publisher"), {
       "skills/own/SKILL.md": "---\nname: own\ndescription: Own.\n---\nOwn.\n"
     });
+
     write(
       publisher,
       "monke.yml",
@@ -259,9 +275,11 @@ describe("updates through connected local repositories", () => {
     expect(readRepoImportRecipeStore(publisher).recipes[0]).toStrictEqual({ ...previous, commit });
     expect(read(publisher, "monke.yml")).toContain("# Keep publisher settings.\napps: {}");
     expect(read(publisher, "skills/references/imported/extra/MAIN.md")).toContain("Extra second.");
+
     const installed = project
       ? path.join(f.caller, ".agents/skills")
       : path.join(f.home, ".codex/skills");
+
     expect(read(installed, "monke-tools/imported/base/SKILL.md")).toContain("Second version.");
     expect(f.output().split(`Updating repo imports: ${publisher}\n`)).toHaveLength(2);
     const diff = reviewDiff(f.reviewLog);
@@ -283,17 +301,22 @@ describe("updates through connected local repositories", () => {
         cwd: f.checkout
       });
       const scope = project ? ["--project"] : [];
+
       if (project) {
         await runCliAsync(["skills", "add", f.checkout, "--project", "--skill", "base"], f.runtime);
       }
+
       const missing = createRepo(path.join(f.sandbox, "missing"), {
         "skills/missing/SKILL.md": "---\nname: missing\ndescription: Missing.\n---\nMissing.\n"
       });
+
       await runCliAsync(["skills", "add", missing, ...scope], f.runtime);
       rmSync(missing, { recursive: true });
+
       if (kind === "file") {
         write(f.sandbox, "missing", "The linked checkout was replaced by a file.\n");
       }
+
       const commit = f.advance();
 
       await expect(runCliAsync(["skills", "update", ...scope], f.runtime)).rejects.toThrow(
@@ -301,9 +324,11 @@ describe("updates through connected local repositories", () => {
       );
 
       expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
+
       const installed = project
         ? path.join(f.caller, ".agents/skills")
         : path.join(f.home, ".codex/skills");
+
       expect(read(installed, "monke-tools/imported/base/SKILL.md")).toContain("Second version.");
       expect(reviewDiff(f.reviewLog)).toContain("Second version.");
     }
@@ -327,11 +352,14 @@ describe("updates through connected local repositories", () => {
       const second = f.advance();
       const globalSummary = pauseCommand(f.runtime);
       const repoSummary = pauseCommand(repoRuntime);
+
       const globalUpdate = runCliAsync(["skills", "update"], globalSummary.runtime).then(
         () => "",
         String
       );
+
       let repoUpdate: Promise<string> | undefined;
+
       try {
         await globalSummary.entered;
         write(
@@ -357,27 +385,35 @@ describe("updates through connected local repositories", () => {
           ])
         ).resolves.toBe("waiting");
         expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(second);
+
         if (firstFails) {
           write(f.monkeHome, "skill-reviews", "Obstructed first comparison.\n");
         }
+
         globalSummary.release();
         await expect(globalUpdate).resolves.toMatch(firstFails ? /skill-reviews/u : /^$/u);
+
         if (firstFails) {
           rmSync(path.join(f.monkeHome, "skill-reviews"));
         } else {
           rmSync(f.reviewLog);
         }
+
         await repoSummary.entered;
+
         if (secondFails) {
           rmSync(path.join(f.monkeHome, "skill-reviews"), { force: true, recursive: true });
           write(f.monkeHome, "skill-reviews", "Obstructed second comparison.\n");
         }
+
         repoSummary.release();
         await expect(repoUpdate).resolves.toMatch(secondFails ? /skill-reviews/u : /^$/u);
+
         if (secondFails) {
           rmSync(path.join(f.monkeHome, "skill-reviews"));
           await runCliAsync(["skills", "update", "--repo"], repoRuntime);
         }
+
         const diff = reviewDiff(f.reviewLog);
         expect(diff).toContain(`-  - commit: ${second}`);
         expect(diff).toContain(`+  - commit: ${current}`);
@@ -385,11 +421,13 @@ describe("updates through connected local repositories", () => {
         expect(diff).toContain("+Third version.");
         expect(diff).not.toContain("-Extra first.");
         let retried = diff;
+
         if (firstFails) {
           rmSync(f.reviewLog);
           await runCliAsync(["skills", "update"], f.runtime);
           retried = reviewDiff(f.reviewLog);
         }
+
         expect(retried).toContain(`-  - commit: ${firstFails ? original : second}`);
         expect(retried).toContain(`+  - commit: ${current}`);
         expect(retried.includes("-Extra first.")).toBe(firstFails);
@@ -404,19 +442,24 @@ describe("updates through connected local repositories", () => {
 
   test("failed publisher imports keep accepted pins while healthy imports reach consumers", async () => {
     const f = fixture();
+
     const broken = createRepo(path.join(f.sandbox, "broken-upstream"), {
       "skills/broken/SKILL.md": "---\nname: broken\ndescription: Broken.\n---\nAccepted broken.\n"
     });
+
     const publisher = createRepo(path.join(f.sandbox, "publisher"), {
       "monke.yml": "skills: []\n"
     });
+
     const publisherRuntime = { ...f.runtime, cwd: publisher };
     await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], publisherRuntime);
     await runCliAsync(["skills", "add", broken, "--repo", "--skill", "broken"], publisherRuntime);
     await runCliAsync(["skills", "add", publisher, "--skill", "base"], f.runtime);
+
     const previous = readRepoImportRecipeStore(publisher).recipes.find(
       (recipe) => recipe.source === broken
     );
+
     rmSync(path.join(broken, "skills/broken"), { recursive: true });
     git(broken, ["add", "."]);
     git(broken, ["commit", "-m", "Remove selected skill"]);
@@ -436,9 +479,11 @@ describe("updates through connected local repositories", () => {
 
   test("consumer rejection preserves the publisher's advanced YAML and generated bytes", async () => {
     const f = fixture();
+
     const publisher = createRepo(path.join(f.sandbox, "publisher"), {
       "monke.yml": "skills: []\n"
     });
+
     await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
       ...f.runtime,
       cwd: publisher
@@ -465,22 +510,28 @@ describe("updates through connected local repositories", () => {
     "project recovery preserves a %s publisher's accepted updates",
     async (kind) => {
       const f = fixture();
+
       const publisher = createRepo(
         path.join(f.caller, kind === "nested" ? ".agents/skills/publisher" : "publisher"),
         { "monke.yml": "skills: []\n" }
       );
+
       await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
         ...f.runtime,
         cwd: publisher
       });
+
       if (kind === "alias") {
         mkdirSync(path.join(f.caller, ".agents"), { recursive: true });
         symlinkSync(path.join(publisher, "skills"), path.join(f.caller, ".agents/skills"), "dir");
       }
+
       await runCliAsync(["skills", "add", publisher, "--project", "--skill", "base"], f.runtime);
+
       const missing = createRepo(path.join(f.sandbox, "missing"), {
         "skills/missing/SKILL.md": "---\nname: missing\ndescription: Missing.\n---\nMissing.\n"
       });
+
       await runCliAsync(["skills", "add", missing, "--project"], f.runtime);
       rmSync(missing, { recursive: true });
       const commit = f.advance();
@@ -490,6 +541,7 @@ describe("updates through connected local repositories", () => {
           chmodSync(exclude, 0o444);
         }
       };
+
       try {
         await expect(runCliAsync(["skills", "update", "--project"], f.runtime)).rejects.toThrow(
           /not writable/u
@@ -508,16 +560,20 @@ describe("updates through connected local repositories", () => {
     "concurrent publisher updates wait for %s project publication recovery",
     async (kind) => {
       const f = fixture();
+
       const publisher = createRepo(
         path.join(f.caller, kind === "nested" ? ".agents/skills/publisher" : "publisher"),
         { "monke.yml": "skills: []\n" }
       );
+
       const repoRuntime = { ...f.runtime, cwd: publisher };
       await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], repoRuntime);
+
       if (kind === "alias") {
         mkdirSync(path.join(f.caller, ".agents"), { recursive: true });
         symlinkSync(path.join(publisher, "skills"), path.join(f.caller, ".agents/skills"), "dir");
       }
+
       await runCliAsync(["skills", "add", publisher, "--project", "--skill", "base"], f.runtime);
       await runCliAsync(
         [
@@ -544,11 +600,14 @@ describe("updates through connected local repositories", () => {
           chmodSync(exclude, 0o444);
         }
       };
+
       const projectUpdate = runCliAsync(["skills", "update", "--project"], installer.runtime).then(
         () => "",
         String
       );
+
       let publisherUpdate: Promise<string> | undefined;
+
       try {
         await installer.entered;
         expect(readRepoImportRecipeStore(publisher).recipes[0]?.commit).toBe(accepted);
@@ -598,9 +657,11 @@ describe("updates through connected local repositories", () => {
     "saved repo installers remain replayable: %j",
     async ({ command, connected }) => {
       const f = fixture();
+
       const publisher = createRepo(path.join(f.sandbox, "publisher"), {
         "monke.yml": "skills: []\n"
       });
+
       await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base", "extra"], {
         ...f.runtime,
         cwd: publisher
@@ -612,9 +673,11 @@ describe("updates through connected local repositories", () => {
 exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.meta.dirname, "../src/index.ts"))} "$@"
 `
       );
+
       if (connected) {
         await runCliAsync(["skills", "add", publisher, "--project", "--skill", "base"], f.runtime);
       }
+
       await runCliAsync(
         [
           "skills",
@@ -675,10 +738,12 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
   test("identical relative source declarations resolve in each connected checkout", async () => {
     const f = fixture();
     const publishers = [];
+
     for (const slug of ["alpha", "beta"]) {
       const upstream = createRepo(path.join(f.sandbox, slug, "upstream"), {
         [`skills/${slug}/SKILL.md`]: `---\nname: ${slug}\ndescription: ${slug}.\n---\nFirst ${slug}.\n`
       });
+
       const publisher = createRepo(path.join(f.sandbox, slug, "publisher"), {
         "monke.yml": stringify({
           skills: [
@@ -690,6 +755,7 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
           ]
         })
       });
+
       await runCliAsync(["skills", "add", publisher, "--name", slug], f.runtime);
       write(
         upstream,
@@ -761,6 +827,7 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
       await runCliAsync(["skills", "list"], f.runtime);
       const gate = path.join(f.sandbox, "corrupt-publisher");
       const yaml = path.join(f.checkout, "monke.yml");
+
       if (phase === "publisher after") {
         await runCliAsync(
           [
@@ -778,17 +845,21 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
           f.runtime
         );
       }
+
       const previous = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
       const commit = f.advance();
+
       const baseline = path.join(
         f.monkeHome,
         "skill-registry/.monke-skill-baseline/skills/imported/base/SKILL.md"
       );
+
       if (phase === "consumer before") {
         chmodSync(baseline, 0o000);
       } else {
         write(f.sandbox, "corrupt-publisher", "Corrupt YAML only during update.\n");
       }
+
       try {
         await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(
           phase === "consumer before" ? /EACCES/u : /monke\.yml/u
@@ -803,6 +874,7 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
           rmSync(gate);
         }
       }
+
       expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
       await runCliAsync(["skills", "update"], f.runtime);
 
@@ -820,10 +892,12 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
       ...f.runtime,
       cwd: f.checkout
     });
+
     const broken = createRepo(path.join(f.sandbox, "broken-publisher"), {
       "monke.yml": "skills: []\n",
       "skills/own/SKILL.md": "---\nname: own\ndescription: Own.\n---\nOwn.\n"
     });
+
     await runCliAsync(["skills", "add", broken, "--name", "broken"], f.runtime);
     const previous = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
     const commit = f.advance();
@@ -845,9 +919,11 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
 
   test("the comparison includes publisher restoration performed by consumer refresh", async () => {
     const f = fixture();
+
     const publisher = createRepo(path.join(f.sandbox, "publisher"), {
       "monke.yml": "skills: []\n"
     });
+
     await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
       ...f.runtime,
       cwd: publisher

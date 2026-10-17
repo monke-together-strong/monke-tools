@@ -29,6 +29,7 @@ describe("CLI", () => {
 
   test("Home prints the configured Monke home without creating it", () => {
     const home = path.join(makeTempDir("cli-home"), "custom-monke-home");
+
     const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
       cwd: projectRoot,
       encoding: "utf-8",

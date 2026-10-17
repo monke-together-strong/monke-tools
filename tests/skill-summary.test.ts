@@ -21,6 +21,7 @@ function snapshot(root: string, slugs: string[]) {
       : [],
     version: 4
   });
+
   for (const slug of slugs) {
     write(root, `skills/imported/${slug}/SKILL.md`, `Guidance for ${slug}.`);
   }
@@ -36,12 +37,15 @@ describe("skill update summaries", () => {
     write(before, "skills/imported/alpha/reference.md", "Old guidance.");
     write(after, "skills/imported/alpha/reference.md", "New guidance.");
     const runtime = createTestRuntime({ cwd: root });
+
     const exec = vi.fn<typeof runtime.execAsync>(async (_command, args = []) => {
       const output = args[args.indexOf("--output-last-message") + 1];
       ok(output);
       writeFileSync(output, "# Skill update summary\n\n## alpha\n\nUpdated reference.");
+
       return { exitCode: 0, stderr: "", stdout: "" };
     });
+
     runtime.execAsync = exec;
     const messages: string[] = [];
     await summarizeSkillChanges({
@@ -82,8 +86,10 @@ describe("skill update summaries", () => {
       const output = args[args.indexOf("--output-last-message") + 1];
       ok(output);
       writeFileSync(output, "Partial output");
+
       return { exitCode: 1, stderr: "Unavailable", stdout: "" };
     };
+
     let messages = "";
     await summarizeSkillChanges({
       after,

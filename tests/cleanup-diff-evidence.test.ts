@@ -15,13 +15,16 @@ function fixture() {
   mkdirSync("tmp", { recursive: true });
   const sandbox = mkdtempSync(path.resolve("tmp/cleanup-diff-"));
   sandboxes.push(sandbox);
+
   const source = createRepo(path.join(sandbox, "source"), {
     "delete.txt": "delete me\n",
     "file.txt": "old text\n",
     "old-name.txt": "rename me\n",
     "run.sh": "exit 0\n"
   });
+
   const base = git(source, ["rev-parse", "HEAD"]);
+
   const applyChange = () => {
     write(source, "file.txt", "new text\n");
     writeFileSync(path.join(source, "binary.bin"), Buffer.from([0, 255, 1, 0]));
@@ -32,6 +35,7 @@ function fixture() {
     chmodSync(path.join(source, "run.sh"), 0o755);
     git(source, ["add", "."]);
   };
+
   git(source, ["switch", "-c", "original"]);
   applyChange();
   git(source, ["commit", "-m", "original feature"]);
@@ -44,6 +48,7 @@ function fixture() {
   git(source, ["commit", "-m", "land amended feature"]);
   const merge = git(source, ["rev-parse", "HEAD"]);
   const runtime = readOnlyCleanupRuntime(createTestRuntime({ cwd: source }));
+
   return { base, head, merge, runtime, source };
 }
 
@@ -73,31 +78,38 @@ describe("complete merged change evidence", () => {
     "rejects a landed %s difference",
     (kind) => {
       const f = fixture();
+
       switch (kind) {
         case "whitespace": {
           write(f.source, "file.txt", "new  text\n");
           break;
         }
+
         case "binary": {
           writeFileSync(path.join(f.source, "binary.bin"), Buffer.from([0, 254, 1, 0]));
           break;
         }
+
         case "mode": {
           chmodSync(path.join(f.source, "run.sh"), 0o644);
           break;
         }
+
         case "path": {
           git(f.source, ["mv", "new-name.txt", "different-name.txt"]);
           break;
         }
+
         case "extra-change": {
           write(f.source, "extra.txt", "additional landed work\n");
           break;
         }
+
         default: {
           throw new Error("Unexpected diff variant");
         }
       }
+
       git(f.source, ["add", "."]);
       git(f.source, ["commit", "--amend", "--no-edit"]);
       const merge = git(f.source, ["rev-parse", "HEAD"]);
@@ -108,8 +120,10 @@ describe("complete merged change evidence", () => {
   test("distinguishes paths with different non-UTF-8 bytes", () => {
     const f = fixture();
     const blob = git(f.source, ["rev-parse", `${f.head}:file.txt`]);
+
     const addPath = (commit: string, byte: number) => {
       git(f.source, ["read-tree", commit]);
+
       const result = Bun.spawnSync(["git", "update-index", "-z", "--index-info"], {
         cwd: f.source,
         stdin: Buffer.concat([
@@ -118,10 +132,13 @@ describe("complete merged change evidence", () => {
           Buffer.from(".txt\0")
         ])
       });
+
       expect(result.exitCode).toBe(0);
       const tree = git(f.source, ["write-tree"]);
+
       return git(f.source, ["commit-tree", tree, "-p", `${commit}^1`, "-m", "raw filename"]);
     };
+
     const merge = addPath(f.merge, 255);
     const head = addPath(f.head, 254);
     expect(inspectMatchingMergeDiff(f.runtime, f.source, head, merge, merge)).toBeFalsy();

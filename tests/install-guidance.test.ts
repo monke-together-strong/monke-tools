@@ -19,10 +19,12 @@ describe("Installation guidance in errors", () => {
       const sandbox = makeTempDir(`install-guidance-${kind}`);
       const monkeHome = path.join(sandbox, "monke-home");
       const sourceCheckout = path.join(sandbox, "source");
+
       const installRoot =
         kind === "local"
           ? prepareActiveLocal(monkeHome, sourceCheckout)
           : prepareActiveRelease(monkeHome, "1.2.3");
+
       const guidanceRoot = kind === "local" ? sourceCheckout : installRoot;
       write(guidanceRoot, skillPath, "Installation guidance.\n");
 
@@ -45,6 +47,7 @@ describe("Installation guidance in errors", () => {
           toolInstallRoot: installRoot
         })
       );
+
       await expect(failure).rejects.toThrow(
         kind === "local"
           ? "No stable monke-tools Release was found"
@@ -93,6 +96,7 @@ describe("Installation guidance in errors", () => {
 
   test("the executable prints the installation error and source guidance path", () => {
     const sandbox = makeTempDir("install-guidance-cli");
+
     const result = spawnSync("bun", ["run", "src/index.ts", "update", "--check"], {
       cwd: projectRoot,
       encoding: "utf-8",

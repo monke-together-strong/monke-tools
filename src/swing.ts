@@ -38,9 +38,11 @@ const SwingHistorySchema = z.strictObject({
   previous: SwingHistoryTargetSchema.optional(),
   version: z.literal(1)
 });
+
 const GithubRepositorySchema = z.object({
   nameWithOwner: z.string().min(1)
 });
+
 const GithubPullRequestSchema = z.object({
   headRefName: z.string().min(1),
   headRepository: z.object({ name: z.string().min(1) }),
@@ -48,6 +50,7 @@ const GithubPullRequestSchema = z.object({
 });
 
 type SwingHistoryTarget = z.output<typeof SwingHistoryTargetSchema>;
+
 type SwingHistory = z.output<typeof SwingHistorySchema>;
 
 interface ResolveStoredTargetOptions {
@@ -76,13 +79,17 @@ export interface SwingOptions {
 /** Navigate with the Clack-backed interactive Swing picker used by the real CLI. */
 export async function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOptions = {}) {
   const home = getMonkeHome(runtime);
+
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
     allowExternalSessionWorktree: true,
     allowSessionBranchMismatch: true
   });
+
   const currentTarget = getCurrentSwingTarget(home, context);
+
   const selectedTarget =
     rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
+
   await navigateToSwingTarget(
     runtime,
     home,
@@ -107,6 +114,7 @@ async function navigateToSwingTarget(
   await withGlobalLockAsync(home, async () => {
     const resolved = await resolveSwingTarget(runtime, home, rootSourceRoot, selectedTarget);
     moved = !isSameSwingTarget(resolved.target, currentTarget);
+
     if (moved) {
       saveSwingHistory(home, rootSourceRoot, {
         current: resolved.target,
@@ -114,13 +122,16 @@ async function navigateToSwingTarget(
         version: 1
       });
     }
+
     targetPath = resolved.path;
   });
 
   if (moved) {
     createLogger(runtime).info(`Moved Swing target to ${targetPath}`);
   }
+
   requestShellDirectory(runtime, targetPath);
+
   if (options.codex === true) {
     openCodexWorkspace(runtime, targetPath);
   }
@@ -133,6 +144,7 @@ function selectSwingTarget(
   currentTarget: SwingHistoryTarget
 ) {
   const options = listSwingPickerOptions(runtime, home, rootSourceRoot, currentTarget);
+
   return runtime.select({
     maxItems: Math.min(options.length, 10),
     message: "Swing target",
@@ -151,6 +163,7 @@ function listSwingPickerOptions(
 ) {
   const previousTarget = loadSwingHistory(home, rootSourceRoot).previous;
   const options: SwingPickerOption[] = [];
+
   for (const candidate of listLocalWorktreeTargets(runtime, home, rootSourceRoot)) {
     if (candidate.kind === "source") {
       if (currentTarget.kind !== "source") {
@@ -160,18 +173,23 @@ function listSwingPickerOptions(
           target: { kind: "source" }
         });
       }
+
       continue;
     }
+
     if (candidate.branch === null) {
       continue;
     }
+
     const target: SwingHistoryTarget =
       candidate.kind === "session"
         ? { kind: "session", session: candidate.session ?? candidate.label }
         : { branch: candidate.branch, kind: "ordinary-worktree", path: candidate.path };
+
     if (isSameSwingTarget(target, currentTarget)) {
       continue;
     }
+
     options.push({
       markers: formatTargetMarkers(target, previousTarget),
       rawTarget:
@@ -189,6 +207,7 @@ function listSwingPickerOptions(
 
 function formatSwingPickerLabel(option: SwingPickerOption) {
   const markers = option.markers.length > 0 ? ` [${option.markers.join(", ")}]` : "";
+
   return `${option.rawTarget}${markers}`;
 }
 
@@ -197,9 +216,11 @@ function formatTargetMarkers(
   previousTarget: SwingHistoryTarget | undefined
 ) {
   const markers: string[] = [];
+
   if (previousTarget && isSameSwingTarget(target, previousTarget)) {
     markers.push("previous");
   }
+
   return markers;
 }
 
@@ -215,9 +236,11 @@ function resolveSwingTarget(
 
   if (rawTarget === "-") {
     const { previous } = loadSwingHistory(home, rootSourceRoot);
+
     if (!previous) {
       throw new MonkeError(`No Previous Swing target recorded for ${rootSourceRoot}`);
     }
+
     return resolveStoredTarget(runtime, home, rootSourceRoot, previous);
   }
 
@@ -230,12 +253,14 @@ function resolveSwingTarget(
   }
 
   const pullRequestTarget = parsePullRequestTarget(rawTarget);
+
   if (pullRequestTarget !== null) {
     const pullRequestSession = resolvePullRequestSession(
       runtime,
       rootSourceRoot,
       pullRequestTarget
     );
+
     ensurePullRequestSessionBranch(
       runtime,
       rootSourceRoot,
@@ -243,6 +268,7 @@ function resolveSwingTarget(
       pullRequestSession.session,
       { createIfMissing: false }
     );
+
     return resolveStoredTarget(
       runtime,
       home,
@@ -286,26 +312,32 @@ async function resolveStoredTarget(
     if (!existsSync(rootSourceRoot)) {
       throw new MonkeError(`Source checkout does not exist at ${rootSourceRoot}`);
     }
+
     return { path: rootSourceRoot, target };
   }
 
   if (target.kind === "ordinary-worktree") {
     validateOrdinaryWorktreeTarget(runtime, home, rootSourceRoot, target);
+
     return { path: target.path, target };
   }
 
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
+
   if (!existsSync(worktreePath)) {
     const linkedWorktree = listLinkedWorktrees(runtime, rootSourceRoot).find(
       (entry) => entry.branch === target.session
     );
+
     if (linkedWorktree) {
       const linkedTarget: SwingHistoryTarget = {
         branch: target.session,
         kind: "ordinary-worktree",
         path: linkedWorktree.path
       };
+
       validateOrdinaryWorktreeTarget(runtime, home, rootSourceRoot, linkedTarget);
+
       return { path: linkedWorktree.path, target: linkedTarget };
     }
 
@@ -325,6 +357,7 @@ async function resolveStoredTarget(
       );
     }
   }
+
   const context = validateWorktreeForSession(
     runtime,
     home,
@@ -333,7 +366,9 @@ async function resolveStoredTarget(
     target.session,
     { allowBranchMismatch: true }
   );
+
   warnSwingBranchMismatch(runtime, worktreePath, target.session, context.currentBranch);
+
   return { path: worktreePath, target };
 }
 
@@ -343,6 +378,7 @@ function resolvePullRequestSession(
   pullRequestTarget: PullRequestSwingTarget
 ) {
   const currentRepo = resolveCurrentGithubRepo(runtime, rootSourceRoot);
+
   if (pullRequestTarget.repo && !isSameGithubRepo(pullRequestTarget.repo, currentRepo)) {
     throw new MonkeError(
       `Cross-repo PR URLs are not supported: target ${pullRequestTarget.repo.owner}/${pullRequestTarget.repo.name} does not match current repo ${currentRepo.owner}/${currentRepo.name}`
@@ -350,6 +386,7 @@ function resolvePullRequestSession(
   }
 
   const pullRequestNumber = pullRequestTarget.number;
+
   const output = runtime.exec(
     "gh",
     [
@@ -361,11 +398,13 @@ function resolvePullRequestSession(
     ],
     { cwd: rootSourceRoot }
   ).stdout;
+
   const pullRequest = parseGithubJson(
     output,
     `GitHub PR #${pullRequestNumber}`,
     GithubPullRequestSchema
   );
+
   const { headRefName } = pullRequest;
   const headRepoName = pullRequest.headRepository.name;
   const headOwnerLogin = pullRequest.headRepositoryOwner.login;
@@ -387,10 +426,12 @@ function ensurePullRequestSessionBranch(
   options: { createIfMissing: boolean }
 ) {
   const temporaryRef = `refs/monke/pr-heads/${pullRequestNumber}`;
+
   try {
     runtime.exec("git", ["fetch", "origin", `+pull/${pullRequestNumber}/head:${temporaryRef}`], {
       cwd: rootSourceRoot
     });
+
     const pullRequestHead = runtime
       .exec("git", ["rev-parse", temporaryRef], {
         cwd: rootSourceRoot
@@ -403,11 +444,13 @@ function ensurePullRequestSessionBranch(
           cwd: rootSourceRoot
         })
         .stdout.trim();
+
       if (localHead !== pullRequestHead) {
         throw new MonkeError(
           `Local branch "${session}" differs from PR #${pullRequestNumber} head; update or rename it before swinging to this PR target.`
         );
       }
+
       return;
     }
 
@@ -426,6 +469,7 @@ function resolveCurrentGithubRepo(runtime: Runtime, rootSourceRoot: string) {
   const output = runtime.exec("gh", ["repo", "view", "--json", "nameWithOwner"], {
     cwd: rootSourceRoot
   }).stdout;
+
   const trimmed = output.trim();
   const { nameWithOwner } = parseGithubJson(trimmed, "GitHub repo", GithubRepositorySchema);
   const [owner, name] = nameWithOwner.split("/");
@@ -439,22 +483,28 @@ function resolveCurrentGithubRepo(runtime: Runtime, rootSourceRoot: string) {
 
 function parsePullRequestTarget(rawTarget: string) {
   const prMatch = /^pr:(?<number>\d+)$/u.exec(rawTarget);
+
   if (prMatch?.groups?.number) {
     return { number: Math.trunc(Number(prMatch.groups.number)) };
   }
 
   try {
     const url = new URL(rawTarget);
+
     if (url.hostname !== "github.com") {
       return null;
     }
+
     const match = /^\/(?<owner>[^/]+)\/(?<name>[^/]+)\/pull\/(?<number>\d+)\/?$/u.exec(
       url.pathname
     );
+
     const { name, number, owner } = match?.groups ?? {};
+
     if (name === undefined || number === undefined || owner === undefined) {
       return null;
     }
+
     return {
       number: Math.trunc(Number(number)),
       repo: { name, owner }
@@ -484,6 +534,7 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
   }
 
   const expectedPath = getExpectedWorktreePath(home, context.sourceRoot, context.sessionName);
+
   return samePath(context.worktreeRoot, expectedPath)
     ? {
         kind: "session",
@@ -500,12 +551,15 @@ function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget) 
   if (left.kind !== right.kind) {
     return false;
   }
+
   if (left.kind === "source") {
     return true;
   }
+
   if (left.kind === "session") {
     return right.kind === "session" && left.session === right.session;
   }
+
   return (
     right.kind === "ordinary-worktree" &&
     left.branch === right.branch &&
@@ -526,6 +580,7 @@ function validateOrdinaryWorktreeTarget(
   const sourceContext = resolveRepoContext(runtime, rootSourceRoot, null, {
     inferSessionName: false
   });
+
   const resolved = resolveLocalWorktreeTarget(
     runtime,
     home,
@@ -536,9 +591,11 @@ function validateOrdinaryWorktreeTarget(
       path: target.path
     }
   );
+
   if (resolved?.kind === "source") {
     throw new MonkeError(`Expected ${target.path} to be a linked worktree`);
   }
+
   if (resolved === undefined) {
     throw new MonkeError(
       `Expected worktree ${target.path} to belong to ${rootSourceRoot} and remain on branch ${target.branch}`
@@ -553,6 +610,7 @@ function warnSwingBranchMismatch(
   branch: string
 ) {
   const mismatch = describeSessionBranchMismatch(session, branch === "HEAD" ? null : branch);
+
   if (mismatch === null) {
     return;
   }
@@ -575,6 +633,7 @@ function listLinkedWorktrees(runtime: Runtime, rootSourceRoot: string) {
 
 function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
   const filePath = getSwingHistoryFilePath(home, rootSourceRoot);
+
   if (!existsSync(filePath)) {
     return { version: 1 };
   }
@@ -595,10 +654,12 @@ function getSwingHistoryFilePath(home: string, rootSourceRoot: string) {
 
 function parseGithubJson<T extends z.ZodType>(output: string, label: string, schema: T) {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(output);
   } catch {
     throw new MonkeError(`Invalid ${label}: expected JSON output`);
   }
+
   return unwrapBoundaryResult(schema.safeParse(parsed), label);
 }

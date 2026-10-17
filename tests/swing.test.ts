@@ -32,9 +32,11 @@ describe("Swing", () => {
   test("swing navigates to an existing root repo Session worktree without creating one", () => {
     const sandbox = makeTempDir("swing-session");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
 
     const result = runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
@@ -48,9 +50,11 @@ describe("Swing", () => {
   test("swing picker navigates to a Session worktree on another branch and warns", async () => {
     const sandbox = makeTempDir("swing-session-branch-mismatch");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     git(worktreeRoot, ["switch", "-c", "unexpected"]);
@@ -71,9 +75,11 @@ describe("Swing", () => {
   test("swing can leave a managed Session worktree after its branch changes", () => {
     const sandbox = makeTempDir("swing-current-session-branch-mismatch");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     git(worktreeRoot, ["switch", "-c", "unexpected"]);
@@ -87,9 +93,11 @@ describe("Swing", () => {
   test("swing without a target opens a Swing picker and selects a Session", async () => {
     const sandbox = makeTempDir("swing-picker-number");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
 
     const result = await runMonkeAsync({
@@ -107,9 +115,11 @@ describe("Swing", () => {
   test("swing detects a linked worktree outside Monke home by branch name", () => {
     const sandbox = makeTempDir("swing-linked-worktree");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     const worktreeRoot = path.join(sandbox, "ordinary-worktrees", "banana");
     git(repoRoot, ["branch", "banana"]);
     git(repoRoot, ["worktree", "add", worktreeRoot, "banana"]);
@@ -124,9 +134,11 @@ describe("Swing", () => {
   test("swing picker includes linked worktrees outside Monke home", async () => {
     const sandbox = makeTempDir("swing-picker-linked-worktree");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "mango"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = path.join(sandbox, "ordinary-worktrees", "banana");
     git(repoRoot, ["branch", "banana"]);
@@ -151,9 +163,11 @@ describe("Swing", () => {
   test("swing picker hides paths and lists recently updated Sessions first", async () => {
     const sandbox = makeTempDir("swing-picker-recency");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "z-newer"], cwd: repoRoot, monkeHome: home });
     runMonke({ args: ["spawn", "a-older"], cwd: repoRoot, monkeHome: home });
     git(
@@ -187,9 +201,11 @@ describe("Swing", () => {
   test("swing picker sorts Sessions and ordinary worktrees by shared recency", async () => {
     const sandbox = makeTempDir("swing-picker-shared-recency");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "managed-older"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = path.join(sandbox, "ordinary-worktrees", "ordinary-newer");
     git(repoRoot, ["branch", "ordinary-newer"]);
@@ -219,9 +235,11 @@ describe("Swing", () => {
   test("swing picker can select the Source checkout from a Session worktree", async () => {
     const sandbox = makeTempDir("swing-picker-source");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
@@ -239,9 +257,11 @@ describe("Swing", () => {
   test("swing picker omits the current target", async () => {
     const sandbox = makeTempDir("swing-picker-current-history");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     runMonke({ args: ["spawn", "cherry"], cwd: repoRoot, monkeHome: home });
     const cherryWorktree = getExpectedWorktreePath(home, repoRoot, "cherry");
@@ -253,6 +273,7 @@ describe("Swing", () => {
     });
 
     let prompt: SelectPrompt | undefined;
+
     const backToSource = await runMonkeAsync({
       args: ["swing"],
       cwd: cherryWorktree,
@@ -270,9 +291,11 @@ describe("Swing", () => {
   test("swing picker rejects unknown selections", async () => {
     const sandbox = makeTempDir("swing-picker-invalid");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
 
     await expect(
@@ -288,6 +311,7 @@ describe("Swing", () => {
   test("swing fails clearly when the Session does not exist", () => {
     const sandbox = makeTempDir("swing-missing");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
@@ -300,9 +324,11 @@ describe("Swing", () => {
   test("swing treats @ inside Session names as ordinary branch text", () => {
     const sandbox = makeTempDir("swing-at-session");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "feature@alice"], cwd: repoRoot, monkeHome: home });
 
     const result = runMonke({ args: ["swing", "feature@alice"], cwd: repoRoot, monkeHome: home });
@@ -315,9 +341,11 @@ describe("Swing", () => {
   test("swing caret returns from a Session worktree to the Source checkout", () => {
     const sandbox = makeTempDir("swing-source");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
@@ -330,9 +358,11 @@ describe("Swing", () => {
   test("swing allows the current Session worktree to live outside Monke home with a warning", () => {
     const sandbox = makeTempDir("swing-external-worktree");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
     git(repoRoot, ["branch", "winters-echo"]);
     git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
@@ -351,12 +381,15 @@ describe("Swing", () => {
   test("swing dash toggles to the Previous Swing target scoped by Root repo", () => {
     const sandbox = makeTempDir("swing-previous");
     const home = path.join(sandbox, "home");
+
     const firstRepo = createRepo(path.join(sandbox, "first"), {
       "README.md": "first\n"
     });
+
     const secondRepo = createRepo(path.join(sandbox, "second"), {
       "README.md": "second\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: firstRepo, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, firstRepo, "banana");
     runMonke({ args: ["swing", "banana"], cwd: firstRepo, monkeHome: home });
@@ -374,17 +407,21 @@ describe("Swing", () => {
   test("swing rejects corrupt Previous Swing target history with its file and field path", () => {
     const sandbox = makeTempDir("swing-corrupt-history");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
     const historyDirectory = path.join(home, "swing-history");
     const [historyName] = readdirSync(historyDirectory);
+
     if (historyName === undefined) {
       throw new Error("expected Swing history file");
     }
+
     const historyPath = path.join(historyDirectory, historyName);
     writeFileSync(
       historyPath,
@@ -414,9 +451,11 @@ previous:
   ])("swing rejects $name", ({ contents, expected }) => {
     const sandbox = makeTempDir("swing-history-versioning");
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     const historyDirectory = path.join(home, "swing-history");
     mkdirSync(historyDirectory, { recursive: true });
     writeFileSync(path.join(historyDirectory, `${hashKey(repoRoot)}.yml`), contents, "utf-8");
@@ -430,9 +469,11 @@ previous:
     const sandbox = makeTempDir("swing-pr");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     installSwingGhShim(binDirectory, {
       "123": {
@@ -461,18 +502,21 @@ previous:
       cwd: repoRoot,
       monkeHome: home
     });
+
     const byUrl = runMonke({
       args: ["swing", "https://github.com/owner/root/pull/123"],
       binDirectory,
       cwd: repoRoot,
       monkeHome: home
     });
+
     const byCaseFoldedNumber = runMonke({
       args: ["swing", "pr:125"],
       binDirectory,
       cwd: repoRoot,
       monkeHome: home
     });
+
     const byCodexPr = runMonke({
       args: ["swing", "pr:123", "--codex"],
       binDirectory,
@@ -492,9 +536,11 @@ previous:
     const sandbox = makeTempDir("swing-pr-malformed");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     installSwingGhShim(binDirectory, {
       "404": {
         headRefName: 404,
@@ -518,9 +564,11 @@ previous:
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/issue-81-flow-market-unit";
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     git(repoRoot, ["switch", "-c", prBranch]);
     writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf-8");
@@ -586,9 +634,11 @@ apps:
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/config-less";
+
     const repoRoot = createTestRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     pushReadmePullRequestHead(repoRoot, {
       branch: prBranch,
@@ -633,9 +683,11 @@ apps:
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/pinned-default";
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     runMonke({ args: ["spawn", prBranch, "-m"], cwd: repoRoot, monkeHome: home });
     git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/88/head`]);
@@ -672,9 +724,11 @@ apps:
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/invalid-path";
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     pushReadmePullRequestHead(repoRoot, {
       branch: prBranch,
@@ -708,9 +762,11 @@ apps:
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/stale-existing";
     const upstreamBranch = "feature/stale-existing-upstream";
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     pushReadmePullRequestHead(repoRoot, {
       branch: prBranch,
@@ -758,9 +814,11 @@ apps:
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/in-sync-pr";
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     pushReadmePullRequestHead(repoRoot, {
       branch: prBranch,
@@ -783,6 +841,7 @@ apps:
       cwd: repoRoot,
       monkeHome: home
     });
+
     const secondSwing = runMonke({
       args: ["swing", "pr:85"],
       binDirectory,
@@ -799,9 +858,11 @@ apps:
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
     const prBranch = "feature/stale-local";
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n"
     });
+
     installBareOrigin(sandbox, repoRoot);
     pushReadmePullRequestHead(repoRoot, {
       branch: prBranch,
@@ -833,9 +894,11 @@ apps:
     const sandbox = makeTempDir("swing-codex-windows");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     const cmdLogPath = installWindowsCmdShim(binDirectory);
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -861,9 +924,11 @@ apps:
     const sandbox = makeTempDir("swing-unsupported");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "hello\n"
     });
+
     installSwingGhShim(binDirectory, {
       "124": {
         headRefName: "fork/pr-124",
@@ -920,6 +985,7 @@ function pushReadmePullRequestHead(
 function localBranchExists(repoRoot: string, branch: string) {
   try {
     git(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
+
     return true;
   } catch {
     return false;
@@ -934,9 +1000,11 @@ interface SwingGhResponse {
 
 function installSwingGhShim(binDirectory: string, prs: Record<string, SwingGhResponse>) {
   mkdirSync(binDirectory, { recursive: true });
+
   const cases = Object.entries(prs)
     .map(([number, pr]) => `    ${number}) printf '%s\\n' '${JSON.stringify(pr)}'; exit 0 ;;`)
     .join("\n");
+
   const script = `#!/bin/sh
 set -eu
 if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
@@ -951,6 +1019,7 @@ fi
 echo "unsupported gh invocation: $*" >&2
 exit 1
 `;
+
   const targetPath = path.join(binDirectory, "gh");
   writeFileSync(targetPath, script, "utf-8");
   chmodSync(targetPath, 0o755);

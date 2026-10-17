@@ -9,6 +9,7 @@ import {
 } from "../src/session-cleanup-report.ts";
 
 const head = "a".repeat(40);
+
 function fixture(): SessionCleanupEvidence {
   return {
     blockers: [],
@@ -241,6 +242,7 @@ describe("Session cleanup explanations", () => {
       sourceRoot: "/sources/root",
       step: "teardown"
     });
+
     expect(report.outcome).toBe("failed");
     const text = formatSessionCleanupReport(report);
     expect(text).toContain("teardown failed in /sources/root: Channel deletion failed");

@@ -11,6 +11,7 @@ const blocks = [
 
 const version = z.literal("12.1.0");
 const dependency = z.strictObject({ specifier: version, version });
+
 const bootstrapSchema = z.strictObject({
   importers: z.strictObject({
     ".": z.strictObject({
@@ -24,6 +25,7 @@ const bootstrapSchema = z.strictObject({
 });
 
 export const pnpmBootstrapManifestSchema = z.object({ packageManager: z.string() });
+
 type PnpmBootstrapManifest = z.infer<typeof pnpmBootstrapManifestSchema>;
 
 /** Recognize only the reproduced directional bootstrap edit; preserve every application byte. */
@@ -38,17 +40,24 @@ export function isPnpmBootstrapDeletion(
   ) {
     return false;
   }
+
   const boundary = before.indexOf("\n---\n", 4);
+
   if (boundary === -1) {
     return false;
   }
+
   let bootstrap = before.slice(0, boundary);
+
   try {
     const document = parseDocument(bootstrap);
+
     if (document.errors.length > 0 || document.warnings.length > 0) {
       return false;
     }
+
     const parsed = bootstrapSchema.safeParse(document.toJS({ maxAliasCount: 0 }));
+
     if (
       !parsed.success ||
       !parsed.data.packages["@pnpm/exe@12.1.0"] ||
@@ -59,11 +68,14 @@ export function isPnpmBootstrapDeletion(
   } catch {
     return false;
   }
+
   const sections = ["\nimporters:\n", "\npackages:\n", "\nsnapshots:\n"];
+
   for (const [index, block] of blocks.entries()) {
     const start = bootstrap.indexOf(sections[index] ?? "");
     const end = index < 2 ? bootstrap.indexOf(sections[index + 1] ?? "") : bootstrap.length;
     const position = bootstrap.indexOf(block);
+
     if (
       start === -1 ||
       position <= start ||
@@ -72,7 +84,9 @@ export function isPnpmBootstrapDeletion(
     ) {
       return false;
     }
+
     bootstrap = bootstrap.slice(0, position) + bootstrap.slice(position + block.length);
   }
+
   return bootstrap + before.slice(boundary) === after;
 }

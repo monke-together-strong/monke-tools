@@ -279,10 +279,12 @@ apps:
     expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
+
     const reservationState = readSingleYamlFile(
       path.join(home, "repo-reservations"),
       RepoReservationSchema
     );
+
     expect(reservationState.sourceRoot).toBe(root);
   });
 
@@ -301,6 +303,7 @@ apps:
       cwd: root,
       monkeHome: home
     });
+
     expect(spawn.stderr).toContain("Warning:");
 
     rmSync(getExpectedWorktreePath(home, root, "banana"), { force: true, recursive: true });
@@ -354,6 +357,7 @@ apps:
       cwd: root,
       monkeHome: home
     });
+
     expect(liveCleanup.stdout).toContain("Skipped:");
     expect(existsSync(path.join(root, "cleanup.log"))).toBeFalsy();
     const shellLogBeforeDeadCleanup = readFileSync(shLogPath, "utf-8");
@@ -367,6 +371,7 @@ apps:
       cwd: root,
       monkeHome: home
     });
+
     expect(missing.stdout).toContain("Skipped:");
     expect(missing.stdout).toContain("resource-recovery-required");
     expect(existsSync(path.join(root, "cleanup.log"))).toBeFalsy();
@@ -381,10 +386,12 @@ apps:
     expect(read(root, "cleanup.log")).toBe(
       `${root}\nmt-ada-clean-command\nclean-command\n${root}\n${worktree}\n`
     );
+
     const shellArgs = readFileSync(shLogPath, "utf-8")
       .slice(shellLogBeforeDeadCleanup.length)
       .trim()
       .split("\n");
+
     expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(1);
     expect(shellArgs).not.toContain("-lc");
     expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
@@ -542,6 +549,7 @@ apps:
       cwd: root,
       monkeHome: home
     });
+
     expect(result.stdout).toContain("Skipped:");
     expect(result.stdout).toContain("retry-one");
     expect(result.stdout).toContain("retry-two");
@@ -588,6 +596,7 @@ apps:
       cwd: root,
       monkeHome: home
     });
+
     expect(failure.error).toBeInstanceOf(Error);
     expect(failure.stderr).toMatch(/Cleanup command failed.*cleanup failed/su);
 

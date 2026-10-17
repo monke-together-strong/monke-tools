@@ -18,6 +18,7 @@ describe("environment rewriting", () => {
     write(sourceRoot, ".monke/.env.generated", "MONKE=1\n");
     write(sourceRoot, "node_modules/example/.env", "DEPENDENCY=1\n");
     symlinkSync(path.join(sourceRoot, "apps"), path.join(sourceRoot, "linked-apps"));
+
     const config: RepoConfig = {
       appsInOrder: [],
       configPath: path.join(sourceRoot, "monke.yml"),
@@ -116,6 +117,7 @@ DATABASE_URL=${malformedDsn}
     const unsupportedMessage = captureThrowMessage(() => {
       rewriteEnvFile(envPath, new Map([["API_TOKEN", 12_000]]));
     });
+
     expect(unsupportedMessage).toContain(`Unsupported env value at ${envPath}:API_TOKEN`);
     expect(unsupportedMessage).toContain(`<redacted length=${unsupportedValue.length}>`);
     expect(unsupportedMessage).not.toContain(unsupportedValue);
@@ -123,6 +125,7 @@ DATABASE_URL=${malformedDsn}
     const malformedMessage = captureThrowMessage(() => {
       rewriteEnvFile(envPath, new Map([["DATABASE_URL", 12_001]]));
     });
+
     expect(malformedMessage).toContain(`Malformed URL or DSN at ${envPath}:DATABASE_URL`);
     expect(malformedMessage).toContain(`<redacted length=${malformedDsn.length}>`);
     expect(malformedMessage).not.toContain(malformedDsn);

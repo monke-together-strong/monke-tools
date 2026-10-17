@@ -13,10 +13,12 @@ import type { Runtime } from "./types.ts";
 /** Attach existing installation guidance without replacing the original failure. */
 export function addInstallGuidance(runtime: Runtime, error: MonkeError) {
   const roots = [runtime.toolInstallRoot, path.resolve(import.meta.dirname, "..")];
+
   try {
     const install = existsSync(path.join(runtime.toolInstallRoot, INSTALL_MANIFEST_FILENAME))
       ? loadToolInstall(runtime.toolInstallRoot)
       : loadActiveToolInstall(getMonkeHome(runtime));
+
     if (install) {
       roots.unshift(
         install.manifest.installKind === "local"
@@ -31,11 +33,14 @@ export function addInstallGuidance(runtime: Runtime, error: MonkeError) {
   const guidance = roots
     .map((root) => path.join(root, "skills", "internal", "monke-install", "SKILL.md"))
     .find((candidate) => existsSync(candidate));
+
   if (guidance) {
     const hint = `Installation guidance: ${guidance}`;
+
     if (!error.message.includes(hint)) {
       error.message += `\n${hint}`;
     }
   }
+
   return error;
 }

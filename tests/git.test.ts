@@ -26,6 +26,7 @@ describe("Git operations", () => {
 
   test("validateWorktreeForSession rejects worktrees from a different repository", () => {
     const sandbox = makeTempDir("git-repo-identity");
+
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:
@@ -37,6 +38,7 @@ describe("Git operations", () => {
         env: PORT
 `
     });
+
     const otherSourceRoot = createRepo(path.join(sandbox, "other"), {
       "apps/db/.env.local": "PORT=5432\n",
       "monke.yml": `apps:
@@ -48,6 +50,7 @@ describe("Git operations", () => {
         env: PORT
 `
     });
+
     const home = path.join(sandbox, "home");
     const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
 
@@ -73,6 +76,7 @@ describe("Git operations", () => {
       exec(command, args) {
         expect(command).toBe("git");
         expect(args).toStrictEqual(["worktree", "list", "--porcelain"]);
+
         return {
           exitCode: 0,
           stderr: "",
@@ -109,6 +113,7 @@ prunable gitdir file points to non-existent location
 
   test("ensureSessionWorktreeAsync requires cleanup before recreating missing worktrees", async () => {
     const sandbox = makeTempDir("git-recreate-worktree");
+
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:
@@ -120,6 +125,7 @@ prunable gitdir file points to non-existent location
         env: PORT
 `
     });
+
     const runtime = createRuntime({ cwd: sourceRoot });
     const session = "banana";
     const home = path.join(sandbox, "home");
@@ -146,6 +152,7 @@ prunable gitdir file points to non-existent location
     const runtime = createRuntime({ cwd: sourceRoot });
     const home = path.join(sandbox, "home");
     const session = "banana";
+
     const retained = [session, "unrelated"].map((branch) => {
       const worktree = getExpectedWorktreePath(home, sourceRoot, branch);
       git(sourceRoot, ["worktree", "add", "-b", branch, worktree]);
@@ -154,10 +161,12 @@ prunable gitdir file points to non-existent location
       const admin = git(worktree, ["rev-parse", "--absolute-git-dir"]);
       const index = readFileSync(path.join(admin, "index"));
       rmSync(worktree, { force: true, recursive: true });
+
       return { admin, branch, index, worktree };
     });
 
     let failure;
+
     try {
       if (mode === "fresh") {
         assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
@@ -176,11 +185,13 @@ prunable gitdir file points to non-existent location
       );
       expect(existsSync(entry.worktree)).toBeFalsy();
     }
+
     expect(failure).toBeInstanceOf(Error);
   });
 
   test("ensureSessionWorktreeAsync rejects invalid session names before worktree operations", async () => {
     const sandbox = makeTempDir("git-invalid-session");
+
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `apps:

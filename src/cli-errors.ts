@@ -23,6 +23,7 @@ export function configureCliParser<T extends ConfigurableCliParser>(program: T) 
   program.exitOverride((error) => {
     throw new CommanderError(error.exitCode, error.code, errorOutput.trimEnd() || error.message);
   });
+
   return program;
 }
 
@@ -50,5 +51,6 @@ function formatCliFailure(error: Error | string) {
   if (error instanceof Error) {
     return error.stack ?? `${error.name}: ${error.message}`;
   }
+
   return error;
 }

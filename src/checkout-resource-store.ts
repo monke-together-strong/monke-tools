@@ -23,6 +23,7 @@ export const ResourceOwnerSchema = z.object({
   session: z.string().optional(),
   sourceRoot: z.string().refine(path.isAbsolute)
 });
+
 const CheckoutResourcesSchema = z.strictObject({
   legacyCleanupCommand: z.string().optional(),
   owner: ResourceOwnerSchema,
@@ -31,7 +32,9 @@ const CheckoutResourcesSchema = z.strictObject({
   resourceValues: z.array(ResourceValueStateSchema),
   version: z.literal(1)
 });
+
 export type ResourceOwner = z.infer<typeof ResourceOwnerSchema>;
+
 export type CheckoutResources = z.infer<typeof CheckoutResourcesSchema>;
 
 export function resourceOwner(
@@ -41,6 +44,7 @@ export function resourceOwner(
 ): ResourceOwner {
   const source = path.normalize(sourceRoot);
   const checkout = path.normalize(checkoutPath);
+
   return {
     checkoutPath: checkout,
     id: hashKey(JSON.stringify([source, checkout])).slice(0, 32),
@@ -62,6 +66,7 @@ export class CheckoutResourceStore {
         if (!repo.resourceValues && !repo.resourceCommandOutputs) {
           return [];
         }
+
         return [
           {
             owner: resourceOwner(repo.sourceRoot, repo.worktreePath, state.session),
@@ -79,10 +84,13 @@ export class CheckoutResourceStore {
 
   read(owner: ResourceOwner): CheckoutResources | undefined {
     const file = this.file(owner);
+
     if (!existsSync(file)) {
       return;
     }
+
     const record = CheckoutResourcesSchema.parse(JSON.parse(readFileSync(file, "utf-8")));
+
     if (
       record.owner.id !== owner.id ||
       !samePath(record.owner.sourceRoot, owner.sourceRoot) ||
@@ -90,6 +98,7 @@ export class CheckoutResourceStore {
     ) {
       throw new MonkeError(`Resource ownership mismatch at ${file}`);
     }
+
     return record;
   }
 
@@ -110,6 +119,7 @@ export class CheckoutResourceStore {
     const file = this.file(parsed.owner);
     mkdirSync(path.dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.tmp`;
+
     try {
       writeFileSync(temporary, JSON.stringify(parsed), { mode: 0o600 });
       renameSync(temporary, file);
@@ -130,6 +140,7 @@ export class CheckoutResourceStore {
     const previous = Object.fromEntries(
       options.command.outputs.map((name) => [name, new Set<string>()])
     );
+
     for (const record of this.list()) {
       if (
         !samePath(record.owner.sourceRoot, options.sourceRoot) ||
@@ -137,13 +148,16 @@ export class CheckoutResourceStore {
       ) {
         continue;
       }
+
       const command = record.resourceCommandOutputs.find(
         (item) => item.name === options.command.name
       );
+
       for (const output of command?.outputs ?? []) {
         previous[output.env]?.add(output.value);
       }
     }
+
     return Object.fromEntries(
       Object.entries(previous).map(([name, values]) => [name, [...values].toSorted()])
     );
@@ -161,29 +175,37 @@ export class CheckoutResourceStore {
       ) {
         continue;
       }
+
       const remembered = new Map(record.resourceValues.map((entry) => [entry.env, entry.value]));
       const collision = options.values.find((value) => remembered.get(value.env) === value.value);
+
       if (collision) {
         return { ...collision, session: record.owner.session ?? record.owner.checkoutPath };
       }
     }
+
     return null;
   }
 
   private list() {
     const directory = path.join(this.home, "resources");
+
     const records = (existsSync(directory) ? readdirSync(directory) : [])
       .filter((name) => name.endsWith(".json"))
       .map((name) => {
         const record = CheckoutResourcesSchema.parse(
           JSON.parse(readFileSync(path.join(directory, name), "utf-8"))
         );
+
         if (path.basename(this.file(record.owner)) !== name) {
           throw new MonkeError(`Resource record storage key mismatch: ${name}`);
         }
+
         return record;
       });
+
     const ids = new Set(records.map((record) => record.owner.id));
+
     return [...records, ...this.legacyRecords().filter((record) => !ids.has(record.owner.id))];
   }
 
