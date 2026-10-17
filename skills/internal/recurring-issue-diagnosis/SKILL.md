@@ -35,7 +35,8 @@ unapproved side effect, or a future event; verify that boundary before handing
 off a next check.
 
 Investigate and recommend for diagnosis requests. Implement a correction only
-when implementation is in scope.
+when implementation is in scope. Make the correction at the root cause per
+[Fix Root Causes](../../references/imported/principle-fix-root-causes/MAIN.md).
 
 ## Maintain the tracker
 

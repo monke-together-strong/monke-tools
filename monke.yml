@@ -4,6 +4,8 @@ skills:
   - commit: 6f131f137de64fdaf928278c0fd9ecec520ccbee
     source: https://github.com/backnotprop/pstack
     skills:
+      - slug: principle-fix-root-causes
+        kind: reference
       - slug: technical-writing
         modelInvocation: allow
       - slug: unslop

@@ -1,3 +1,6 @@
+## General
+- Fix defects where the system first goes wrong, per [Fix Root Causes](../imported/principle-fix-root-causes/MAIN.md). A guard, retry, swallowed error, clamp, or discarded state is a fix only when the state it handles is legitimate.
+
 ## Typescript
 - Prefer inferred return types. Annotate only when required for a contract or correct inference.
 - Fix type and lint issues at the abstraction that owns the behavior. Avoid duplicating data structures or logic to satisfy a check. Types must describe what the implementation guarantees, including changes made by transformations.

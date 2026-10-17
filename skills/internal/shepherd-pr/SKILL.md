@@ -28,7 +28,9 @@ Diagnose failed checks before requesting or waiting for reviews. Read the logs
 and use targeted checks to distinguish a PR regression, baseline defect,
 repo-owned flake, or external infrastructure failure.
 
-Fix repo-owned failures at their cause. Verify flake fixes with repeated targeted
+Fix repo-owned failures at their root cause per
+[Fix Root Causes](../../references/imported/principle-fix-root-causes/MAIN.md).
+Verify flake fixes with repeated targeted
 runs; a passing retry alone does not resolve a flake. Retries without code changes
 are diagnostic probes or recovery from an evidenced external failure. If a durable
 fix would materially expand scope, report the diagnosis and ask about that scope.
