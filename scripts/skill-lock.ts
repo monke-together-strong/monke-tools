@@ -586,7 +586,10 @@ export async function stageGitSkillSource(options: {
   };
 }
 
-function publisherGuidanceSelected(item: SkillImportRecipeSkill, selectors: string[]) {
+function publisherGuidanceSelected(
+  item: Pick<SkillImportRecipeSkill, "selector" | "slug">,
+  selectors: string[]
+) {
   return (
     selectors.includes("*") ||
     selectors.some(
@@ -1064,7 +1067,7 @@ export function stagedSkillGuidance(
   stagingDirectory: string,
   previous: SkillImportRecipe,
   declared: SkillImportRecipeSkill[] = [],
-  options: { preserveImportKinds?: boolean; reference?: boolean } = {}
+  options: { preserveImportKinds?: boolean; references?: string[] } = {}
 ) {
   return listStagedSkillSlugs(stagingDirectory).map((slug) => {
     const entry = path.join(stagingDirectory, ".agents", "skills", slug, "SKILL.md");
@@ -1075,10 +1078,15 @@ export function stagedSkillGuidance(
       ? (existing?.kind ?? imported?.kind)
       : (imported?.kind ?? existing?.kind);
 
+    const selector = stagedSkillSelector(entry, slug, imported);
+
+    const reference =
+      options.references && publisherGuidanceSelected({ selector, slug }, options.references);
+
     return {
       ...existing,
-      kind: options.reference ? ("reference" as const) : (kind ?? ("skill" as const)),
-      selector: stagedSkillSelector(entry, slug, imported),
+      kind: reference ? ("reference" as const) : (kind ?? ("skill" as const)),
+      selector,
       slug
     };
   });

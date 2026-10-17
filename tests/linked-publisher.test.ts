@@ -359,7 +359,7 @@ describe("linked publisher collections", () => {
             publisher,
             "--link",
             "--project",
-            ...(probe.selected.length ? ["--skill", ...probe.selected] : [])
+            ...(probe.selected.length ? ["--replace", "--skill", ...probe.selected] : [])
           ],
           runtime
         );

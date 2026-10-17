@@ -316,6 +316,25 @@ done
     expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
   });
 
+  it("extends a source's selection on add --ref without converting existing skills", async () => {
+    const { repo, runtime, upstream } = fixture();
+
+    write(
+      upstream,
+      "skills/guide/SKILL.md",
+      "---\nname: guide\ndescription: Guide.\n---\nGuide.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Add guide"]);
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "example"], runtime);
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "guide"], runtime);
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toMatchObject({
+      skills: [{ skills: ["example", { kind: "reference", slug: "guide" }] }]
+    });
+    expect(existsSync(path.join(repo, "skills/imported/example/SKILL.md"))).toBeTruthy();
+    expect(existsSync(path.join(repo, "skills/references/imported/guide/MAIN.md"))).toBeTruthy();
+  });
+
   it.each(["block", "flow", "flow root"])(
     "replaces a %s skills value on policy without changing surrounding comments and formatting",
     async (style) => {
