@@ -20,6 +20,8 @@ Keep one deduplicated advisory list across attempts.
 1. Verify findings against the task and actual code or observable behavior.
    Explain dismissed findings and record deferred work with its owner.
 2. Fix all validated findings within scope, blocking and advisory, in one batch.
+   Fix defects at their root cause per
+   [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md).
    Run the affected checks and commit the fixes, preserving unrelated checkout
    edits.
 3. If the batch fixed any blockers, rerun the required reviews on the updated

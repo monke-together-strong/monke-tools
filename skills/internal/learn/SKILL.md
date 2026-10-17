@@ -42,7 +42,8 @@ only when they define that class.
 Implement when the user asks for a change; otherwise recommend it. Preserve the
 target artifact's scope, voice, and structure unless changing them is requested
 or the evidence identifies them as the cause. For skill edits, use
-`$writing-for-agents` and check the result against it.
+`$writing-for-agents` and check the result against it. When the fix adds a
+check or enforcement, prove that it fails on the original mistake.
 
 Report the cause, the change made or recommended, and remaining uncertainty or
 validation gaps. The lesson should tell another agent when and how to apply it.

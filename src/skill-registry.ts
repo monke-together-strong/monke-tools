@@ -80,6 +80,7 @@ type SkillsRequest =
       link?: boolean;
       name?: string;
       reference?: boolean;
+      replace?: boolean;
       skills?: string[];
       source?: string;
     }
@@ -98,6 +99,10 @@ export function runSkillsRegistry(
 ) {
   if (request.action === "add" && request.reference && !repo) {
     throw new MonkeError("--ref requires --repo");
+  }
+
+  if (request.action === "add" && request.replace && !request.skills) {
+    throw new MonkeError("--replace requires --skill");
   }
 
   if (repo && project) {
@@ -725,7 +730,10 @@ function localSourceRecipe(
       registryRoot
     ),
     name,
-    selection: request.skills ?? previous?.selection,
+    selection:
+      previous && !request.replace
+        ? previous.selection && extendSelection(previous.selection, request.skills)
+        : request.skills,
     skills: previous?.skills ?? [],
     source: previous?.source ?? name
   };
@@ -780,11 +788,15 @@ async function addGitSkillSource(
     store.recipes.find((recipe) => recipe.source === source) ??
     store.recipes.find((recipe) => recipe.source === revision.source);
 
-  const recipe = gitSourceRecipe(revision.source, request, previous, repo);
+  const selectors =
+    previous && !request.replace
+      ? extendSelection(
+          previous.selection ?? previous.skills.map((item) => item.selector),
+          request.skills
+        )
+      : (request.skills ?? ["*"]);
 
-  const selectors = request.skills ??
-    previous?.selection ??
-    previous?.skills.map((item) => item.selector) ?? ["*"];
+  const recipe = gitSourceRecipe(revision.source, request, previous, repo, selectors);
 
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-git-"));
 
@@ -808,7 +820,7 @@ async function addGitSkillSource(
 
     const skills = stagedSkillGuidance(staging, recipe, installOutput.declaredGuidance, {
       preserveImportKinds: repo,
-      reference: request.reference
+      references: request.reference ? (request.skills ?? selectors) : undefined
     });
 
     assertGitSkillSelection({
@@ -881,22 +893,30 @@ function gitSourceRecipe(
   source: string,
   request: Extract<SkillsRequest, { action: "add" }>,
   previous: SkillImportRecipe | undefined,
-  repo: boolean
+  repo: boolean,
+  selection: string[]
 ): SkillImportRecipe {
   return {
     ...previous,
     name: request.name ?? previous?.name,
     skills: previous?.skills ?? [],
     source,
-    ...(!repo
-      ? {
-          selection: request.skills ??
-            previous?.selection ??
-            previous?.skills.map((item) => item.selector) ?? ["*"]
-        }
-      : {}),
+    ...(repo ? {} : { selection }),
     ...(request.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {})
   };
+}
+
+/** `*` in either list selects everything. */
+function extendSelection(current: string[], requested?: string[]) {
+  if (!requested) {
+    return current;
+  }
+
+  if (current.includes("*") || requested.includes("*")) {
+    return ["*"];
+  }
+
+  return [...current, ...requested.filter((selector) => !current.includes(selector))];
 }
 
 function assertGitSkillSelection(options: {
