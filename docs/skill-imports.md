@@ -119,5 +119,8 @@ skill repositories.
 
 Global registries start with monke-tools' imports and retain their own selections
 and policies. Installation adds newly bundled sources without replaying personal
-installers. Removing a source records that choice so later installations leave it
-removed. Existing machine registries migrate to compact recipes on first read.
+installers. For a retained source at the bundled pin, installation also applies
+monke-tools' Import kind changes. Installation adds newly declared skills and
+references unless the registry narrowed that source's selection. Removing a
+source records that choice so later installations leave it removed. Existing
+machine registries migrate to compact recipes on first read.

@@ -1240,6 +1240,98 @@ skillInstallPreference:
     }
   );
 
+  it.each(["unnarrowed", "narrowed"] as const)(
+    "follows publisher changes to a retained bundled source whose selection is %s during Local install refresh",
+    async (selection) => {
+      const sandbox = makeTempDir("local-install-bundled-changes");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const sourceCheckout = path.join(sandbox, "source");
+      const source = "https://example.com/bundled";
+      const skill = (slug: string) => ({ kind: "skill" as const, selector: slug, slug });
+      prepareSource(sourceCheckout);
+
+      const publish = (
+        skills: { kind: "reference" | "skill"; selector: string; slug: string }[]
+      ) => {
+        writeRepoImportRecipeStore(sourceCheckout, {
+          recipes: [{ commit: "0".repeat(40), skills, source }],
+          version: 4
+        });
+
+        for (const recipe of readImportRecipeStore(sourceCheckout).recipes) {
+          rememberRestoredRecipe(sourceCheckout, recipe);
+        }
+      };
+
+      write(
+        sourceCheckout,
+        "skills/imported/diagnose/SKILL.md",
+        "---\nname: diagnose\n---\nUpstream.\n"
+      );
+      write(sourceCheckout, "skills/imported/tidy/SKILL.md", "---\nname: tidy\n---\nTidy.\n");
+      publish([skill("diagnose"), skill("tidy")]);
+      await activateLocal({
+        home,
+        installId: "local-first",
+        monkeHome,
+        sourceCheckout,
+        targetKinds: ["claude"]
+      });
+      // Any global Skill command creates the registry, as a personal import does.
+      await runCliAsync(
+        ["skills", "list"],
+        createTestRuntime({
+          cwd: sandbox,
+          env: { HOME: home, MONKE_HOME: monkeHome },
+          onStderr() {},
+          onStdout() {}
+        })
+      );
+      const registry = path.join(monkeHome, "skill-registry");
+
+      if (selection === "narrowed") {
+        const store = readImportRecipeStore(registry);
+        writeImportRecipeStore(registry, {
+          ...store,
+          recipes: store.recipes.map((recipe) => ({ ...recipe, selection: ["diagnose", "tidy"] }))
+        });
+      }
+
+      rmSync(path.join(sourceCheckout, "skills/imported/diagnose"), { recursive: true });
+      write(sourceCheckout, "skills/references/imported/diagnose/MAIN.md", "Upstream.\n");
+      write(sourceCheckout, "skills/imported/teach/SKILL.md", "---\nname: teach\n---\nTeach.\n");
+      write(
+        sourceCheckout,
+        "skills/internal/diagnose/SKILL.md",
+        "---\nname: diagnose\n---\nWrap.\n"
+      );
+      publish([{ ...skill("diagnose"), kind: "reference" }, skill("teach"), skill("tidy")]);
+      await activateLocal({
+        home,
+        installId: "local-second",
+        monkeHome,
+        sourceCheckout,
+        targetKinds: ["claude"]
+      });
+
+      const [recipe] = readImportRecipeStore(registry).recipes;
+      expect(recipe?.skills).toStrictEqual(
+        selection === "narrowed"
+          ? [{ ...skill("diagnose"), kind: "reference" }, skill("tidy")]
+          : readImportRecipeStore(sourceCheckout).recipes[0]?.skills
+      );
+      expect(existsSync(path.join(registry, "skills/imported/diagnose"))).toBeFalsy();
+      expect(readFileSync(path.join(home, ".claude/skills/diagnose/SKILL.md"), "utf-8")).toContain(
+        "Wrap."
+      );
+      expect(
+        readFileSync(path.join(home, ".claude/references/imported/diagnose/MAIN.md"), "utf-8")
+      ).toBe("Upstream.\n");
+      expect(existsSync(path.join(home, ".claude/skills/teach"))).toBe(selection === "unnarrowed");
+    }
+  );
+
   it("completes guidance during Local install activation and reports both shell and Codiff failures", async () => {
     const sandbox = makeTempDir("local-install-codiff-failure");
     const home = path.join(sandbox, "home");
