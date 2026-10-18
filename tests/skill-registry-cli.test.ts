@@ -1517,7 +1517,12 @@ done
       );
       await runCliAsync(["skills", "list"], fixture.runtime);
       await runCliAsync(
-        ["skills", "add", source, ...(selection === "explicit" ? ["--skill", "other"] : [])],
+        [
+          "skills",
+          "add",
+          source,
+          ...(selection === "explicit" ? ["--replace", "--skill", "other"] : [])
+        ],
         fixture.runtime
       );
       const selected = selection !== "explicit";
@@ -1650,13 +1655,13 @@ done
   });
 
   it.each([
-    { replacement: false, scope: "machine" },
-    { replacement: true, scope: "machine" },
-    { replacement: false, scope: "repo" },
-    { replacement: true, scope: "repo" }
+    { added: false, scope: "machine" },
+    { added: true, scope: "machine" },
+    { added: false, scope: "repo" },
+    { added: true, scope: "repo" }
   ])(
-    "preserves identity when re-adding a handwritten tree source in $scope scope with replacement=$replacement",
-    async ({ replacement, scope }) => {
+    "preserves identity and selection when re-adding a handwritten tree source in $scope scope with added=$added",
+    async ({ added, scope }) => {
       const fixture = registryFixture();
 
       const upstream = createRepo(path.join(fixture.sandbox, "handwritten-tree-source"), {
@@ -1701,7 +1706,6 @@ done
       const source = "https://github.com/owner/repeated/tree/feature/topic/course";
       const canonical = "https://github.com/owner/repeated/course#feature/topic";
       const root = scope === "repo" ? repo : fixture.registry;
-      const selected = replacement ? "color" : "typography";
       vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
 
       try {
@@ -1725,7 +1729,7 @@ done
             : JSON.stringify({ recipes: [recipe], version: 4 })
         );
         await runCliAsync(
-          ["skills", "add", source, ...flags, ...(replacement ? ["--skill", selected] : [])],
+          ["skills", "add", source, ...flags, ...(added ? ["--skill", "color"] : [])],
           runtime
         );
 
@@ -1736,8 +1740,10 @@ done
 
         const expected = {
           ...recipe,
-          ...(scope === "machine" ? { selection: [selected] } : {}),
-          skills: replacement ? ["color"] : recipe.skills,
+          ...(scope === "machine"
+            ? { selection: added ? ["typography", "color"] : ["typography"] }
+            : {}),
+          skills: added ? ["color", ...recipe.skills] : recipe.skills,
           source: canonical
         };
 
@@ -1748,11 +1754,8 @@ done
         const installed =
           scope === "repo" ? path.join(repo, "skills/imported") : fixture.installed.codex;
 
-        expect(read(installed, `${selected}/SKILL.md`)).toContain(
-          `disable-model-invocation: ${replacement ? "true" : "false"}`
-        );
-        expect(existsSync(path.join(installed, "typography"))).toBe(!replacement);
-        expect(existsSync(path.join(installed, "color"))).toBe(replacement);
+        expect(read(installed, "typography/SKILL.md")).toContain("disable-model-invocation: false");
+        expect(existsSync(path.join(installed, "color"))).toBe(added);
       } finally {
         vi.unstubAllEnvs();
       }
@@ -1847,7 +1850,10 @@ done
           writeSkill(linked, "notes", "Unreviewed notes.\n");
         }
 
-        await runCliAsync(["skills", "add", source, ...flags, "--skill", "color"], runtime);
+        await runCliAsync(
+          ["skills", "add", source, ...flags, "--replace", "--skill", "color"],
+          runtime
+        );
         expect(existsSync(path.join(installed, "typography"))).toBeFalsy();
         expect(read(installed, "color/SKILL.md")).toContain("Color instructions.");
 
@@ -3860,7 +3866,10 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
       ["skills", "add", fixture.checkout, "--skill", "typography"],
       fixture.runtime
     );
-    await runCliAsync(["skills", "add", fixture.checkout, "--skill", "color"], fixture.runtime);
+    await runCliAsync(
+      ["skills", "add", fixture.checkout, "--replace", "--skill", "color"],
+      fixture.runtime
+    );
 
     for (const root of Object.values(fixture.installed)) {
       expect(existsSync(path.join(root, "typography"))).toBeFalsy();

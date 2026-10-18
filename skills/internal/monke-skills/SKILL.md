@@ -28,8 +28,9 @@ Keep supporting files inside the skill folder. Linked and command imports expose
 authored skills through agent links. Publisher-declared imports remain
 consumer-owned copies. Add `--link` to register existing
 installer output without running it now; reference credentials through environment
-variables. `--skill` restricts a collection; command/linked sources without a
-selection discover new skills on update.
+variables. `--skill` restricts a collection. Re-adding a source extends its
+selection with `--skill`. Add `--replace` to make `--skill` replace the selection.
+Command and linked sources without a selection discover new skills on update.
 
 Adoption compares same-slug copies across known harness roots. Identical copies
 reuse one owner and its policies, including links in unconfigured harnesses.

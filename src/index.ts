@@ -319,8 +319,9 @@ function createProgram(runtime: Runtime) {
     .option("--cwd <path>", "Installer working directory (defaults to a managed source directory)")
     .option("--link", "Register existing files without running the installer now")
     .option("--name <name>", "Source name (required for command-only imports)")
-    .option("--skill <slugs...>", "Only import the selected skills")
-    .option("--ref", "Import selections as references in repo scope")
+    .option("--skill <slugs...>", "Select skills to import (re-adding extends the selection)")
+    .option("--replace", "Replace the source's selection with --skill")
+    .option("--ref", "Import --skill selections as references in repo scope")
     .option("--accept-openclaw-risks", "Accept upstream OpenClaw security risks")
     .action((source, options) =>
       runSkillsRegistry(
@@ -333,6 +334,7 @@ function createProgram(runtime: Runtime) {
           link: options.link,
           name: options.name,
           reference: options.ref,
+          replace: options.replace,
           skills: options.skill,
           source
         },

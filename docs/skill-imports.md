@@ -6,6 +6,8 @@ and overrides in the root `monke.yml`, then restores generated guidance into
 `skills/imported/` and `skills/references/imported/`. It adds missing ignore rules.
 Add `--ref` to restore references, whose `SKILL.md` becomes `MAIN.md` without its
 leading YAML frontmatter. Supporting files retain their bytes.
+Re-adding a source keeps its existing selections and overrides. Add `--replace`
+to make `--skill` replace the selection.
 Repo recipes select a source's committed guidance without following that
 source's import declarations.
 
