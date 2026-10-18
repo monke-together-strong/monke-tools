@@ -501,14 +501,83 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
       ? bundledRecipes.recipes.filter((recipe) => !sources.has(recipe.source))
       : [];
 
-  const next = normalizeImportRecipeStore({ ...store, recipes: [...store.recipes, ...additions] });
+  const updates = includeNewSources
+    ? store.recipes.flatMap((recipe) => {
+        const bundled = bundledRecipes.recipes.find((item) => item.source === recipe.source);
+        const update = bundled && followBundledRecipe(recipe, bundled);
 
-  return { additions, next };
+        return update ? [update] : [];
+      })
+    : [];
+
+  const imports: BundledImport[] = [
+    ...updates,
+    ...additions.map((recipe) => ({ copied: recipe.skills, obsolete: [], recipe }))
+  ];
+
+  const next = normalizeImportRecipeStore({
+    ...store,
+    recipes: [
+      ...store.recipes.map(
+        (recipe) =>
+          updates.find((update) => update.recipe.source === recipe.source)?.recipe ?? recipe
+      ),
+      ...additions
+    ]
+  });
+
+  return { imports, next };
 }
 
-function copyBundledImports(root: string, guidance: string, additions: SkillImportRecipe[]) {
-  for (const recipe of additions) {
-    for (const item of recipe.skills) {
+/** Bundled guidance a registry copies for one recipe, replacing its obsolete items. */
+interface BundledImport {
+  copied: SkillImportRecipe["skills"];
+  obsolete: SkillImportRecipe["skills"];
+  recipe: SkillImportRecipe;
+}
+
+/**
+ * Follow the publisher's Import kinds and, for an unnarrowed selection, its added guidance. Bundled
+ * bytes match a retained recipe only at the same pin. Items that keep their kind keep their
+ * overrides.
+ */
+function followBundledRecipe(
+  recipe: SkillImportRecipe,
+  bundled: SkillImportRecipe
+): BundledImport | undefined {
+  if (recipe.localSource || !recipe.commit || recipe.commit !== bundled.commit) {
+    return undefined;
+  }
+
+  const copied = bundled.skills.filter((declared) => {
+    const retained = recipe.skills.find((item) => item.slug === declared.slug);
+
+    return retained
+      ? retained.kind !== declared.kind
+      : !recipe.selection || recipe.selection.includes("*");
+  });
+
+  if (copied.length === 0) {
+    return undefined;
+  }
+
+  const replaced = (item: SkillImportRecipe["skills"][number]) =>
+    copied.some((declared) => declared.slug === item.slug);
+
+  return {
+    copied,
+    obsolete: recipe.skills.filter(replaced),
+    recipe: { ...recipe, skills: [...recipe.skills.filter((item) => !replaced(item)), ...copied] }
+  };
+}
+
+function copyBundledImports(root: string, guidance: string, imports: BundledImport[]) {
+  for (const { copied, obsolete, recipe } of imports) {
+    for (const item of obsolete) {
+      rmSync(importedGuidancePath(root, item), { force: true, recursive: true });
+    }
+
+    for (const item of copied) {
       const source = importedGuidancePath(guidance, item);
       const target = importedGuidancePath(root, item);
       mkdirSync(path.dirname(target), { recursive: true });
@@ -521,14 +590,14 @@ function copyBundledImports(root: string, guidance: string, additions: SkillImpo
 
 function initializeSkillRegistry(runtime: Runtime, guidance: string, includeNewSources = false) {
   const root = path.join(getMonkeHome(runtime), "skill-registry");
-  const { additions, next } = planRegistryImports(root, guidance, includeNewSources);
+  const { imports, next } = planRegistryImports(root, guidance, includeNewSources);
 
-  if (additions.length > 0) {
+  if (imports.length > 0) {
     assertSkillRestoreMarker(root);
   }
 
   mkdirSync(root, { recursive: true });
-  copyBundledImports(root, guidance, additions);
+  copyBundledImports(root, guidance, imports);
 
   for (const folder of [
     "skills/internal",
@@ -556,14 +625,16 @@ function initializeSkillRegistry(runtime: Runtime, guidance: string, includeNewS
 
   mkdirSync(path.join(root, "skills", "imported"), { recursive: true });
 
-  if (additions.length > 0 || !existsSync(path.join(root, SKILL_LOCK_PATH))) {
+  if (imports.length > 0 || !existsSync(path.join(root, SKILL_LOCK_PATH))) {
     writeImportRecipeStore(root, next);
   }
 
-  if (additions.length > 0 || !existsSync(path.join(root, ".monke-skill-baseline"))) {
+  if (imports.length > 0 || !existsSync(path.join(root, ".monke-skill-baseline"))) {
     rememberSkillGuidance(
       root,
-      additions.length > 0 ? additions.flatMap((recipe) => recipe.skills) : undefined
+      imports.length > 0
+        ? imports.flatMap(({ copied, obsolete }) => [...obsolete, ...copied])
+        : undefined
     );
   }
 
@@ -668,7 +739,7 @@ export function preflightSkillRegistryInstall(
   const proposal = mkdtempSync(path.join(tmpdir(), "monke-install-guidance-"));
 
   try {
-    const { additions } = planRegistryImports(registry, guidance, true);
+    const { imports } = planRegistryImports(registry, guidance, true);
 
     for (const folder of [
       "skills/internal",
@@ -693,7 +764,7 @@ export function preflightSkillRegistryInstall(
       }
     }
 
-    copyBundledImports(proposal, guidance, additions);
+    copyBundledImports(proposal, guidance, imports);
     preflightInstallGuidance(runtime, proposal, explicitTargets, adoptedLinks);
   } finally {
     rmSync(proposal, { force: true, recursive: true });
