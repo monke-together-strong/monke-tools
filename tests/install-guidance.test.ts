@@ -105,7 +105,7 @@ describe("Installation guidance in errors", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe(
-      `No Active tool install was found; install monke-tools before updating\nInstallation guidance: ${path.join(projectRoot, skillPath)}\n`
+      `error: No Active tool install was found; install monke-tools before updating\nInstallation guidance: ${path.join(projectRoot, skillPath)}\n`
     );
   });
 });

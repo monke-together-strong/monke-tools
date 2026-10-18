@@ -3,6 +3,8 @@ import type { OutputConfiguration } from "@commander-js/extra-typings";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
+import { createLogger } from "./logger.ts";
+import { createRuntime } from "./runtime.ts";
 
 interface ConfigurableCliParser {
   configureOutput: (configuration: OutputConfiguration) => void;
@@ -33,7 +35,7 @@ export function reportCliFailure(error: Error | string) {
     return;
   }
 
-  process.stderr.write(`${formatCliFailure(error)}\n`);
+  createLogger(createRuntime()).error(formatCliFailure(error));
   process.exitCode = 1;
 }
 
@@ -42,8 +44,12 @@ function formatCliFailure(error: Error | string) {
     return `error: invalid input\n${z.prettifyError(error)}`;
   }
 
-  // Expected failures carry a message written for the user.
-  if (error instanceof MonkeError || error instanceof CommanderError) {
+  // Expected failures carry a message written for the user; Commander already prefixes its own.
+  if (error instanceof MonkeError) {
+    return `error: ${error.message}`;
+  }
+
+  if (error instanceof CommanderError) {
     return error.message;
   }
 
