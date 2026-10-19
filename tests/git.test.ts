@@ -173,8 +173,8 @@ prunable gitdir file points to non-existent location
       } else {
         await ensureSessionWorktreeAsync(runtime, home, sourceRoot, session);
       }
-    } catch (error) {
-      failure = error;
+    } catch (cause) {
+      failure = cause;
     }
 
     for (const entry of retained) {

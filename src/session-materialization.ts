@@ -90,10 +90,10 @@ export async function runSessionMaterialization<TPrepared, TResult>(
           );
 
           return true;
-        } catch (error) {
+        } catch (cause) {
           owner.replaceRepo(
             transitionRepo(owner.repo(node.sourceRoot), {
-              message: errorMessage(ThrownValueSchema.parse(error)),
+              message: errorMessage(ThrownValueSchema.parse(cause)),
               phase: "preparation-failed",
               reused: reusableRoots.has(node.sourceRoot)
             }),
@@ -231,10 +231,10 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
       );
 
       return "materialized";
-    } catch (error) {
+    } catch (cause) {
       options.owner.replaceRepo(
         transitionRepo(options.owner.repo(options.node.sourceRoot), {
-          message: errorMessage(ThrownValueSchema.parse(error)),
+          message: errorMessage(ThrownValueSchema.parse(cause)),
           phase: "materialization-failed"
         }),
         "repo-result"

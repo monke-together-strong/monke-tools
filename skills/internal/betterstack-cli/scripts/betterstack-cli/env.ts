@@ -16,12 +16,12 @@ export async function loadEnvFileIfPresent(filePath: string) {
 
   try {
     content = await Bun.file(filePath).text();
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+  } catch (cause) {
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
       return;
     }
 
-    throw error;
+    throw cause;
   }
 
   for (const rawLine of content.split(/\r?\n/u)) {

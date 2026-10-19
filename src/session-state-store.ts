@@ -231,9 +231,9 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
   for (const filePath of listSessionStateFiles(home)) {
     try {
       states.push(parseSessionStateFile(home, filePath));
-    } catch (error) {
+    } catch (cause) {
       if (invalidSessionStateReferencesWorktree(filePath, worktreePaths)) {
-        throw error;
+        throw cause;
       }
     }
   }
@@ -261,7 +261,7 @@ function parseSessionStateFile(home: string, filePath: string) {
 function parseSupportedSessionState(filePath: string) {
   try {
     return parseOwnedYamlFile(filePath, SessionStateSchema);
-  } catch (error) {
+  } catch (cause) {
     const { version } = parseOwnedYamlFile(filePath, SessionStateVersionSchema);
 
     if (version !== 2) {
@@ -270,7 +270,7 @@ function parseSupportedSessionState(filePath: string) {
       );
     }
 
-    throw error;
+    throw cause;
   }
 }
 

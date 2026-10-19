@@ -171,13 +171,13 @@ export async function cleanupOrdinaryWorktrees(
       }
 
       result.push({ ...worktree, eligible: true, outcome: "cleaned", reason: decision.code });
-    } catch (error) {
+    } catch (cause) {
       result.push({
         ...worktree,
         eligible: false,
         inspectionFailed: !attempted,
         outcome: attempted ? "failed" : "skipped",
-        reason: errorMessage(ThrownValueSchema.parse(error))
+        reason: errorMessage(ThrownValueSchema.parse(cause))
       });
     }
   }

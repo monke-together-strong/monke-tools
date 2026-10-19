@@ -27,7 +27,7 @@ export async function runReviewSkills(argv = process.argv.slice(2)) {
 if (import.meta.main) {
   try {
     await runReviewSkills();
-  } catch (error) {
-    reportCliFailure(ThrownValueSchema.parse(error));
+  } catch (cause) {
+    reportCliFailure(ThrownValueSchema.parse(cause));
   }
 }

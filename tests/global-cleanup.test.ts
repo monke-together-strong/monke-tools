@@ -246,8 +246,8 @@ describe("global Session cleanup", () => {
           ...runtime,
           cwd: invocationCwd
         });
-      } catch (error) {
-        failure = error;
+      } catch (cause) {
+        failure = cause;
       }
 
       return { error: failure, report: ReportSchema.parse(JSON.parse(stdout)) };

@@ -271,9 +271,9 @@ export async function runResourcesExec(runtime: Runtime, command: string, args: 
       }
 
       return { env, unlock };
-    } catch (error) {
+    } catch (cause) {
       unlock();
-      throw error;
+      throw cause;
     }
   });
 

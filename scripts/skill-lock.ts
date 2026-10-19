@@ -73,9 +73,9 @@ export function assertSkillRestoreMarker(repoRoot: string) {
 
   try {
     accessSync(parent, fsConstants.W_OK + fsConstants.X_OK);
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(`Skill restore marker parent is not writable and searchable: ${parent}`, {
-      cause: error
+      cause
     });
   }
 
@@ -223,7 +223,7 @@ export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cw
         );
       }
     }
-  } catch (error) {
+  } catch (cause) {
     if (text !== original) {
       if (original === undefined) {
         rmSync(file);
@@ -232,7 +232,7 @@ export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cw
       }
     }
 
-    throw error;
+    throw cause;
   }
 }
 

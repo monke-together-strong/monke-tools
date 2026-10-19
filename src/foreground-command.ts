@@ -46,16 +46,16 @@ export function prepareForegroundCommand(command: string, args: string[]) {
 
   try {
     terminal = openSync("/dev/tty", "r+");
-  } catch (error) {
+  } catch (cause) {
     if (
       !(
-        error instanceof Error &&
-        "code" in error &&
-        ["ENXIO", "ENOENT", "ENODEV"].includes(String(error.code))
+        cause instanceof Error &&
+        "code" in cause &&
+        ["ENXIO", "ENOENT", "ENODEV"].includes(String(cause.code))
       )
     ) {
       libc.close();
-      throw error;
+      throw cause;
     }
   }
 

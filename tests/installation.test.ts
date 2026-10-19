@@ -1116,8 +1116,8 @@ skillInstallPreference:
           sourceCheckout: candidate,
           targetKinds: ["claude"]
         });
-      } catch (error) {
-        outcome = errorMessage(ThrownValueSchema.parse(error));
+      } catch (cause) {
+        outcome = errorMessage(ThrownValueSchema.parse(cause));
       }
 
       const succeeds = scenario === "removed bundled import";
@@ -1195,8 +1195,8 @@ skillInstallPreference:
           sourceCheckout,
           targetKinds: ["claude", "codex", "cursor"]
         });
-      } catch (error) {
-        outcome = errorMessage(ThrownValueSchema.parse(error));
+      } catch (cause) {
+        outcome = errorMessage(ThrownValueSchema.parse(cause));
       }
 
       const succeeds = scenario === "retained imports";

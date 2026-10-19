@@ -207,6 +207,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           allowNullableString: true
         }
       ],
+      // Match anti-slop's unknown error-parameter convention so rejection callbacks satisfy both rules.
+      "unicorn/catch-error-name": ["error", { name: "cause" }],
       // Reduce is often the clearest expression for immutable aggregation and collection folding.
       "unicorn/no-array-reduce": "off",
       "unicorn/no-negated-condition": "off",

@@ -146,14 +146,14 @@ export async function runActivateReleaseInstall(
       }
 
       preflightSkillRegistryInstall(runtime, stagedInstall, options.explicitTargets);
-    } catch (error) {
+    } catch (cause) {
       rmSync(stagedInstall, { force: true, recursive: true });
 
       if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
         rmdirSync(stagingRoot);
       }
 
-      throw error;
+      throw cause;
     }
 
     const installId = installIdForManifest(manifest);
@@ -172,7 +172,7 @@ export async function runActivateReleaseInstall(
         runtime,
         stagedInstall
       });
-    } catch (error) {
+    } catch (cause) {
       const candidateStat = lstatSync(candidateRoot, { throwIfNoEntry: false });
 
       const activeCandidateRoot =
@@ -189,7 +189,7 @@ export async function runActivateReleaseInstall(
         collision?.restore();
       }
 
-      throw error;
+      throw cause;
     }
 
     collision?.discard();
@@ -256,9 +256,9 @@ function prepareValidatedInactiveInstallCollision(
   try {
     writeCollisionRecovery(installRoot, activeInstallRoot);
     renameSync(installRoot, backupRoot);
-  } catch (error) {
+  } catch (cause) {
     rmSync(path.join(installRoot, COLLISION_RECOVERY_FILENAME), { force: true });
-    throw error;
+    throw cause;
   }
 
   return {
@@ -385,25 +385,25 @@ async function finishInstallActivation(
     runShellInstall(runtime, {
       binary: path.join(getHomeDirectory(runtime), ".local", "bin", "mt")
     });
-  } catch (error) {
+  } catch (cause) {
     failures.push(
-      `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(ThrownValueSchema.parse(error))}`
+      `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(ThrownValueSchema.parse(cause))}`
     );
   }
 
   try {
     await options.reconcileGuidance();
-  } catch (error) {
+  } catch (cause) {
     failures.push(
-      `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(ThrownValueSchema.parse(error))}`
+      `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(ThrownValueSchema.parse(cause))}`
     );
   }
 
   try {
     reconcileCodiff(runtime, options.minimumCodiffVersion);
-  } catch (error) {
+  } catch (cause) {
     failures.push(
-      `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(ThrownValueSchema.parse(error))}`
+      `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(ThrownValueSchema.parse(cause))}`
     );
   }
 
@@ -446,9 +446,9 @@ function activateStagedInstall(options: {
   try {
     options.runtime.installationActivationBoundary?.("final-rename");
     renameSync(options.stagedInstall, installRoot);
-  } catch (error) {
+  } catch (cause) {
     rmSync(options.stagedInstall, { force: true, recursive: true });
-    throw error;
+    throw cause;
   }
 
   const currentPointer = path.join(options.monkeHome, "current");
@@ -460,10 +460,10 @@ function activateStagedInstall(options: {
     symlinkSync(path.relative(options.monkeHome, installRoot), temporaryPointer, "dir");
     options.runtime.installationActivationBoundary?.("pointer-replacement");
     renameSync(temporaryPointer, currentPointer);
-  } catch (error) {
+  } catch (cause) {
     rmSync(temporaryPointer, { force: true });
     rmSync(installRoot, { force: true, recursive: true });
-    throw error;
+    throw cause;
   }
 
   return installRoot;

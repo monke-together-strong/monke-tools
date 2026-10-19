@@ -82,8 +82,8 @@ describe("LFV Diff", () => {
 
       try {
         await delivery;
-      } catch (error) {
-        deliveryError = error instanceof Error ? error.message : String(error);
+      } catch (cause) {
+        deliveryError = cause instanceof Error ? cause.message : String(cause);
       }
 
       expect(deliveryError).toBe(expectedError);

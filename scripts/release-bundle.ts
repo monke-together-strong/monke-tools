@@ -116,6 +116,6 @@ program
 
 try {
   await program.parseAsync(Bun.argv.slice(2), { from: "user" });
-} catch (error) {
-  reportCliFailure(ThrownValueSchema.parse(error));
+} catch (cause) {
+  reportCliFailure(ThrownValueSchema.parse(cause));
 }

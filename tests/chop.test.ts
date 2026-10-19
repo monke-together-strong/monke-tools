@@ -538,8 +538,8 @@ apps: {}
         cwd: fixture.root,
         monkeHome: fixture.home
       });
-    } catch (error) {
-      thrown = error;
+    } catch (cause) {
+      thrown = cause;
     }
 
     expect(thrown).toBeInstanceOf(Error);

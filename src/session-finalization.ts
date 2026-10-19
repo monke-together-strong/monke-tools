@@ -114,9 +114,9 @@ export function cleanupSessionResources(
       }
 
       observer.completed?.(action);
-    } catch (error) {
+    } catch (cause) {
       throw new MonkeError(
-        `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(ThrownValueSchema.parse(error))}`
+        `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(ThrownValueSchema.parse(cause))}`
       );
     }
   }
@@ -161,9 +161,9 @@ function releaseRepoResources(
 
     try {
       releaseCheckoutResources(runtime, store, record, cleanupCwd);
-    } catch (error) {
+    } catch (cause) {
       throw new MonkeError(
-        `Cleanup command failed for session ${state.session} repo ${repo.sourceRoot} during resource release\n${errorMessage(ThrownValueSchema.parse(error))}`
+        `Cleanup command failed for session ${state.session} repo ${repo.sourceRoot} during resource release\n${errorMessage(ThrownValueSchema.parse(cause))}`
       );
     }
   }

@@ -100,10 +100,10 @@ export async function summarizeSkillChanges(options: {
     }
 
     writeMessage(`${summary}\n`);
-  } catch (error) {
+  } catch (cause) {
     rmSync(output, { force: true });
     writeMessage(
-      `Skill update summary unavailable: ${errorMessage(ThrownValueSchema.parse(error))}\n`
+      `Skill update summary unavailable: ${errorMessage(ThrownValueSchema.parse(cause))}\n`
     );
   }
 }

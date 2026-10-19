@@ -547,8 +547,8 @@ async function runBootstrapCommand(
         ...unsetEnvNames.map((env) => [env, undefined] as const)
       ])
     });
-  } catch (error) {
-    const detail = errorMessage(ThrownValueSchema.parse(error));
+  } catch (cause) {
+    const detail = errorMessage(ThrownValueSchema.parse(cause));
     throw new MonkeError(
       `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run ${retryCommand} to resume from this repo.`
     );

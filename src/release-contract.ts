@@ -481,9 +481,9 @@ function runVerificationCommand(command: string, args: string[]) {
       stderr: result.stderr.toString(),
       stdout: result.stdout.toString()
     };
-  } catch (error) {
+  } catch (cause) {
     return {
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: cause instanceof Error ? cause : new Error(String(cause)),
       exitCode: -1,
       stderr: "",
       stdout: ""

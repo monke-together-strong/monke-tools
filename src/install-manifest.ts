@@ -169,9 +169,9 @@ export function resolveActiveInstallRoot(monkeHome: string) {
     assertDirectChildPath(installRoot, installsRoot, "Active tool install");
 
     return installRoot;
-  } catch (error) {
-    if (error instanceof MonkeError) {
-      throw error;
+  } catch (cause) {
+    if (cause instanceof MonkeError) {
+      throw cause;
     }
 
     throw new MonkeError(`Active install pointer is invalid: ${currentPointer}`);

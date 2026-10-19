@@ -135,8 +135,8 @@ DATABASE_URL=${malformedDsn}
 function captureThrowMessage(action: () => void) {
   try {
     action();
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+  } catch (cause) {
+    return cause instanceof Error ? cause.message : String(cause);
   }
 
   throw new Error("Expected action to throw");
