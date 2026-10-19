@@ -58,9 +58,9 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
     context = resolveRepoContext(runtime, sourceRoot, null, {
       inferSessionName: false
     });
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
-      `Cannot verify Source checkout ${sourceRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`
+      `Cannot verify Source checkout ${sourceRoot}: ${errorMessage(ThrownValueSchema.parse(cause))}`
     );
   }
 
@@ -210,9 +210,9 @@ function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePa
     context = resolveRepoContext(runtime, worktreePath, null, {
       inferSessionName: false
     });
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
-      `Cannot verify registered worktree ${worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`
+      `Cannot verify registered worktree ${worktreePath}: ${errorMessage(ThrownValueSchema.parse(cause))}`
     );
   }
 

@@ -289,11 +289,11 @@ export async function inspectSessionCleanup(
 
         try {
           assertNoOtherStateOwnsSessionRepos(state, states);
-        } catch (error) {
+        } catch (cause) {
           snapshot.blockers.push("ownership-conflict");
           snapshot.problems?.push({
             code: "ownership-conflict",
-            message: errorMessage(ThrownValueSchema.parse(error))
+            message: errorMessage(ThrownValueSchema.parse(cause))
           });
         }
 
@@ -352,11 +352,11 @@ export async function inspectSessionCleanup(
 
                 member.mode = registration.mode;
                 member.registeredBranch = registration.registeredBranch;
-              } catch (error) {
+              } catch (cause) {
                 snapshot.blockers.push("member-identity-unverified");
                 snapshot.problems?.push({
                   code: "member-identity-unverified",
-                  message: errorMessage(ThrownValueSchema.parse(error)),
+                  message: errorMessage(ThrownValueSchema.parse(cause)),
                   worktreePath: repo.worktreePath
                 });
 
@@ -412,11 +412,11 @@ export async function inspectSessionCleanup(
 
       try {
         revalidateSessionMember(recheck, recheckReadOnly, home, state, repo, member);
-      } catch (error) {
+      } catch (cause) {
         snapshot.blockers.push("member-changed-during-inspection");
         snapshot.problems?.push({
           code: "member-changed-during-inspection",
-          message: errorMessage(ThrownValueSchema.parse(error)),
+          message: errorMessage(ThrownValueSchema.parse(cause)),
           worktreePath: repo.worktreePath
         });
       }
@@ -527,9 +527,9 @@ function discoverUnownedWorktrees(
           });
         }
       }
-    } catch (error) {
+    } catch (cause) {
       sources.push({
-        message: errorMessage(ThrownValueSchema.parse(error)),
+        message: errorMessage(ThrownValueSchema.parse(cause)),
         sourceRoot,
         status: "unavailable",
         worktreeCount: null

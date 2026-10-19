@@ -132,8 +132,8 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
       if (connectedDirectories.has(directory) && root !== registryRoot) {
         connected.add(root);
       }
-    } catch (error) {
-      failures.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`);
+    } catch (cause) {
+      failures.push(`${directory}: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
   }
 
@@ -186,8 +186,8 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           }
 
           updatedCollections.push(result);
-        } catch (error) {
-          failures.push(`${root}: ${error instanceof Error ? error.message : String(error)}`);
+        } catch (cause) {
+          failures.push(`${root}: ${cause instanceof Error ? cause.message : String(cause)}`);
         }
       }
 
@@ -219,8 +219,8 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
               withSkillLocks(roots, runtime, recover, withSkillImportMutation)
             )
           : update());
-      } catch (error) {
-        failures.push(error instanceof Error ? error.message : String(error));
+      } catch (cause) {
+        failures.push(cause instanceof Error ? cause.message : String(cause));
       }
 
       // Consumer restoration can change publisher files, so capture final bytes last.
@@ -231,8 +231,8 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           // oxlint-disable-next-line no-await-in-loop
           await collection.snapshotAfter();
           capturedCollections += 1;
-        } catch (error) {
-          failures.push(error instanceof Error ? error.message : String(error));
+        } catch (cause) {
+          failures.push(cause instanceof Error ? cause.message : String(cause));
         }
       }
 
@@ -249,12 +249,12 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
         for (const collection of updatedCollections) {
           try {
             collection.rememberBaseline();
-          } catch (error) {
-            failures.push(error instanceof Error ? error.message : String(error));
+          } catch (cause) {
+            failures.push(cause instanceof Error ? cause.message : String(cause));
           }
         }
-      } catch (error) {
-        failures.push(error instanceof Error ? error.message : String(error));
+      } catch (cause) {
+        failures.push(cause instanceof Error ? cause.message : String(cause));
       }
     });
 
@@ -264,8 +264,8 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
       } else if (failures.length === 0) {
         writeMessage("No skill changes.\n");
       }
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
+    } catch (cause) {
+      failures.push(cause instanceof Error ? cause.message : String(cause));
     }
   } finally {
     rmSync(reviewDirectory, { force: true, recursive: true });
@@ -452,8 +452,8 @@ async function updateSkills(
 
       store = nextStore;
       acceptedGuidance.push(...recipe.skills, ...nextRecipe.skills);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
       failures.push(`${recipe.source}: ${message}`);
     } finally {
       if (stagingDirectory) {
@@ -589,8 +589,8 @@ function finalizeUpdatedImports(options: {
     ) {
       rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
     }
-  } catch (error) {
-    failure = `Skill update finalization failed: ${error instanceof Error ? error.message : String(error)}`;
+  } catch (cause) {
+    failure = `Skill update finalization failed: ${cause instanceof Error ? cause.message : String(cause)}`;
   }
 
   return failure;
@@ -734,9 +734,9 @@ async function prepareGitSkillUpdate(
     const normalizedSource = installOutput.source;
 
     return { assessmentOutput, installOutput, normalizedSource, revision, stagingDirectory };
-  } catch (error) {
+  } catch (cause) {
     rmSync(stagingDirectory, { force: true, recursive: true });
-    throw error;
+    throw cause;
   }
 }
 

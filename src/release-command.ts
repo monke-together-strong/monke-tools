@@ -15,8 +15,8 @@ export function runReleaseCommand(
       stderr: "pipe",
       stdout: "pipe"
     });
-  } catch (error) {
-    throw new Error(`${commandText} could not be started`, { cause: error });
+  } catch (cause) {
+    throw new Error(`${commandText} could not be started`, { cause });
   }
 
   if (result.signalCode !== undefined) {

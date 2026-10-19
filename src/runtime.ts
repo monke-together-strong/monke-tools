@@ -190,9 +190,9 @@ function createGitHubReleaseDistribution(
         headers,
         signal: AbortSignal.timeout(RELEASE_REQUEST_TIMEOUT_MS)
       });
-    } catch (error) {
+    } catch (cause) {
       throw new MonkeError(
-        `GitHub Release request failed: ${errorMessage(ThrownValueSchema.parse(error))}`
+        `GitHub Release request failed: ${errorMessage(ThrownValueSchema.parse(cause))}`
       );
     }
 
@@ -232,13 +232,13 @@ function createGitHubReleaseDistribution(
         const body: unknown = await response.json();
 
         return ReleaseCatalogPageSchema.parse(body);
-      } catch (error) {
-        if (error instanceof MonkeError) {
-          throw error;
+      } catch (cause) {
+        if (cause instanceof MonkeError) {
+          throw cause;
         }
 
         throw new MonkeError(
-          `GitHub Release metadata is invalid: ${errorMessage(ThrownValueSchema.parse(error))}`
+          `GitHub Release metadata is invalid: ${errorMessage(ThrownValueSchema.parse(cause))}`
         );
       }
     }
@@ -270,11 +270,11 @@ function executeCommand(
       stdout: "pipe",
       timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000
     });
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
-      `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(cause))}`,
       {
-        cause: error
+        cause
       }
     );
   }
@@ -323,13 +323,13 @@ function executeCommandAsync(
         stdin: "pipe",
         stdout: "pipe"
       });
-    } catch (error) {
+    } catch (cause) {
       detachParentTerminationHandlersIfIdle();
       reject(
         new MonkeError(
-          `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
+          `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(cause))}`,
           {
-            cause: error
+            cause
           }
         )
       );
@@ -375,10 +375,10 @@ async function executeForeground(
     try {
       options.protectProcessGroup?.(spawned.pid);
       spawned.send("start");
-    } catch (error) {
+    } catch (cause) {
       spawned.kill("SIGKILL");
       await spawned.exited;
-      throw error;
+      throw cause;
     }
 
     const exitCode = await spawned.exited;
@@ -432,15 +432,15 @@ class AsyncCommandExecution {
       const exitCode = await this.child.exited;
       await Promise.all([this.#output, this.#input]);
       this.handleExit(exitCode, this.child.signalCode);
-    } catch (error) {
+    } catch (cause) {
       if (this.#timedOut) {
         return;
       }
 
       this.rejectOnce(
         new MonkeError(
-          `Failed to run ${formatCommand(this.command, this.args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
-          { cause: error }
+          `Failed to run ${formatCommand(this.command, this.args)}: ${errorMessage(ThrownValueSchema.parse(cause))}`,
+          { cause }
         )
       );
       unregisterAsyncChild(this.child);
@@ -582,8 +582,8 @@ class AsyncCommandExecution {
       }
 
       await this.child.stdin.end();
-    } catch (error) {
-      this.#stdinError = error instanceof Error ? error : new Error(String(error));
+    } catch (cause) {
+      this.#stdinError = cause instanceof Error ? cause : new Error(String(cause));
     }
   }
 }
@@ -822,8 +822,8 @@ function acquireLockPathAsync(lockPath: string) {
         }
 
         setTimeout(poll, attempt.wait ? LOCK_RETRY_INTERVAL_MS : 0);
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error(String(error)));
+      } catch (cause) {
+        reject(cause instanceof Error ? cause : new Error(String(cause)));
       }
     };
 
@@ -940,14 +940,14 @@ function tryAcquireLockPath(lockPath: string) {
   try {
     fileDescriptor = openSync(lockPath, "wx");
     writeFileSync(fileDescriptor, contents, "utf-8");
-  } catch (error) {
+  } catch (cause) {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
       rmSync(lockPath, { force: true });
     }
 
-    if (!errorMessage(ThrownValueSchema.parse(error)).includes("EEXIST")) {
-      throw error;
+    if (!errorMessage(ThrownValueSchema.parse(cause)).includes("EEXIST")) {
+      throw cause;
     }
 
     return { wait: !tryEvictStaleLock(lockPath) };
@@ -1076,12 +1076,12 @@ function tryEvictStaleLock(lockPath: string) {
 
   try {
     mkdirSync(reclaimPath);
-  } catch (error) {
-    if (errorMessage(ThrownValueSchema.parse(error)).includes("EEXIST")) {
+  } catch (cause) {
+    if (errorMessage(ThrownValueSchema.parse(cause)).includes("EEXIST")) {
       return false;
     }
 
-    throw error;
+    throw cause;
   }
 
   try {
@@ -1149,13 +1149,13 @@ export function isProcessRunning(pid: number) {
     process.kill(pid, 0);
 
     return true;
-  } catch (error) {
-    if (error instanceof Error && "code" in error) {
-      if (error.code === "EPERM") {
+  } catch (cause) {
+    if (cause instanceof Error && "code" in cause) {
+      if (cause.code === "EPERM") {
         return true;
       }
 
-      if (error.code === "ESRCH") {
+      if (cause.code === "ESRCH") {
         return false;
       }
     }

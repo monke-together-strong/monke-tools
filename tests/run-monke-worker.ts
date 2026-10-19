@@ -22,7 +22,7 @@ try {
       }
     })
   );
-} catch (error) {
-  process.stderr.write(error instanceof Error ? error.message : "Monke command failed");
+} catch (cause) {
+  process.stderr.write(cause instanceof Error ? cause.message : "Monke command failed");
   process.exitCode = 1;
 }

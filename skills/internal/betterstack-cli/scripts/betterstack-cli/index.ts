@@ -379,9 +379,9 @@ async function loadConnections(token: string) {
 async function tryLoadSourceMetadata(token: string, sourceId: number) {
   try {
     return await loadSourceMetadata(token, sourceId);
-  } catch (error) {
-    if (error instanceof BetterStackInvalidResponseError) {
-      throw error;
+  } catch (cause) {
+    if (cause instanceof BetterStackInvalidResponseError) {
+      throw cause;
     }
 
     return null;
@@ -391,9 +391,9 @@ async function tryLoadSourceMetadata(token: string, sourceId: number) {
 async function tryLoadConnections(token: string) {
   try {
     return await loadConnections(token);
-  } catch (error) {
-    if (error instanceof BetterStackInvalidResponseError) {
-      throw error;
+  } catch (cause) {
+    if (cause instanceof BetterStackInvalidResponseError) {
+      throw cause;
     }
 
     return [];
@@ -568,6 +568,6 @@ function reportFailure(cause: unknown) {
 
 try {
   await main();
-} catch (error) {
-  reportFailure(error);
+} catch (cause) {
+  reportFailure(cause);
 }

@@ -348,13 +348,13 @@ export async function saveSkillComparison(
         refsChanged = true;
         git(["symbolic-ref", "HEAD", `refs/heads/skill-review-${id}`]);
         renameSync(nextIndex, paths.index);
-      } catch (error) {
+      } catch (cause) {
         if (refsChanged) {
           replaceRetainedRefs(retained, reviews);
           git(["symbolic-ref", "HEAD", previousHeadRef]);
         }
 
-        throw error;
+        throw cause;
       } finally {
         rmSync(nextIndex, { force: true });
       }
@@ -395,9 +395,9 @@ export async function openSkillComparison(
       commit: comparison.commit,
       path: comparison.repository
     });
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
-      `Skill changes remain applied; review delivery failed. Reopen with:\n${reopen}\n${error instanceof Error ? error.message : String(error)}`
+      `Skill changes remain applied; review delivery failed. Reopen with:\n${reopen}\n${cause instanceof Error ? cause.message : String(cause)}`
     );
   }
 }

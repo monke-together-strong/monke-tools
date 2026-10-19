@@ -81,7 +81,7 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
         selected.release.target_commitish,
         lockedActive
       );
-    } catch (error) {
+    } catch (cause) {
       if (
         lockedActive.manifest.installKind === "local" &&
         isSelectedReleaseActive(monkeHome, selected.version)
@@ -89,7 +89,7 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
         reportLocalTransition(runtime, lockedActive.manifest.sourceCheckout);
       }
 
-      throw error;
+      throw cause;
     }
 
     const logger = createLogger(runtime);
@@ -222,9 +222,9 @@ async function downloadAndActivate(
         expectedSourceCommit: sourceCommit,
         expectedVersion: version
       });
-    } catch (error) {
+    } catch (cause) {
       throw new MonkeError(
-        `Release archive verification failed: ${errorMessage(ThrownValueSchema.parse(error))}`
+        `Release archive verification failed: ${errorMessage(ThrownValueSchema.parse(cause))}`
       );
     }
 

@@ -49,16 +49,16 @@ export async function withSkillPublicationTransaction<T>(
 
   try {
     await (withSnapshotLocks ? withSnapshotLocks(capture) : capture());
-  } catch (error) {
+  } catch (cause) {
     rmSync(recovery, { recursive: true });
-    throw error;
+    throw cause;
   }
 
   let result;
 
   try {
     result = await publish();
-  } catch (error) {
+  } catch (cause) {
     const failures: string[] = [];
 
     const restore = () => {
@@ -70,8 +70,8 @@ export async function withSkillPublicationTransaction<T>(
             mkdirSync(path.dirname(original), { recursive: true });
             cpSync(backup, original, { recursive: true, verbatimSymlinks: true });
           }
-        } catch (restoreError) {
-          failures.push(`${original}: ${errorMessage(ThrownValueSchema.parse(restoreError))}`);
+        } catch (restoreCause) {
+          failures.push(`${original}: ${errorMessage(ThrownValueSchema.parse(restoreCause))}`);
         }
       }
 
@@ -94,26 +94,26 @@ export async function withSkillPublicationTransaction<T>(
       } else {
         restore();
       }
-    } catch (restoreError) {
-      failures.push(errorMessage(ThrownValueSchema.parse(restoreError)));
+    } catch (restoreCause) {
+      failures.push(errorMessage(ThrownValueSchema.parse(restoreCause)));
     }
 
     if (failures.length > 0) {
       throw new MonkeError(
-        `${errorMessage(ThrownValueSchema.parse(error))}\nRestoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${recovery} (see recovery.json)`,
-        { cause: error }
+        `${errorMessage(ThrownValueSchema.parse(cause))}\nRestoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${recovery} (see recovery.json)`,
+        { cause }
       );
     }
 
     rmSync(recovery, { recursive: true });
-    throw error;
+    throw cause;
   }
 
   try {
     rmSync(recovery, { recursive: true });
-  } catch (error) {
+  } catch (cause) {
     runtime.writeStderr(
-      `Skills published successfully; could not remove recovery files at ${recovery}: ${errorMessage(ThrownValueSchema.parse(error))}\n`
+      `Skills published successfully; could not remove recovery files at ${recovery}: ${errorMessage(ThrownValueSchema.parse(cause))}\n`
     );
   }
 

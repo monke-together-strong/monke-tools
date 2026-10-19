@@ -178,8 +178,8 @@ writeFileSync(marker(phase + "-done-" + index), "");
 
         try {
           await restoreSkillImports(sandbox);
-        } catch (error) {
-          failure = errorMessage(ThrownValueSchema.parse(error)).split("\n").at(-1) ?? null;
+        } catch (cause) {
+          failure = errorMessage(ThrownValueSchema.parse(cause)).split("\n").at(-1) ?? null;
         }
 
         expect(failure).toStrictEqual(expectedFailure);

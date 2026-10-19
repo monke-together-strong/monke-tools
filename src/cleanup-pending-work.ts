@@ -95,9 +95,9 @@ function diskEntry(root: string, name: string): Entry | null {
       if (!lstatSync(parent).isDirectory()) {
         throw new Error("Non-directory parent");
       }
-    } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-        throw error;
+    } catch (cause) {
+      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+        throw cause;
       }
     }
 
@@ -108,12 +108,12 @@ function diskEntry(root: string, name: string): Entry | null {
 
   try {
     stat = lstatSync(full);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+  } catch (cause) {
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
       return null;
     }
 
-    throw error;
+    throw cause;
   }
 
   if ((!stat.isFile() && !stat.isSymbolicLink()) || stat.size > MAX_PENDING_FILE_BYTES) {

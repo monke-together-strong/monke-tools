@@ -371,10 +371,10 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
     ) {
       throw new Error("Resolved YAML values outside skills would change");
     }
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
       `Cannot edit ${file} without changing YAML aliases outside skills; move anchors shared with other sections outside skills`,
-      { cause: error }
+      { cause }
     );
   }
 

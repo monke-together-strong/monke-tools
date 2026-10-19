@@ -301,8 +301,8 @@ function restoreSourceFolders(
   try {
     prepareRecoveryParents(snapshot, snapshot.sourceFolder);
     recordNewSourceSkills(snapshot, recoveryCopies);
-  } catch (error) {
-    failures.push(errorMessage(ThrownValueSchema.parse(error)));
+  } catch (cause) {
+    failures.push(errorMessage(ThrownValueSchema.parse(cause)));
   }
 
   for (const [source, copy] of [...recoveryCopies].toReversed()) {
@@ -322,8 +322,8 @@ function restoreSourceFolders(
       } else {
         cpSync(copy, source, { recursive: true, verbatimSymlinks: true });
       }
-    } catch (error) {
-      failures.push(`${source}: ${errorMessage(ThrownValueSchema.parse(error))}`);
+    } catch (cause) {
+      failures.push(`${source}: ${errorMessage(ThrownValueSchema.parse(cause))}`);
     }
   }
 
@@ -594,18 +594,18 @@ export async function updateLocalSkillSource(options: {
     });
 
     return next;
-  } catch (error) {
+  } catch (cause) {
     const failures = restoreSourceFolders(snapshot, recoveryCopies);
 
     if (failures.length > 0) {
       retainRecovery = true;
       throw new MonkeError(
-        `${errorMessage(ThrownValueSchema.parse(error))}\nSource restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${staging}`,
-        { cause: error }
+        `${errorMessage(ThrownValueSchema.parse(cause))}\nSource restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${staging}`,
+        { cause }
       );
     }
 
-    throw error;
+    throw cause;
   } finally {
     if (!retainRecovery) {
       rmSync(staging, { force: true, recursive: true });

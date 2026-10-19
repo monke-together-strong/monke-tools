@@ -476,9 +476,9 @@ function preflightSession(
   for (const check of sessionChecks) {
     try {
       check();
-    } catch (error) {
+    } catch (cause) {
       failures.push({
-        message: errorMessage(ThrownValueSchema.parse(error)),
+        message: errorMessage(ThrownValueSchema.parse(cause)),
         sourceRoot: state.rootSourceRoot
       });
     }
@@ -489,9 +489,9 @@ function preflightSession(
   for (const repo of state.repos) {
     try {
       repos.push(inspectSessionRepo(runtime, home, state, repo, options, observer));
-    } catch (error) {
+    } catch (cause) {
       failures.push({
-        message: `${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`,
+        message: `${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(cause))}`,
         sourceRoot: repo.sourceRoot
       });
     }

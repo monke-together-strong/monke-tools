@@ -98,8 +98,8 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
         await ordinary(inventory, lock);
       });
     }
-  } catch (error) {
-    globalFailure = errorMessage(ThrownValueSchema.parse(error));
+  } catch (cause) {
+    globalFailure = errorMessage(ThrownValueSchema.parse(cause));
   }
 
   // Include every inspected Session even when a global failure stops execution.
@@ -444,8 +444,8 @@ function summarizeCleanup(report: CleanupReport & { summary: ReturnType<typeof c
 function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {
   try {
     lock.assertHeld();
-  } catch (error) {
-    throw new GlobalCleanupError(errorMessage(ThrownValueSchema.parse(error)));
+  } catch (cause) {
+    throw new GlobalCleanupError(errorMessage(ThrownValueSchema.parse(cause)));
   }
 
   if (inventory.unboundedOwnership) {
@@ -794,8 +794,8 @@ function executeSession(
         { plannedActions: planned.plannedActions }
       )
     };
-  } catch (error) {
-    const message = errorMessage(ThrownValueSchema.parse(error));
+  } catch (cause) {
+    const message = errorMessage(ThrownValueSchema.parse(cause));
 
     const remainingActions = planned.plannedActions.filter(
       (action) =>
@@ -816,7 +816,7 @@ function executeSession(
     };
 
     return {
-      globalFailure: error instanceof GlobalCleanupError ? message : null,
+      globalFailure: cause instanceof GlobalCleanupError ? message : null,
       report: createSessionCleanupReport(snapshot, execution, {
         plannedActions: planned.plannedActions
       })

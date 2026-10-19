@@ -2460,8 +2460,8 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
           ["skills", "adopt", path.join(fixture.source, "typography")],
           fixture.runtime
         );
-      } catch (error) {
-        report = errorMessage(ThrownValueSchema.parse(error));
+      } catch (cause) {
+        report = errorMessage(ThrownValueSchema.parse(cause));
       }
 
       expect(report).toMatch(scenario.error);
@@ -3139,8 +3139,8 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
 
       try {
         await runCliAsync(["skills", "adopt", leftover], fixture.runtime);
-      } catch (error) {
-        report = errorMessage(ThrownValueSchema.parse(error));
+      } catch (cause) {
+        report = errorMessage(ThrownValueSchema.parse(cause));
       }
 
       expect(report).toMatch(pattern);
@@ -3914,8 +3914,8 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
 
       try {
         await runCliAsync(["skills", "update"], fixture.runtime);
-      } catch (error) {
-        outcome = errorMessage(ThrownValueSchema.parse(error));
+      } catch (cause) {
+        outcome = errorMessage(ThrownValueSchema.parse(cause));
       }
 
       expect(outcome).toMatch(

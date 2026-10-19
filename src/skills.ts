@@ -181,8 +181,8 @@ export function preflightInstallGuidance(
           homeDirectory
         });
       }
-    } catch (error) {
-      failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`);
+    } catch (cause) {
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(cause))}`);
     }
   }
 
@@ -198,8 +198,8 @@ export function preflightInstallGuidance(
           homeDirectory
         });
       }
-    } catch (error) {
-      failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`);
+    } catch (cause) {
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(cause))}`);
     }
   }
 
@@ -346,8 +346,8 @@ export function reconcileSkillNamespaces(options: {
 
     try {
       removeManagedTarget(previousTarget, options);
-    } catch (error) {
-      const message = errorMessage(ThrownValueSchema.parse(error));
+    } catch (cause) {
+      const message = errorMessage(ThrownValueSchema.parse(cause));
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
     }
   }
@@ -365,8 +365,8 @@ export function reconcileSkillNamespaces(options: {
       options.writeMessage(
         `Linked ${SKILL_NAMESPACE} skills at ${skillTargetPolicy(target).managedLocation}\n`
       );
-    } catch (error) {
-      const message = errorMessage(ThrownValueSchema.parse(error));
+    } catch (cause) {
+      const message = errorMessage(ThrownValueSchema.parse(cause));
       failures.push(`${target.agentSkillRoot}: ${message}`);
     }
   }
@@ -697,9 +697,9 @@ function reconcileFlatTarget(
       symlinkSync(link.sourcePath, linkPath, "dir");
       createdLinks.push(link);
     }
-  } catch (error) {
+  } catch (cause) {
     writeFlatManifest(target, createdLinks, createdSupportingLinks);
-    throw error;
+    throw cause;
   }
 
   writeFlatManifest(target, links, supportingLinks);

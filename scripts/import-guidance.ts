@@ -153,7 +153,7 @@ export function copyStagedGuidanceToManagedRoots(
     }
 
     options.commitState?.();
-  } catch (error) {
+  } catch (cause) {
     const failures = restoreLinkedMetadata(metadataCopies, newAgentsDirectories);
 
     for (const [targetPath, backupPath] of affectedPaths) {
@@ -164,20 +164,20 @@ export function copyStagedGuidanceToManagedRoots(
           mkdirSync(path.dirname(targetPath), { recursive: true });
           move(backupPath, targetPath);
         }
-      } catch (recoveryError) {
-        failures.push(`${targetPath}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
+      } catch (recoveryCause) {
+        failures.push(`${targetPath}: ${errorMessage(ThrownValueSchema.parse(recoveryCause))}`);
       }
     }
 
     if (failures.length > 0) {
       retainRecovery = true;
       throw new MonkeError(
-        `${errorMessage(ThrownValueSchema.parse(error))}\nGuidance restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${backupRoot}`,
-        { cause: error }
+        `${errorMessage(ThrownValueSchema.parse(cause))}\nGuidance restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${backupRoot}`,
+        { cause }
       );
     }
 
-    throw error;
+    throw cause;
   } finally {
     if (!retainRecovery) {
       rmSync(backupRoot, { force: true, recursive: true });
@@ -198,8 +198,8 @@ function restoreLinkedMetadata(
       if (copy !== null) {
         cpSync(copy, metadataPath, { verbatimSymlinks: true });
       }
-    } catch (recoveryError) {
-      failures.push(`${metadataPath}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
+    } catch (recoveryCause) {
+      failures.push(`${metadataPath}: ${errorMessage(ThrownValueSchema.parse(recoveryCause))}`);
     }
   }
 
@@ -208,8 +208,8 @@ function restoreLinkedMetadata(
       if (existsSync(directory)) {
         rmdirSync(directory);
       }
-    } catch (recoveryError) {
-      failures.push(`${directory}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
+    } catch (recoveryCause) {
+      failures.push(`${directory}: ${errorMessage(ThrownValueSchema.parse(recoveryCause))}`);
     }
   }
 

@@ -832,8 +832,8 @@ export function memoizeRepoStructure(runtime: Runtime): Runtime {
       if (!memo) {
         try {
           memo = { ok: true, result: runtime.exec(command, args, options) };
-        } catch (error) {
-          memo = { error, ok: false };
+        } catch (cause) {
+          memo = { error: cause, ok: false };
         }
 
         cache.set(key, memo);
@@ -1002,14 +1002,14 @@ async function inspectAncestry(
       );
 
       return comparison.behind_by === 0 && comparison.merge_base_commit.sha === head;
-    } catch (error) {
+    } catch (cause) {
       // defaultHead was just resolved on GitHub, so a 404 means GitHub has never
       // seen head. A commit absent from the remote cannot be inside its default branch.
-      if (error instanceof GitHubNotFoundError) {
+      if (cause instanceof GitHubNotFoundError) {
         return false;
       }
 
-      throw error;
+      throw cause;
     }
   } catch {
     return null;
@@ -1070,9 +1070,9 @@ async function inspectCommitPullRequests(
         return { ancestorOfDefault, headContainsCurrent, matchingDiff, mergeTree, pullRequest: pr };
       })
     );
-  } catch (error) {
+  } catch (cause) {
     // The repository was verified above; an unpushed commit has no associated PRs.
-    return error instanceof GitHubNotFoundError ? [] : null;
+    return cause instanceof GitHubNotFoundError ? [] : null;
   }
 }
 

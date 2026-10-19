@@ -979,8 +979,8 @@ function isDirectExecution(importMetaUrl) {
 
     try {
       scenario.spawn("banana", { SECRET_STDOUT: "secret stdout" });
-    } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
+    } catch (cause) {
+      message = cause instanceof Error ? cause.message : String(cause);
     }
 
     expect(message).toMatch(

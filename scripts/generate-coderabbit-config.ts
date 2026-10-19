@@ -111,11 +111,11 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
       stderr: "pipe",
       stdout: "pipe"
     });
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
-      `Could not inspect changed paths: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      `Could not inspect changed paths: ${errorMessage(ThrownValueSchema.parse(cause))}`,
       {
-        cause: error
+        cause
       }
     );
   }
@@ -397,7 +397,7 @@ export async function runCodeRabbitConfigGenerator(
 if (import.meta.main) {
   try {
     await runCodeRabbitConfigGenerator();
-  } catch (error) {
-    reportCliFailure(ThrownValueSchema.parse(error));
+  } catch (cause) {
+    reportCliFailure(ThrownValueSchema.parse(cause));
   }
 }

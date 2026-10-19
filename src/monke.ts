@@ -1396,10 +1396,10 @@ async function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, wor
       warnings.push(message);
       runtime.writeStderr(`${message}\n`);
     });
-  } catch (error) {
+  } catch (cause) {
     throw new MonkeError(
-      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(ThrownValueSchema.parse(error))}`,
-      { cause: error }
+      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
+      { cause }
     );
   }
 

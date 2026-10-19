@@ -43,12 +43,12 @@ export async function runCliAsync(argv: string[], runtime = createRuntime()) {
 
   try {
     await program.parseAsync(argv, { from: "user" });
-  } catch (error) {
-    if (installationCommand && error instanceof MonkeError) {
-      addInstallGuidance(runtime, error);
+  } catch (cause) {
+    if (installationCommand && cause instanceof MonkeError) {
+      addInstallGuidance(runtime, cause);
     }
 
-    throw error;
+    throw cause;
   }
 }
 
@@ -448,8 +448,8 @@ function explicitSkillTargets(
 async function main() {
   try {
     await runCliAsync(Bun.argv.slice(2));
-  } catch (error) {
-    reportCliFailure(ThrownValueSchema.parse(error));
+  } catch (cause) {
+    reportCliFailure(ThrownValueSchema.parse(cause));
   }
 }
 
