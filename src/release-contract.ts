@@ -22,6 +22,7 @@ import {
   hashReleaseGuidance
 } from "./release-guidance.ts";
 import { sha256 } from "./sha256.ts";
+import type { Runtime } from "./types.ts";
 
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
 const LEADING_ARCHIVE_PATH_PATTERN = /^\.\/?/u;
@@ -69,6 +70,7 @@ interface ValidateReleaseBundleOptions {
 interface VerifyReleaseArchiveOptions {
   archivePath: string;
   checksumPath?: string;
+  exec?: Runtime["exec"];
   expectedGuidanceRoot?: string;
   expectedMinimumCodiffVersion?: string;
   expectedPlatform: output<typeof ReleasePlatformSchema>;
@@ -287,11 +289,11 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
     verifyArchiveChecksum(archivePath, options.checksumPath);
   }
 
-  assertArchiveContract(listArchiveEntries(archivePath));
+  assertArchiveContract(listArchiveEntries(archivePath, options.exec));
   const extractedRoot = mkdtempSync(path.join(tmpdir(), "monke-tools-release-verify-"));
 
   try {
-    runReleaseCommand("tar", ["-xzf", archivePath, "-C", extractedRoot]);
+    runReleaseCommand("tar", ["-xzf", archivePath, "-C", extractedRoot], { exec: options.exec });
 
     const manifest = validateVerifiedReleaseBundleRoot({
       bundleRoot: extractedRoot,
@@ -307,7 +309,11 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
     });
 
     if (options.verifyExecutable !== false) {
-      const version = runVerificationCommand(path.join(extractedRoot, "mt"), ["--version"]);
+      const version = runVerificationCommand(
+        path.join(extractedRoot, "mt"),
+        ["--version"],
+        options.exec
+      );
 
       if (version.exitCode !== 0 || version.stdout.trim() !== expectedVersion) {
         throw new MonkeError(
@@ -315,9 +321,11 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
         );
       }
 
-      const installer = runVerificationCommand(path.join(extractedRoot, "install.sh"), [
-        "--verify"
-      ]);
+      const installer = runVerificationCommand(
+        path.join(extractedRoot, "install.sh"),
+        ["--verify"],
+        options.exec
+      );
 
       if (installer.exitCode !== 0) {
         throw new MonkeError(
@@ -379,8 +387,8 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
   }
 }
 
-function listArchiveEntries(archivePath: string) {
-  return runReleaseCommand("tar", ["-tzf", archivePath])
+function listArchiveEntries(archivePath: string, exec: Runtime["exec"] | undefined) {
+  return runReleaseCommand("tar", ["-tzf", archivePath], { exec })
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -468,8 +476,16 @@ function commandFailureDetail(result: { error?: Error; stderr: string; stdout: s
   );
 }
 
-function runVerificationCommand(command: string, args: string[]) {
+function runVerificationCommand(
+  command: string,
+  args: string[],
+  exec: Runtime["exec"] | undefined
+) {
   try {
+    if (exec) {
+      return exec(command, args, { allowFailure: true });
+    }
+
     const result = Bun.spawnSync({
       cmd: [command, ...args],
       stderr: "pipe",
