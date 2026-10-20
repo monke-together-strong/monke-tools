@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { runReleaseCommand } from "../src/release-command.ts";
+import { createRuntime } from "../src/runtime.ts";
 
 describe(runReleaseCommand, () => {
   it("returns stdout from a successful command", () => {
@@ -21,6 +22,14 @@ describe(runReleaseCommand, () => {
 
   it.skipIf(process.platform === "win32")("reports signal termination", () => {
     expect(() => runReleaseCommand("sh", ["-c", "kill -TERM $$"])).toThrow(
+      "terminated by signal SIGTERM"
+    );
+  });
+
+  it.skipIf(process.platform === "win32")("reports signal termination through a runtime", () => {
+    const { exec } = createRuntime();
+
+    expect(() => runReleaseCommand("sh", ["-c", "kill -TERM $$"], { exec })).toThrow(
       "terminated by signal SIGTERM"
     );
   });

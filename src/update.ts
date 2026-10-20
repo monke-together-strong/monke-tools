@@ -218,6 +218,7 @@ async function downloadAndActivate(
       verifyReleaseArchive({
         archivePath,
         checksumPath: checksumsPath,
+        exec: runtime.exec,
         expectedPlatform: contract.platform,
         expectedSourceCommit: sourceCommit,
         expectedVersion: version

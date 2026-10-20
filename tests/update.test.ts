@@ -37,6 +37,54 @@ function releaseAssetResponse(contents: Uint8Array) {
 }
 
 describe("Release update", () => {
+  it("uses the runtime for archive verification and preserves the active install on failure", async () => {
+    const sandbox = makeTempDir("release-update-verification-runtime");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+    const previousCurrent = readlinkSync(path.join(monkeHome, "current"));
+    const candidate = prepareReleaseAsset(sandbox, "1.2.4");
+
+    const runtime = createTestRuntime({
+      architecture: "x64",
+      cwd: sandbox,
+      env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+      onStderr() {},
+      onStdout() {},
+      platform: "linux",
+      releaseDistribution: {
+        async downloadReleaseAsset(url) {
+          return releaseAssetResponse(
+            url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+          );
+        },
+        async listReleases(page) {
+          return page === 1 ? [candidate.metadata] : [];
+        }
+      },
+      toolBuildIdentity: "1.2.3",
+      toolInstallRoot: installRoot
+    });
+
+    const execute = runtime.exec;
+    const commands: string[] = [];
+    runtime.exec = (command, args, options) => {
+      commands.push(`${path.basename(command)} ${args?.[0]}`);
+
+      if (path.basename(command) === "install.sh" && args?.[0] === "--verify") {
+        return { exitCode: 7, stderr: "injected installer verification failure", stdout: "" };
+      }
+
+      return execute(command, args, options);
+    };
+
+    await expect(runCliAsync(["update"], runtime)).rejects.toThrow(
+      "injected installer verification failure"
+    );
+    expect(commands).toStrictEqual(["tar -tzf", "tar -xzf", "mt --version", "install.sh --verify"]);
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(previousCurrent);
+    expect(existsSync(installRoot)).toBeTruthy();
+  });
+
   it("ignores stray backups and absent retained roots during install recovery", () => {
     const sandbox = makeTempDir("release-update-recovery-strays");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -750,7 +798,7 @@ describe("Release update", () => {
     ["catalog lookup", /injected catalog failure/u],
     ["GitHub digest", /digest does not match GitHub metadata/u],
     ["published checksum", /checksum mismatch/u],
-    ["archive structure", /tar .* failed/u],
+    ["archive structure", /Command failed: tar -tzf/u],
     ["manifest provenance", /source commit does not match/u],
     ["manifest platform", /platform does not match linux-x64/u]
   ])(

@@ -1,9 +1,15 @@
+import type { Runtime } from "./types.ts";
+
 /** Run a release command with consistent operator-facing failure diagnostics. */
 export function runReleaseCommand(
   command: string,
   arguments_: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; exec?: Runtime["exec"] } = {}
 ) {
+  if (options.exec) {
+    return options.exec(command, arguments_, { cwd: options.cwd, env: options.env }).stdout;
+  }
+
   const commandText = [command, ...arguments_].join(" ");
   let result: Bun.ReadableSyncSubprocess;
 
