@@ -6,28 +6,26 @@ export function runReleaseCommand(
   arguments_: string[],
   options: { cwd?: string; env?: NodeJS.ProcessEnv; exec?: Runtime["exec"] } = {}
 ) {
+  if (options.exec) {
+    return options.exec(command, arguments_, { cwd: options.cwd, env: options.env }).stdout;
+  }
+
   const commandText = [command, ...arguments_].join(" ");
-  let result: Bun.ReadableSyncSubprocess | ReturnType<Runtime["exec"]>;
+  let result: Bun.ReadableSyncSubprocess;
 
   try {
-    result = options.exec
-      ? options.exec(command, arguments_, {
-          allowFailure: true,
-          cwd: options.cwd,
-          env: options.env
-        })
-      : Bun.spawnSync({
-          cmd: [command, ...arguments_],
-          cwd: options.cwd,
-          env: options.env,
-          stderr: "pipe",
-          stdout: "pipe"
-        });
+    result = Bun.spawnSync({
+      cmd: [command, ...arguments_],
+      cwd: options.cwd,
+      env: options.env,
+      stderr: "pipe",
+      stdout: "pipe"
+    });
   } catch (cause) {
     throw new Error(`${commandText} could not be started`, { cause });
   }
 
-  if ("signalCode" in result && result.signalCode !== undefined) {
+  if (result.signalCode !== undefined) {
     throw new Error(`${commandText} was terminated by signal ${result.signalCode}`);
   }
 

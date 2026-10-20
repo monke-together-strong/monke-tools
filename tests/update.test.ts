@@ -798,7 +798,7 @@ describe("Release update", () => {
     ["catalog lookup", /injected catalog failure/u],
     ["GitHub digest", /digest does not match GitHub metadata/u],
     ["published checksum", /checksum mismatch/u],
-    ["archive structure", /tar .* failed/u],
+    ["archive structure", /Command failed: tar -tzf/u],
     ["manifest provenance", /source commit does not match/u],
     ["manifest platform", /platform does not match linux-x64/u]
   ])(
