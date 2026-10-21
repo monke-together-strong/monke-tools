@@ -54,6 +54,10 @@ skills:
     skills:
       - slug: pr
         kind: reference
+  - commit: b8c1edf92ef7d2f5d71ddfebcb0ce6e8d7d3d0f0
+    source: https://github.com/monke-together-strong/keykong
+    skills:
+      - keykong
   - commit: e3bca69842e50383aa39066bc53ee318135af59b
     source: https://github.com/pbakaus/impeccable
     skills:
