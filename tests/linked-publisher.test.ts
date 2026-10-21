@@ -309,9 +309,9 @@ describe("linked publisher collections", () => {
     }
   );
 
-  it.each(["guide", "Base Skill"])(
+  it.for(["guide", "Base Skill"])(
     "excludes the %s alias from exact own slug selection",
-    async (other) => {
+    async (other, context) => {
       const { declare, installed, publisher, runtime, upstream } = fixture();
       const slug = other === "guide" ? "Guide" : "Base Skill";
       write(
@@ -321,6 +321,11 @@ describe("linked publisher collections", () => {
       );
 
       if (other === "guide") {
+        // Distinct Guide and guide slugs require a case-sensitive filesystem.
+        if (existsSync(path.join(publisher, "skills/guide"))) {
+          context.skip();
+        }
+
         write(
           publisher,
           "skills/guide/SKILL.md",
