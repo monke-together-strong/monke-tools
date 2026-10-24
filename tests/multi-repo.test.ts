@@ -2,12 +2,18 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { assert } from "@sindresorhus/is";
 import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
+import {
+  getSessionStateFilePath,
+  loadSessionState,
+  saveSessionState
+} from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
+import type { SessionState } from "../src/types.ts";
 import {
   createRepo,
   git,
@@ -33,6 +39,17 @@ function makeRepoTempDir(prefix: string) {
   mkdirSync(testTempRoot, { recursive: true });
 
   return realpathSync.native(mkdtempSync(path.join(testTempRoot, `${prefix}-`)));
+}
+
+// The real allocator skips occupied host ports, so propagation checks use persisted assignments.
+function assignedPort(state: SessionState, sourceRoot: string, portKey: string) {
+  const value = state.repos
+    .find((repo) => repo.sourceRoot === sourceRoot)
+    ?.assignedPorts.find((port) => port.key === portKey)?.value;
+
+  assert.number(value, `Missing assigned port ${portKey} for ${sourceRoot}`);
+
+  return value;
 }
 
 describe("multi-repo sessions", () => {
@@ -83,12 +100,17 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
     const rootWorktree = getExpectedWorktreePath(home, root, "swing");
 
-    expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
+    const state = loadSessionState(home, root, "swing");
+    const depPort = assignedPort(state, depRoot, "DEP_POSTGRES_PORT");
+    const apiPort = assignedPort(state, root, "API_PORT");
+    expect(apiPort).not.toBe(depPort);
+
+    expect(read(depWorktree, ".env")).toBe(`DEP_POSTGRES_PORT=${depPort}\n`);
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n"
+      `PORT=${apiPort}\nDATABASE_URL=postgres://localhost:${depPort}/app\n`
     );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=${apiPort}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -474,9 +496,16 @@ external:
 
     const rootWorktree = getExpectedWorktreePath(home, root, "default-graph");
     const depWorktree = getExpectedWorktreePath(home, depRoot, "default-graph");
-    expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
+
+    const depPort = assignedPort(
+      loadSessionState(home, root, "default-graph"),
+      depRoot,
+      "DEP_POSTGRES_PORT"
+    );
+
+    expect(read(depWorktree, ".env")).toBe(`DEP_POSTGRES_PORT=${depPort}\n`);
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -492,7 +521,7 @@ external:
       monkeHome: home
     });
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
     expect(read(depWorktree, "default-only.txt")).toBe("default dep\n");
 
@@ -558,12 +587,20 @@ external:
 
     const rootWorktree = getExpectedWorktreePath(home, root, "local-env");
     const depWorktree = getExpectedWorktreePath(home, depRoot, "local-env");
-    expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
+
+    const depPort = assignedPort(
+      loadSessionState(home, root, "local-env"),
+      depRoot,
+      "DEP_POSTGRES_PORT"
+    );
+
+    expect(depPort).not.toBe(10_000);
+    expect(read(depWorktree, "services/db/.env.local")).toBe(`PORT=${depPort}\nDEFAULT_ONLY=1\n`);
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "DATABASE_URL=postgres://localhost:10001/app\n"
+      `DATABASE_URL=postgres://localhost:${depPort}/app\n`
     );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10001\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
   });
 
@@ -613,19 +650,16 @@ external:
 
     const rootWorktree = getExpectedWorktreePath(home, root, "mixed-defaults");
     const depWorktree = getExpectedWorktreePath(home, depRoot, "mixed-defaults");
-    // Another worker can temporarily occupy the first port in the reservation.
-    const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
 
-    const assignedPort = state.repos
-      .find((repo) => repo.sourceRoot === depRoot)
-      ?.assignedPorts.find((port) => port.key === "DEP_POSTGRES_PORT")?.value;
-
-    expect(assignedPort).toBeDefined();
-    expect(read(depWorktree, "services/db/.env.local")).toBe(
-      `PORT=${String(assignedPort)}\nMASTER_DEFAULT=1\n`
+    const depPort = assignedPort(
+      loadSessionState(home, root, "mixed-defaults"),
+      depRoot,
+      "DEP_POSTGRES_PORT"
     );
+
+    expect(read(depWorktree, "services/db/.env.local")).toBe(`PORT=${depPort}\nMASTER_DEFAULT=1\n`);
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${String(assignedPort)}\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
   });
 
@@ -868,8 +902,13 @@ external:
       monkeHome: home
     });
 
+    const state = loadSessionState(home, root, "partial");
+    const depPort = assignedPort(state, depRoot, "DEP_POSTGRES_PORT");
+    const apiPort = assignedPort(state, root, "API_PORT");
+    expect(apiPort).not.toBe(depPort);
+
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=${apiPort}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
 
     const record = new CheckoutResourceStore(home).get(
@@ -934,14 +973,20 @@ external:
     const rootWorktree = getExpectedWorktreePath(home, root, "swing");
     const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
 
+    const depPort = assignedPort(
+      loadSessionState(home, root, "swing"),
+      depRoot,
+      "DEP_POSTGRES_PORT"
+    );
+
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "DATABASE_URL=postgres://localhost:10000/api\n"
+      `DATABASE_URL=postgres://localhost:${depPort}/api\n`
     );
     expect(read(rootWorktree, "apps/worker/.env.local")).toBe(
-      "DATABASE_URL=postgres://localhost:10000/worker\n"
+      `DATABASE_URL=postgres://localhost:${depPort}/worker\n`
     );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
 
     expect(depRoot).toBeTruthy();
@@ -1001,8 +1046,14 @@ external:
       monkeHome: home
     });
 
+    const depPort = assignedPort(
+      loadSessionState(home, root, "refresh-env"),
+      depRoot,
+      "DEP_POSTGRES_PORT"
+    );
+
     expect(read(rootWorktree, ".env")).toBe(
-      `KEEP_ME=1\nDEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
+      `KEEP_ME=1\nDEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
   });
 
@@ -1070,8 +1121,9 @@ external:
 
     const rootWorktree = getExpectedWorktreePath(home, root, "direct-only");
     const depWorktree = getExpectedWorktreePath(home, dep, "direct-only");
+    const depPort = assignedPort(loadSessionState(home, root, "direct-only"), dep, "DEP_PORT");
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=11000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=${depPort}\n`
     );
   });
 
@@ -1574,6 +1626,9 @@ external:
     });
 
     const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    const firstPort = assignedPort(state, firstRoot, "FIRST_PORT");
+    const secondPort = assignedPort(state, secondRoot, "SECOND_PORT");
+    expect(firstPort).not.toBe(secondPort);
     expect(
       Object.fromEntries(
         state.repos.map((repo) => [
@@ -1583,7 +1638,7 @@ external:
       )
     ).toStrictEqual({
       [firstRoot]: {
-        assignedPorts: [{ key: "FIRST_PORT", value: 10_000 }],
+        assignedPorts: [{ key: "FIRST_PORT", value: firstPort }],
         status: "materialized"
       },
       [root]: {
@@ -1591,7 +1646,7 @@ external:
         status: "materialized"
       },
       [secondRoot]: {
-        assignedPorts: [{ key: "SECOND_PORT", value: 11_000 }],
+        assignedPorts: [{ key: "SECOND_PORT", value: secondPort }],
         status: "materialized"
       }
     });
@@ -1847,9 +1902,13 @@ external:
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "fresh-dep-seeds");
     const rootWorktree = getExpectedWorktreePath(home, root, "fresh-dep-seeds");
-    expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\n");
+    const state = loadSessionState(home, root, "fresh-dep-seeds");
+    const depPort = assignedPort(state, depRoot, "DEP_POSTGRES_PORT");
+    const apiPort = assignedPort(state, root, "API_PORT");
+    expect(apiPort).not.toBe(depPort);
+    expect(read(depWorktree, "services/db/.env.local")).toBe(`PORT=${depPort}\n`);
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n"
+      `PORT=${apiPort}\nDATABASE_URL=postgres://localhost:${depPort}/app\n`
     );
     expect(read(depRoot, "services/db/.env.local")).toBe("PORT=5432\n");
   });
