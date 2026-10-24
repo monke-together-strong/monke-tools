@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { assert } from "@sindresorhus/is";
 import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -612,17 +613,22 @@ apps:
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf-8")).toBe("pr head\n");
     expect(readFileSync(path.join(worktreeRoot, "bootstrap.log"), "utf-8")).toBe("bootstrapped\n");
+    const completed = loadSessionState(home, repoRoot, prBranch);
+
+    const apiPort = completed.repos
+      .find((repo) => repo.sourceRoot === repoRoot)
+      ?.assignedPorts.find((port) => port.key === "API_PORT")?.value;
+
+    assert.number(apiPort, "Missing API_PORT assignment in the PR Session");
     expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf-8")).toBe(
-      "PORT=10000\n"
+      `PORT=${apiPort}\n`
     );
-    expect(readFileSync(path.join(worktreeRoot, ".env"), "utf-8")).toBe("API_PORT=10000\n");
+    expect(readFileSync(path.join(worktreeRoot, ".env"), "utf-8")).toBe(`API_PORT=${apiPort}\n`);
     expect(result.stderr).toContain(`Bootstrapping ${repoRoot} in ${worktreeRoot}`);
     expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
     expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-    expect(loadSessionState(home, repoRoot, prBranch).repos[0]?.diffBaseRef).toBeUndefined();
-
-    const completed = loadSessionState(home, repoRoot, prBranch);
+    expect(completed.repos[0]?.diffBaseRef).toBeUndefined();
     expect(() => runMonke({ args: ["spawn", prBranch], cwd: repoRoot, monkeHome: home })).toThrow(
       /completed Session.*retained Session branch.*use a new Session/u
     );
