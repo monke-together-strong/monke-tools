@@ -26,6 +26,7 @@ Use the listed default unless an exception applies. Completion requires one of t
 - `shadcn/ui`: Use as the default source for ownable, styled React components.
 - `@base-ui/react`: Use as the default primitive layer for accessible React UI behavior, including shadcn-style components that need low-level primitives.
 - `tailwindcss`: Use for utility-first styling, design tokens, responsive layout, and component styling.
+- `cn`: Use to merge Tailwind class names instead of `clsx` + `tailwind-merge`.
 
 ## Keyboard Shortcuts And Interaction
 
