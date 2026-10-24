@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
@@ -66,6 +66,23 @@ function historyFixture() {
 }
 
 describe("historical skill review CLI", () => {
+  it.each([
+    ["missing-ref", "HEAD"],
+    ["HEAD", "missing-ref"]
+  ])("cleans both reconstructions after a revision fails: %s, %s", async (base, head) => {
+    const fixture = historyFixture();
+    write(fixture.repo, "skills.lock.json", JSON.stringify({ recipes: [], version: 4 }));
+    git(fixture.repo, ["add", "skills.lock.json"]);
+    git(fixture.repo, ["commit", "-m", "Record empty pinned imports"]);
+
+    const result = await fixture.run(base, head);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("missing-ref");
+    expect(readdirSync(path.join(fixture.repo, "tmp"))).toStrictEqual([]);
+    expect(existsSync(path.join(fixture.monkeHome, "skill-reviews"))).toBeFalsy();
+  });
+
   it("preserves committed guidance before recipes and before pinned locks", async () => {
     const fixture = historyFixture();
     const base = git(fixture.repo, ["rev-parse", "HEAD"]);

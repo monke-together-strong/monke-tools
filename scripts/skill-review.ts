@@ -421,7 +421,8 @@ export async function reviewSkillRevisions(
   const temporaryRoot = mkdtempSync(path.join(runtime.cwd, "tmp", "skill-history-"));
 
   try {
-    const endpoints = await Promise.all(
+    // Both reconstructions share the temporary root, so finish both before cleanup.
+    const results = await Promise.allSettled(
       [base, head].map(async (revision, index) => {
         const commit = runtime
           .exec("git", ["rev-parse", "--verify", "--end-of-options", `${revision}^{commit}`])
@@ -458,6 +459,14 @@ export async function reviewSkillRevisions(
         return snapshot;
       })
     );
+
+    const endpoints = results.map((result) => {
+      if (result.status === "rejected") {
+        throw result.reason;
+      }
+
+      return result.value;
+    });
 
     const comparison = await saveSkillComparison(endpoints[0] ?? "", endpoints[1] ?? "", runtime);
 
