@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   readImportRecipeStore,
@@ -184,11 +184,10 @@ describe("versioned installation lifecycle", () => {
     });
 
     const originalCwd = process.cwd();
-    const originalMonkeHome = process.env.MONKE_HOME;
 
     try {
       process.chdir(sourceCheckout);
-      process.env.MONKE_HOME = monkeHome;
+      vi.stubEnv("MONKE_HOME", monkeHome);
       await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "alpha"], runtime);
       const acceptedLock = readFileSync(path.join(sourceCheckout, "monke.yml"), "utf-8");
       rmSync(path.join(sourceCheckout, "skills/imported"), { recursive: true });
@@ -287,7 +286,7 @@ describe("versioned installation lifecycle", () => {
       ).toMatchObject({ recipes: [], version: 4 });
     } finally {
       process.chdir(originalCwd);
-      process.env.MONKE_HOME = originalMonkeHome;
+      vi.unstubAllEnvs();
     }
   }, 30_000);
 
