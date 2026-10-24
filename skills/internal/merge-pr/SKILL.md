@@ -22,5 +22,6 @@ A direct "merge this PR" / "merge PR #123" is approval.
    - If a required contract lacks the environment, deployment gate, or checks, ask for the missing details.
    - Wait for the deployment gate when the section gives a discoverable signal; otherwise ask before testing.
    - Run the listed checks and record pass/fail evidence for each one.
+8. In T3 Code, settle the thread via `t3_thread_organize` once nothing remains open in it, such as another PR or a pending question.
 
 Never delete dirty work, trust git ancestry alone for squash merges, assume the base is `main`, or use `git reset --hard`, `git clean`, or forced worktree removal. Report the PR URL, merge method, base update, removals, post-merge verification, and any skipped cleanup.
