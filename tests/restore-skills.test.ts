@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { rememberRestoredRecipe, restoreSkillImports } from "../scripts/skill-lock.ts";
@@ -168,12 +168,9 @@ writeFileSync(marker(phase + "-done-" + index), "");
         chmodSync(file, 0o755);
       }
 
-      const originalPath = process.env.PATH;
-      const originalHome = process.env.MONKE_HOME;
-
       try {
-        process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
-        process.env.MONKE_HOME = home;
+        vi.stubEnv("PATH", `${bin}${path.delimiter}${process.env.PATH ?? ""}`);
+        vi.stubEnv("MONKE_HOME", home);
         let failure: string | null = null;
 
         try {
@@ -203,8 +200,7 @@ writeFileSync(marker(phase + "-done-" + index), "");
         expect(readdirSync(path.join(sandbox, "tmp"))).toStrictEqual([]);
         expect(readdirSync(path.join(home, "locks"))).toStrictEqual([]);
       } finally {
-        process.env.PATH = originalPath;
-        process.env.MONKE_HOME = originalHome;
+        vi.unstubAllEnvs();
       }
     },
     15_000
