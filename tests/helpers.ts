@@ -322,6 +322,8 @@ export function installFakeCodiff(
     delayByBase?: Record<string, number>;
     exitCode?: number;
     help?: string;
+    /** Environment variable whose launch value is logged before the arguments. */
+    logEnv?: string;
     version?: string;
     versionCoordination?: { discovery: string; started: string };
     waitForBases?: string[];
@@ -383,6 +385,7 @@ mkdir -p ${shellQuote(coordinationDirectory)}
 ${markLaunch}
 ${waitForLaunches}
 ${delays}
+${options.logEnv === undefined ? "" : `printf '%s\\n' "${options.logEnv}=\${${options.logEnv}-unset}" >> ${shellQuote(logPath)}`}
 printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 exit ${String(options.exitCode ?? 0)}
 `

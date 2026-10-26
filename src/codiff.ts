@@ -169,7 +169,9 @@ export function launchCodiff(runtime: Runtime, executable: string, plan: Compari
 
   const result = runtime.exec(executable, args, {
     allowFailure: true,
-    cwd: plan.worktreePath
+    cwd: plan.worktreePath,
+    // Electron hosts such as T3 Code export this; Codiff would then start as Node and exit.
+    env: { ELECTRON_RUN_AS_NODE: undefined }
   });
 
   if (result.exitCode !== 0) {
