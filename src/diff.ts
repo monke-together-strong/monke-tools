@@ -15,7 +15,7 @@ import type { ComparisonPlan } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
 import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
-import { launchLfv, resolveLfv } from "./lfv.ts";
+import { launchMs, resolveMs } from "./ms.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { listSessionStates, loadSessionState, saveSessionState } from "./session-state-store.ts";
@@ -38,9 +38,9 @@ export interface DiffOptions {
 }
 
 function requireDiffAdapter(adapter: string) {
-  if (adapter !== "codiff" && adapter !== "lfv") {
+  if (adapter !== "codiff" && adapter !== "ms") {
     throw new MonkeError(
-      `Unsupported Diff adapter: ${adapter}. This build supports codiff and lfv.`
+      `Unsupported Diff adapter: ${adapter}. This build supports codiff and ms.`
     );
   }
 
@@ -51,12 +51,12 @@ type DiffPresenter = (plan: ComparisonPlan) => Promise<void>;
 
 async function prepareDiffPresenter(
   runtime: Runtime,
-  adapter: "codiff" | "lfv"
+  adapter: "codiff" | "ms"
 ): Promise<DiffPresenter> {
-  if (adapter === "lfv") {
-    const executable = resolveLfv(runtime);
+  if (adapter === "ms") {
+    const executable = resolveMs(runtime);
 
-    return (plan) => launchLfv(runtime, executable, plan);
+    return (plan) => launchMs(runtime, executable, plan);
   }
 
   const executable = await verifyCodiffAsync(runtime);
@@ -77,7 +77,7 @@ export async function runDiffConfigure(runtime: Runtime, options: { adapter?: st
         message: "Diff adapter",
         options: [
           { label: "Codiff desktop", value: "codiff" },
-          { label: "LFV review link", value: "lfv" }
+          { label: "Monke See review link", value: "ms" }
         ]
       }))
   );

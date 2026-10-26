@@ -4134,18 +4134,18 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each([undefined, "codiff"])(
-    "honors the configured LFV adapter in updates unless overridden with %s",
+    "honors the configured Monke See adapter in updates unless overridden with %s",
     async (adapter) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
-      saveGlobalMonkeConfig(fixture.monkeHome, { ...config, diffAdapter: "lfv" });
-      const log = path.join(fixture.bin, "lfv.log");
+      saveGlobalMonkeConfig(fixture.monkeHome, { ...config, diffAdapter: "ms" });
+      const log = path.join(fixture.bin, "ms.log");
       writeExecutable(
-        path.join(fixture.bin, "lfv"),
+        path.join(fixture.bin, "ms"),
         `#!/bin/sh
 set -eu
 printf '%s\\n' "$@" > ${shellQuote(log)}
-printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"https://lfv.example/review/123"}}'
+printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"https://ms.example/review/123"}}'
 `
       );
       await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
@@ -4158,7 +4158,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
         adapter ? "--commit" : "--source\ncommit\n--ref\n"
       );
       expect(existsSync(adapter ? log : fixture.codiffLog)).toBeFalsy();
-      expect(fixture.stdout().includes("https://lfv.example/review/123")).toBe(
+      expect(fixture.stdout().includes("https://ms.example/review/123")).toBe(
         adapter === undefined
       );
       expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Updated skill.");

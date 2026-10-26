@@ -105,7 +105,7 @@ describe("skills CLI", () => {
       "---\nname: typography\ndescription: Typography.\n---\nInstructions.\n"
     );
     saveGlobalMonkeConfig(monkeHome, {
-      diffAdapter: "lfv",
+      diffAdapter: "ms",
       skillInstallPreference: { targets: [{ kind: "codex" }] },
       version: 1
     });
@@ -132,7 +132,7 @@ describe("skills CLI", () => {
       path.join(source, "typography")
     );
     expect(loadGlobalMonkeConfig(monkeHome)).toMatchObject({
-      diffAdapter: "lfv",
+      diffAdapter: "ms",
       skillInstallPreference: { targets: [{ kind: "claude" }] }
     });
     expect(readImportRecipeStore(path.join(monkeHome, "skill-registry")).recipes).toMatchObject([

@@ -48,17 +48,17 @@ The [session command reference](skills/internal/monke-worktrees/SKILL.md) covers
 ### Diff delivery
 
 Desktop Codiff remains the default. `mt diff configure --adapter codiff` or
-`mt diff configure --adapter lfv` saves the
+`mt diff configure --adapter ms` saves the
 machine-local preference in `$MONKE_HOME/config.yml`; `mt diff configure` offers a
-picker. `mt diff --adapter codiff` or `--adapter lfv` overrides delivery for that
+picker. `mt diff --adapter codiff` or `--adapter ms` overrides delivery for that
 invocation without rewriting the preference.
 
-The LFV adapter prints LFV's canonical review URL unchanged; diagnostics stay on
-stderr. It requires an installed LFV CLI
-with the version-1 review JSON contract and a configured viewer. LFV owns authentication,
+The Monke See adapter prints Monke See's canonical review URL unchanged; diagnostics
+stay on stderr. It requires an installed Monke See CLI with the version-1 review JSON
+contract and a configured viewer. Monke See owns authentication,
 rendering, Refresh, and link expiry. PR/MR shorthand requires authenticated `gh` or
 `glab` to resolve a full review URL; full URLs need no Monke provider lookup. Diff never
-installs LFV, changes its exposure, or falls back to another adapter on failure.
+installs Monke See, changes its exposure, or falls back to another adapter on failure.
 
 Bare `mt diff` retains its remembered-base selection, and `mt diff --pick` chooses
 another base or local changes only. Explicit sources bypass both automatic selection

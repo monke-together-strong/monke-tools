@@ -101,7 +101,7 @@ function createProgram(runtime: Runtime) {
       "ref, base..head, base...head, #PR, pr <number|branch>, mr <number>, or review URL"
     )
     .option("-p, --pick")
-    .option("--adapter <adapter>", "one-off adapter selection (codiff or lfv)")
+    .option("--adapter <adapter>", "one-off adapter selection (codiff or ms)")
     .option("--path <checkout>", "select an existing Checkout, including a nested directory")
     .option("--working-tree", "review only staged, unstaged, and untracked changes")
     .option("--commit <ref>", "review one commit")
@@ -111,7 +111,7 @@ function createProgram(runtime: Runtime) {
   diff
     .command("configure")
     .description("Save this machine's Diff adapter without launching a review")
-    .option("--adapter <adapter>", "noninteractive selection (codiff or lfv)")
+    .option("--adapter <adapter>", "noninteractive selection (codiff or ms)")
     .action((options) => runDiffConfigure(runtime, options));
 
   program.command("materialize").action(() => runMaterialize(runtime));
@@ -357,7 +357,7 @@ function createProgram(runtime: Runtime) {
     .description("Update all imported skills and open one complete comparison")
     .option("--repo", "Pin and advance imports declared in this repo's monke.yml")
     .option("--project", "Update the clone-local registry and its skill projections")
-    .addOption(new Option("--adapter <adapter>").choices(["codiff", "lfv"]))
+    .addOption(new Option("--adapter <adapter>").choices(["codiff", "ms"]))
     .option("--interactive", "Prompt before accepting upstream Skill slug replacements")
     .action((options) =>
       runSkillsRegistry(
