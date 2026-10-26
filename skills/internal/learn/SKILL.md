@@ -1,6 +1,6 @@
 ---
 name: learn
-description: Learn from evidence when asked to explain an incident or improve behavior, workflows, skills, prompts, or instructions.
+description: Learn from evidence when asked to explain an incident or improve behavior, workflows, skills, prompts, or instructions, or when the user repeats a correction.
 ---
 
 # Learn
@@ -26,12 +26,10 @@ made the wrong path plausible, and why it prevailed. Tie the cause to evidence;
 “confusion” alone does not identify a fix.
 
 When observed behavior violates an existing rule, treat that as evidence that
-the rule was insufficient in practice. Locate the instruction that shaped the
-wrong decision and first consider rewriting it to encode the intended behavior
-where that decision originates. Add a downstream check or enforcement only when
-evidence explains why correcting that instruction would be insufficient. Prefer
-replacing weak wording to accumulating corrective rules. Citing the existing
-rule or promising compliance is not a fix.
+the rule was insufficient in practice. Fix it per
+[principle-encode-lessons-in-structure](../../imported/principle-encode-lessons-in-structure/SKILL.md).
+Prefer replacing weak wording to accumulating corrective rules. Citing the
+existing rule or promising compliance is not a fix.
 
 Choose the smallest fix surface that covers equivalent cases. State the class
 of cases the fix applies to; retain particular actors, wording, tools, or sites

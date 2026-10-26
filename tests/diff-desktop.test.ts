@@ -323,6 +323,21 @@ describe("Desktop Diff", () => {
     expect(readFileSync(log, "utf-8")).toBe(`${repo}\n`);
   });
 
+  it("launches Codiff as an app when an Electron host exports ELECTRON_RUN_AS_NODE", async () => {
+    const { binDirectory, home, repo } = fixture();
+    const log = installFakeCodiff(binDirectory, { logEnv: "ELECTRON_RUN_AS_NODE" });
+    await runMonkeAsync({
+      args: ["diff", "--commit", "HEAD"],
+      binDirectory,
+      cwd: repo,
+      extraEnv: { ELECTRON_RUN_AS_NODE: "1" },
+      monkeHome: home
+    });
+    expect(readFileSync(log, "utf-8")).toBe(
+      `ELECTRON_RUN_AS_NODE=unset\n--commit\nHEAD\n${repo}\n`
+    );
+  });
+
   it("saves the selected adapter from interactive configuration without needing a repository or executable", async () => {
     const sandbox = makeTempDir("diff-configure");
     const home = path.join(sandbox, "home");
