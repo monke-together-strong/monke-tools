@@ -13,7 +13,7 @@ skills:
       - slug: unslop
         modelInvocation: allow
         description: Cut AI tells from any writing.
-  - commit: 367d908571634328490b07e0d8ee31b38dcf3a8c
+  - commit: 7bf1b7beb7e385790aaddbb482ade81c183fe217
     source: https://github.com/haydenbleasel/ultracite/tree/main/skills/ultracite
     skills:
       - slug: ultracite
@@ -22,7 +22,7 @@ skills:
     source: https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me
     skills:
       - show-me
-  - commit: 49dd158d1076134a641b33efb035946536778336
+  - commit: 5beb35b040e3de97e54fa9e386d7e42d15c295c2
     source: https://github.com/mattpocock/skills
     skills:
       - slug: code-review
@@ -52,21 +52,21 @@ skills:
       - wizard
       - slug: writing-for-agents
         modelInvocation: allow
-  - commit: 49dd158d1076134a641b33efb035946536778336
+  - commit: 5beb35b040e3de97e54fa9e386d7e42d15c295c2
     source: https://github.com/mattpocock/skills/tree/main/skills/engineering/pr
     skills:
       - slug: pr
         kind: reference
-  - commit: e3bca69842e50383aa39066bc53ee318135af59b
+  - commit: 3671d50f0ac9a662ce0615e85a256110c9cd720b
     source: https://github.com/pbakaus/impeccable
     skills:
       - impeccable
-  - commit: c2477f311c19982ef6e246085438e6cfec3e35ea
+  - commit: 481d523374745e77d0cf9c53a4115ab5dd7c8481
     source: https://github.com/shadcn-ui/ui
     skills:
       - shadcn
   - acceptOpenClawRisks: true
-    commit: 7e15ff9a1d8828108e22ae486f699f80a3b914e0
+    commit: 3b7f365f91c5e7f31ae9825a641775d393cbc654
     source: openclaw/agent-skills
     skills:
       - autoreview
