@@ -48,7 +48,7 @@ export const SkillInstallPreferenceSchema = z.strictObject({
 });
 
 const GlobalMonkeConfigSchema = z.strictObject({
-  diffAdapter: z.enum(["codiff", "lfv"]).optional(),
+  diffAdapter: z.enum(["codiff", "ms"]).optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
 });

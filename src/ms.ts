@@ -25,19 +25,19 @@ const ReviewFailureSchema = z.object({
   version: z.literal(1)
 });
 
-export function resolveLfv(runtime: Runtime) {
-  const executable = findExecutable("lfv", runtime.env);
+export function resolveMs(runtime: Runtime) {
+  const executable = findExecutable("ms", runtime.env);
 
   if (executable === null) {
     throw new MonkeError(
-      "LFV is unavailable. Install and configure lfv review before retrying mt diff --adapter lfv."
+      "Monke See is unavailable. Install and configure ms review before retrying mt diff --adapter ms."
     );
   }
 
   return executable;
 }
 
-export async function launchLfv(runtime: Runtime, executable: string, plan: ComparisonPlan) {
+export async function launchMs(runtime: Runtime, executable: string, plan: ComparisonPlan) {
   const sourceArgs = await resolveSourceArgs(runtime, plan);
 
   const result = await runtime.execAsync(
@@ -55,21 +55,21 @@ export async function launchLfv(runtime: Runtime, executable: string, plan: Comp
   try {
     response = JSON.parse(result.stdout);
   } catch {
-    throw new MonkeError("LFV review create returned invalid JSON; no review URL was returned.");
+    throw new MonkeError("ms review create returned invalid JSON; no review URL was returned.");
   }
 
   const failure = ReviewFailureSchema.safeParse(response);
 
   if (failure.success) {
     const { code, hint, message } = failure.data.error;
-    throw new MonkeError(`LFV review create failed: ${code}: ${message}${hint ? `\n${hint}` : ""}`);
+    throw new MonkeError(`ms review create failed: ${code}: ${message}${hint ? `\n${hint}` : ""}`);
   }
 
   const parsed = ReviewResponseSchema.safeParse(response);
 
   if (result.exitCode !== 0 || !parsed.success) {
     throw new MonkeError(
-      "LFV review create failed or returned an invalid response; no review URL was returned."
+      "ms review create failed or returned an invalid response; no review URL was returned."
     );
   }
 
@@ -107,7 +107,7 @@ async function resolveSourceArgs(runtime: Runtime, plan: ComparisonPlan) {
     }
 
     default: {
-      throw new MonkeError("Unsupported LFV comparison source.");
+      throw new MonkeError("Unsupported Monke See comparison source.");
     }
   }
 }

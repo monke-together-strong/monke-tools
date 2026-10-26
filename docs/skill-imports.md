@@ -90,7 +90,7 @@ removal of undeclared files until a successful restore or update. Monke reports
 failures after opening one complete comparison, with a Codex summary of changed
 skills.
 Use `--interactive` to accept upstream slug changes and `--adapter codiff` or
-`--adapter lfv` to select the viewer.
+`--adapter ms` to select the viewer.
 
 The printed `mt diff` command reopens the fixed comparison if viewer launch fails.
 Commit `monke.yml` after review. A pin can advance without changing the selected

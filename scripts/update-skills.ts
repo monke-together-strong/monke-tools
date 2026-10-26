@@ -745,7 +745,7 @@ function parseCommand(argv: string[]) {
     .name("mt skills update --repo")
     .description("Update imported agent guidance from recorded recipes")
     .option("--interactive", "Prompt before accepting staged Skill slug replacements")
-    .option("--adapter <adapter>", "Complete review adapter: codiff or lfv")
+    .option("--adapter <adapter>", "Complete review adapter: codiff or ms")
     .allowExcessArguments(false);
 
   configureCliParser(program);

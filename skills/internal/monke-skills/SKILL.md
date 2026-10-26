@@ -97,7 +97,7 @@ or installer changes outside the registry and project agent directories.
 ```sh
 mt skills policy <source> [skill] --model-invocation <allow|deny>
 mt skills policy <source> <skill> --description 'Use when…'
-mt skills update [--adapter <codiff|lfv>] [--interactive]
+mt skills update [--adapter <codiff|ms>] [--interactive]
 mt skills list
 mt skills remove <source>
 ```

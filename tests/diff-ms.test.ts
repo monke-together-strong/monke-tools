@@ -29,7 +29,7 @@ const success = JSON.stringify({
 });
 
 function fixture(options: { exitCode?: number; stderr?: string; stdout?: string } = {}) {
-  const sandbox = makeTempDir("diff-lfv");
+  const sandbox = makeTempDir("diff-ms");
   const home = path.join(sandbox, "home");
   const binDirectory = path.join(sandbox, "bin");
   const repo = createConfiguredRepo(path.join(sandbox, "repo"), { "README.md": "base\n" });
@@ -38,9 +38,9 @@ function fixture(options: { exitCode?: number; stderr?: string; stdout?: string 
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "committed change"]);
   writeFileSync(path.join(repo, "README.md"), "committed plus dirty\n");
-  const log = path.join(sandbox, "lfv.log");
+  const log = path.join(sandbox, "ms.log");
   writeExecutable(
-    path.join(binDirectory, "lfv"),
+    path.join(binDirectory, "ms"),
     `#!/bin/sh
 printf '%s\\n' "$PWD" "$@" >> ${shellQuote(log)}
 printf '%s\\n' ${shellQuote(options.stdout ?? success)}
@@ -52,16 +52,16 @@ exit ${options.exitCode ?? 0}
   return { base, binDirectory, home, log, repo, sandbox };
 }
 
-describe("LFV Diff", () => {
+describe("Monke See Diff", () => {
   it.each([
     { exitCode: 0, expectedError: null },
     {
       exitCode: 1,
       expectedError:
-        "LFV review create failed or returned an invalid response; no review URL was returned."
+        "ms review create failed or returned an invalid response; no review URL was returned."
     }
   ])(
-    "remembers a picked LFV base only after successful delivery (exit $exitCode)",
+    "remembers a picked Monke See base only after successful delivery (exit $exitCode)",
     async ({ exitCode, expectedError }) => {
       const { binDirectory, home, repo, sandbox } = fixture({ exitCode });
       git(repo, ["restore", "README.md"]);
@@ -71,7 +71,7 @@ describe("LFV Diff", () => {
       git(repo, ["worktree", "add", "-b", "base", baseWorktree]);
 
       const delivery = runMonkeAsync({
-        args: ["diff", "--adapter", "lfv", "--pick"],
+        args: ["diff", "--adapter", "ms", "--pick"],
         binDirectory,
         cwd: session,
         monkeHome: home,
@@ -118,13 +118,13 @@ describe("LFV Diff", () => {
     },
     { exitCode: 1, stdout: success }
   ])(
-    "fails closed on an invalid LFV envelope without a desktop fallback: $stdout",
+    "fails closed on an invalid Monke See envelope without a desktop fallback: $stdout",
     ({ exitCode, stdout }) => {
       const { binDirectory, home, repo } = fixture({ exitCode, stdout });
       const desktopLog = installFakeCodiff(binDirectory);
 
       const result = runMonkeCapturingFailure({
-        args: ["diff", "--adapter", "lfv", "--working-tree"],
+        args: ["diff", "--adapter", "ms", "--working-tree"],
         binDirectory,
         cwd: repo,
         monkeHome: home
@@ -136,7 +136,7 @@ describe("LFV Diff", () => {
     }
   );
 
-  it("does not invoke LFV when provider resolution fails", () => {
+  it("does not invoke Monke See when provider resolution fails", () => {
     const { binDirectory, home, log, repo } = fixture();
     writeExecutable(
       path.join(binDirectory, "gh"),
@@ -144,7 +144,7 @@ describe("LFV Diff", () => {
     );
 
     const result = runMonkeCapturingFailure({
-      args: ["diff", "--adapter", "lfv", "pr", "42"],
+      args: ["diff", "--adapter", "ms", "pr", "42"],
       binDirectory,
       cwd: repo,
       monkeHome: home
@@ -175,7 +175,7 @@ describe("LFV Diff", () => {
       selector: "mr"
     }
   ])(
-    "rejects raw controls in resolved $selector URLs before invoking LFV",
+    "rejects raw controls in resolved $selector URLs before invoking Monke See",
     ({ command, response, selector }) => {
       const { binDirectory, home, log, repo } = fixture();
       writeExecutable(
@@ -184,7 +184,7 @@ describe("LFV Diff", () => {
       );
 
       const result = runMonkeCapturingFailure({
-        args: ["diff", "--adapter", "lfv", selector, "42"],
+        args: ["diff", "--adapter", "ms", selector, "42"],
         binDirectory,
         cwd: repo,
         monkeHome: home
@@ -196,23 +196,23 @@ describe("LFV Diff", () => {
     }
   );
 
-  it("reports missing LFV without invoking a desktop fallback", async () => {
+  it("reports missing Monke See without invoking a desktop fallback", async () => {
     const { binDirectory, home, repo } = fixture();
-    rmSync(path.join(binDirectory, "lfv"));
+    rmSync(path.join(binDirectory, "ms"));
     const desktopLog = installFakeCodiff(binDirectory);
     await expect(
       runMonkeAsync({
-        args: ["diff", "--adapter", "lfv", "--working-tree"],
+        args: ["diff", "--adapter", "ms", "--working-tree"],
         binDirectory,
         cwd: repo,
         extraEnv: { PATH: `${binDirectory}:/usr/bin:/bin` },
         monkeHome: home
       })
-    ).rejects.toThrow("LFV is unavailable");
+    ).rejects.toThrow("Monke See is unavailable");
     expect(existsSync(desktopLog)).toBeFalsy();
   });
 
-  it("saves LFV without launching, retains other preferences, and supports a one-off Codiff override", async () => {
+  it("saves Monke See without launching, retains other preferences, and supports a one-off Codiff override", async () => {
     const { binDirectory, home, log, repo } = fixture();
     mkdirSync(home, { recursive: true });
     const configPath = path.join(home, "config.yml");
@@ -226,15 +226,15 @@ describe("LFV Diff", () => {
       cwd: repo,
       monkeHome: home,
       onSelect(prompt) {
-        expect(prompt.options.map((option) => option.value)).toStrictEqual(["codiff", "lfv"]);
+        expect(prompt.options.map((option) => option.value)).toStrictEqual(["codiff", "ms"]);
       },
-      selectValues: ["lfv"]
+      selectValues: ["ms"]
     });
 
-    expect(configured.stdout).toBe("Diff adapter: lfv\n");
+    expect(configured.stdout).toBe("Diff adapter: ms\n");
     expect(existsSync(log)).toBeFalsy();
     const saved = readFileSync(configPath, "utf-8");
-    expect(saved).toContain("diffAdapter: lfv");
+    expect(saved).toContain("diffAdapter: ms");
     expect(saved).toContain("kind: codex");
 
     const automatic = await runMonkeAsync({
@@ -262,14 +262,14 @@ describe("LFV Diff", () => {
     expect(readFileSync(configPath, "utf-8")).toBe(saved);
   });
 
-  it("preserves LFV failure code, message, hint, and diagnostics without printing a URL", () => {
+  it("preserves Monke See failure code, message, hint, and diagnostics without printing a URL", () => {
     const { binDirectory, home, repo } = fixture({
       exitCode: 1,
       stderr: "authentication diagnostic\n",
       stdout: JSON.stringify({
         error: {
           code: "AUTH_REQUIRED",
-          hint: "Run lfv auth login",
+          hint: "Run ms auth login",
           message: "Sign in to the viewer"
         },
         ok: false,
@@ -278,7 +278,7 @@ describe("LFV Diff", () => {
     });
 
     const result = runMonkeCapturingFailure({
-      args: ["diff", "--adapter", "lfv", "--working-tree"],
+      args: ["diff", "--adapter", "ms", "--working-tree"],
       binDirectory,
       cwd: repo,
       monkeHome: home
@@ -288,7 +288,7 @@ describe("LFV Diff", () => {
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("authentication diagnostic\n");
     expect(result.stderr).toContain("AUTH_REQUIRED: Sign in to the viewer");
-    expect(result.stderr).toContain("Run lfv auth login");
+    expect(result.stderr).toContain("Run ms auth login");
   });
 
   it.each([
@@ -325,7 +325,7 @@ describe("LFV Diff", () => {
       url: "https://gitlab.example.test/group/repo/-/merge_requests/42"
     }
   ])(
-    "resolves $args through the provider's read-only CLI before LFV",
+    "resolves $args through the provider's read-only CLI before Monke See",
     async ({ args, command, delivered, provider, response, url }) => {
       const { binDirectory, home, log, repo, sandbox } = fixture();
       const providerLog = path.join(sandbox, "provider.log");
@@ -337,7 +337,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
 `
       );
       await runMonkeAsync({
-        args: ["diff", "--adapter", "lfv", ...args],
+        args: ["diff", "--adapter", "ms", ...args],
         binDirectory,
         cwd: repo,
         monkeHome: home
@@ -392,7 +392,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
       const { binDirectory, home, log, repo, sandbox } = fixture();
 
       const result = await runMonkeAsync({
-        args: ["diff", "--adapter", "lfv", "--path", repo, ...args],
+        args: ["diff", "--adapter", "ms", "--path", repo, ...args],
         binDirectory,
         cwd: sandbox,
         monkeHome: home,
@@ -408,12 +408,12 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
     }
   );
 
-  it("delivers branch commits plus dirty changes to LFV and returns its canonical URL", async () => {
+  it("delivers branch commits plus dirty changes to Monke See and returns its canonical URL", async () => {
     const { base, binDirectory, home, log, repo } = fixture({ stderr: "viewer diagnostic\n" });
     const before = git(repo, ["status", "--porcelain"]);
 
     const result = await runMonkeAsync({
-      args: ["diff", "--adapter", "lfv", "--branch", base],
+      args: ["diff", "--adapter", "ms", "--branch", base],
       binDirectory,
       cwd: repo,
       monkeHome: home,

@@ -1,6 +1,6 @@
 ---
 name: monke-diff
-description: Open visual diffs with mt. Use when presenting completed changes, reviewing dirty work, comparing branches or commits, selecting a time window, or configuring the Codiff or LFV adapter.
+description: Open visual diffs with mt. Use when presenting completed changes, reviewing dirty work, comparing branches or commits, selecting a time window, or configuring the Codiff or Monke See adapter.
 ---
 
 # Monke diff
@@ -8,7 +8,7 @@ description: Open visual diffs with mt. Use when presenting completed changes, r
 `mt diff` owns comparison selection. Use `mt diff --help` for sources and flags;
 `--pick` chooses a comparison base.
 
-Save the adapter preference with `mt diff configure --adapter <codiff|lfv>`.
+Save the adapter preference with `mt diff configure --adapter <codiff|ms>`.
 
 For "last N hours/days plus dirty changes", resolve the oldest included first-parent
 commit's parent to an immutable base SHA, then run
