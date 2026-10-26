@@ -1,10 +1,13 @@
 apps: {}
 bootstrapCommand: vp install --frozen-lockfile
 skills:
-  - commit: 6f131f137de64fdaf928278c0fd9ecec520ccbee
+  - commit: fad8d01588a1b1ae803f87c8a1e0de79e28cffec
     source: https://github.com/backnotprop/pstack
     skills:
+      - principle-encode-lessons-in-structure
       - principle-fix-root-causes
+      - slug: show-me-your-work
+        kind: reference
       - slug: technical-writing
         modelInvocation: allow
       - slug: unslop
