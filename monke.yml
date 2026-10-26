@@ -44,7 +44,8 @@ skills:
       - tdd
       - teach
       - to-questionnaire
-      - to-spec
+      - slug: to-spec
+        kind: reference
       - to-tickets
       - triage
       - wait-what
