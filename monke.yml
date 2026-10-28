@@ -66,11 +66,6 @@ skills:
     source: https://github.com/shadcn-ui/ui
     skills:
       - shadcn
-  - commit: 7de017b3fc9d50c03cf3ecb98fb71e0ca65a78bd
-    source: https://github.com/t3dotgg/tstack
-    skills:
-      - slug: council
-        kind: reference
   - acceptOpenClawRisks: true
     commit: 3b7f365f91c5e7f31ae9825a641775d393cbc654
     source: openclaw/agent-skills
