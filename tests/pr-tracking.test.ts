@@ -183,6 +183,16 @@ describe("mt prs", () => {
     ]);
   });
 
+  it("keeps a merged PR tracked when its hand-off fails", async () => {
+    const sandbox = createSandbox();
+    installFakeGh(sandbox, { 6: "MERGED" });
+    installRecordingCommand(sandbox, "t3", "exit 1");
+    await track(sandbox, 6);
+
+    await expect(mt(sandbox, ["prs", "poll"])).rejects.toThrow(`Could not hand off ${prUrl(6)}`);
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(6));
+  });
+
   it("keeps a PR tracked when GitHub cannot be read", async () => {
     const sandbox = createSandbox();
     installFakeGh(sandbox, {});

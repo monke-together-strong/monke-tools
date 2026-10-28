@@ -181,4 +181,20 @@ describe("waitForGate on a deploy job within a pipeline", () => {
   ])("$name", async ({ expected, jobs: jobResponses, runs }) => {
     await expect(wait(gate, { jobs: jobResponses, runs })).resolves.toStrictEqual(expected);
   });
+
+  it("stops at the timeout when it is shorter than the interval", async () => {
+    let now = 0;
+
+    const result = await waitForGate(gate, {
+      gh: scriptedGh({ jobs: [jobs(["Test", "in_progress", null])], runs: [run("in_progress")] }),
+      intervalMs: 5 * 60_000,
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms;
+      },
+      timeoutMs: 60_000
+    });
+
+    expect([result.status, now]).toStrictEqual(["timed_out", 60_000]);
+  });
 });

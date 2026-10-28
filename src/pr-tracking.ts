@@ -10,6 +10,7 @@ import type { Runtime } from "./types.ts";
 
 const POLLER_LABEL = "com.monke-together-strong.mt-prs-poll";
 const POLL_INTERVAL_SECONDS = 300;
+const T3_TIMEOUT_SECONDS = 60;
 
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
@@ -126,27 +127,38 @@ async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<stri
     return undefined;
   }
 
-  // Recheck under the lock: an agent that merges a PR untracks it first, so a PR still
-  // tracked after GitHub reports it merged was merged outside its thread. A record that
-  // `track` replaced since the GitHub read waits for the next poll.
-  return await withTrackedPrsLock(runtime, async () => {
+  // An agent that merges a PR untracks it first, so a PR still tracked after GitHub reports it
+  // merged was merged outside its thread. Claim it by removing the record under the lock; a
+  // record that `track` replaced since the GitHub read waits for the next poll.
+  const claimed = await withTrackedPrsLock(runtime, () => {
     const file = trackedPrsPath(runtime);
     const current = readTrackedPrs(file);
-
     const unchanged = current.some((candidate) => isDeepStrictEqual(candidate, pr));
 
-    const failure =
-      unchanged && state === "MERGED" ? await handOffPostMerge(runtime, t3, pr) : undefined;
-
-    if (unchanged && failure === undefined) {
+    if (unchanged) {
       writeTrackedPrs(
         file,
         current.filter((candidate) => candidate.url !== pr.url)
       );
     }
 
-    return failure;
+    return unchanged;
   });
+
+  if (!claimed || state === "CLOSED") {
+    return undefined;
+  }
+
+  // Hand off outside the lock, since T3 can be slow, and restore the claim if the hand-off fails.
+  const failure = await handOffPostMerge(runtime, t3, pr);
+
+  if (failure !== undefined) {
+    await updateTrackedPrs(runtime, (prs) =>
+      prs.some((candidate) => candidate.url === pr.url) ? prs : [...prs, pr]
+    );
+  }
+
+  return failure;
 }
 
 async function handOffPostMerge(
@@ -171,7 +183,8 @@ async function handOffPostMerge(
   const message = `${pr.url} was merged outside this thread. Follow ${skill} for it. Its checkout was ${pr.checkout}.`;
 
   const sent = await runtime.execAsync(t3, ["thread", "send", pr.thread, message], {
-    allowFailure: true
+    allowFailure: true,
+    timeoutSeconds: T3_TIMEOUT_SECONDS
   });
 
   if (sent.exitCode === 0) {
@@ -184,7 +197,7 @@ async function handOffPostMerge(
   const started = await runtime.execAsync(
     t3,
     ["thread", "start", "--title", `Verify #${pr.number}`, pr.sourceCheckout, message],
-    { allowFailure: true }
+    { allowFailure: true, timeoutSeconds: T3_TIMEOUT_SECONDS }
   );
 
   if (started.exitCode === 0) {

@@ -115,7 +115,7 @@ export async function waitForGate(gate: Gate, options: WaitOptions): Promise<Gat
     }
 
     // oxlint-disable-next-line no-await-in-loop -- The interval separates checks.
-    await sleep(options.intervalMs);
+    await sleep(Math.min(options.intervalMs, deadline - now()));
   }
 }
 
