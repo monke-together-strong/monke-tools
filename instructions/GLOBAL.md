@@ -21,7 +21,7 @@
 
 ## Branching
 
-Follow git flow.
+By default, name branches with git flow prefixes: `feature/`, `bugfix/`, `hotfix/`, `release/`.
 
 ## Matt Pocock skills issue tracking
 
