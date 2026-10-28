@@ -1,6 +1,6 @@
 ---
 name: post-merge
-description: Verify a merged PR against its repository and PR post-merge contracts.
+description: Finish a merged PR by closing its issues, cleaning up its checkouts, updating the base, and verifying its post-merge contracts.
 disable-model-invocation: true
 ---
 
@@ -9,8 +9,28 @@ disable-model-invocation: true
 ## Resolve the PR
 
 Use the explicit number or URL; otherwise use `gh pr view`. Ask if no single PR
-resolves. Continue only when `gh pr view <number> --json state,body,mergeCommit`
+resolves. Continue only when
+`gh pr view <number> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
 reports `MERGED`.
+
+## Finish the merge
+
+1. Close relevant issues and sub-issues, such as the Spec issue and its
+   breakdown issues.
+2. List worktrees and local branches. A worktree is a cleanup candidate only
+   when its branch equals `headRefName`, `git status --short` is empty, and
+   `HEAD` equals `headRefOid`. A local branch is a candidate only when no
+   worktree uses it and its tip equals `headRefOid`.
+3. Clean up candidates. Use `mt chop <session>` from the source checkout for mt
+   Sessions, only when every member is clean and its work has landed; retain
+   failed teardowns for recovery. Use `git worktree remove <path>` for ordinary
+   worktrees, then delete candidate branches. Never run global `mt cleanup` here.
+4. Run `git fetch origin`. In a clean checkout already on `baseRefName`, run
+   `git pull --ff-only origin <baseRefName>`. Switch a retained PR checkout to
+   `baseRefName`, and leave other checkouts on their branches.
+
+Never delete dirty work, trust git ancestry alone for squash merges, or use
+`git reset --hard`, `git clean`, or forced worktree removal.
 
 ## Load the contracts
 
@@ -58,5 +78,10 @@ Run every check from each applicable contract and record its result and evidence
 On a failed gate or check, investigate with `$diagnosing-bugs`. For a repo-owned
 defect, open a root-cause fix PR with `$pr`, linking the merged PR.
 
-Report the contract sources, each check's result and evidence, any fix PR or
-release PR handoff, and any skip reason.
+## Settle and report
+
+In T3 Code, settle the thread with `t3_thread_organize` once nothing remains
+open in it, such as a fix PR, a release PR handoff, or a pending question.
+
+Report the base update, removals, skipped cleanup, contract sources, each check's
+result and evidence, any fix PR or release PR handoff, and any skip reason.
