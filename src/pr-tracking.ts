@@ -130,12 +130,16 @@ async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<stri
   return await withTrackedPrsLock(runtime, async () => {
     const file = trackedPrsPath(runtime);
     const current = readTrackedPrs(file);
-    const stillTracked = current.some((candidate) => candidate.url === pr.url);
+
+    // Hand off the record as it is now, since `track` may have replaced its thread or checkout.
+    const record = current.find((candidate) => candidate.url === pr.url);
 
     const failure =
-      stillTracked && state === "MERGED" ? await handOffPostMerge(runtime, t3, pr) : undefined;
+      record !== undefined && state === "MERGED"
+        ? await handOffPostMerge(runtime, t3, record)
+        : undefined;
 
-    if (stillTracked && failure === undefined) {
+    if (record !== undefined && failure === undefined) {
       writeTrackedPrs(
         file,
         current.filter((candidate) => candidate.url !== pr.url)

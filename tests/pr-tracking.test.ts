@@ -157,6 +157,26 @@ describe("mt prs", () => {
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });
 
+  it("hands off the current record when the PR is re-tracked during a poll", async () => {
+    const sandbox = createSandbox();
+    const state = path.join(sandbox.monkeHome, "tracked-prs.json");
+    const t3Calls = installRecordingCommand(sandbox, "t3");
+    await track(sandbox, 5);
+
+    // Re-track with another thread while poll waits on GitHub, as a concurrent `track` would.
+    installRecordingCommand(
+      sandbox,
+      "gh",
+      `sed 's/thread-5/thread-6/' '${state}' > '${state}.new' && mv '${state}.new' '${state}'\nprintf '{"state":"MERGED"}\\n'`
+    );
+
+    await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
+      `Sent post-merge for ${prUrl(5)} to thread thread-6\n`
+    );
+    expect(t3Calls()[0]?.slice(0, 3)).toStrictEqual(["thread", "send", "thread-6"]);
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
+  });
+
   it("keeps a PR tracked when GitHub cannot be read", async () => {
     const sandbox = createSandbox();
     installFakeGh(sandbox, {});
