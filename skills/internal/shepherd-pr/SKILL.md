@@ -10,6 +10,10 @@ coverage against its current head commit.
 
 Use `watch_pull_request` while waiting for CI or reviews.
 
+Unwatch when you hand off. A watched thread stays in Working and out of the
+user's inbox. When you stop (ready, blocked, or asking the user a question),
+call `unwatch_pull_request` first. A merge or close ends the watch on its own.
+
 ## Observe
 
 On each run, check PR state before CI or reviews.
