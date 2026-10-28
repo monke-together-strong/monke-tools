@@ -5,11 +5,10 @@ import { isDeepStrictEqual } from "node:util";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
+import { schedulePoll, unschedulePoll } from "./poll-scheduler.ts";
 import { findExecutable, getHomeDirectory, getMonkeHome, withScopedLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-const POLLER_LABEL = "com.monke-together-strong.mt-prs-poll";
-const POLL_INTERVAL_SECONDS = 300;
 const T3_TIMEOUT_SECONDS = 60;
 
 const PULL_REQUEST_URL =
@@ -66,17 +65,21 @@ export async function runPrsTrack(
     record
   ]);
   runtime.writeStdout(`Tracking ${record.url}\n`);
+  schedulePoll(runtime);
 }
 
 /** Stop tracking a PR, such as right before an agent merges it. */
 export async function runPrsUntrack(runtime: Runtime, url: string) {
   const { url: canonicalUrl } = parsePullRequestUrl(url);
   let removed: TrackedPr | undefined;
+  let remaining = 0;
 
   await updateTrackedPrs(runtime, (prs) => {
     removed = prs.find((tracked) => tracked.url === canonicalUrl);
+    const kept = prs.filter((tracked) => tracked.url !== canonicalUrl);
+    remaining = kept.length;
 
-    return prs.filter((tracked) => tracked.url !== canonicalUrl);
+    return kept;
   });
 
   runtime.writeStdout(
@@ -84,6 +87,10 @@ export async function runPrsUntrack(runtime: Runtime, url: string) {
       ? `Not tracked: ${canonicalUrl}\n`
       : `Untracked ${canonicalUrl} (thread ${removed.thread}, checkout ${removed.checkout})\n`
   );
+
+  if (remaining === 0) {
+    unschedulePoll(runtime);
+  }
 }
 
 export function runPrsList(runtime: Runtime) {
@@ -97,18 +104,22 @@ export function runPrsList(runtime: Runtime) {
  * read or hand-off fails stays tracked for the next poll.
  */
 export async function runPrsPoll(runtime: Runtime) {
-  const tracked = readTrackedPrs(trackedPrsPath(runtime));
+  const file = trackedPrsPath(runtime);
+  const tracked = readTrackedPrs(file);
 
-  if (tracked.length === 0) {
-    return;
+  if (tracked.length > 0) {
+    const t3 = resolveT3Cli(runtime);
+    const results = await Promise.all(tracked.map(async (pr) => await pollPr(runtime, t3, pr)));
+    const failures = results.filter((failure) => failure !== undefined);
+
+    if (failures.length > 0) {
+      throw new MonkeError(failures.join("\n"));
+    }
   }
 
-  const t3 = resolveT3Cli(runtime);
-  const results = await Promise.all(tracked.map(async (pr) => await pollPr(runtime, t3, pr)));
-  const failures = results.filter((failure) => failure !== undefined);
-
-  if (failures.length > 0) {
-    throw new MonkeError(failures.join("\n"));
+  // Last step: a launchd poll that unschedules itself is stopped by launchd.
+  if (readTrackedPrs(file).length === 0) {
+    unschedulePoll(runtime);
   }
 }
 
@@ -218,105 +229,6 @@ function resolveT3Cli(runtime: Runtime) {
   }
 
   return t3;
-}
-
-/** Install a launchd agent that runs `mt prs poll` every five minutes. */
-export function runPrsInstall(runtime: Runtime) {
-  if (runtime.platform !== "darwin") {
-    throw new MonkeError("mt prs install supports macOS launchd only");
-  }
-
-  const mt = findExecutable("mt", runtime.env);
-
-  if (mt === null) {
-    throw new MonkeError("mt was not found on PATH");
-  }
-
-  const plist = launchAgentPath(runtime);
-  const log = path.join(getMonkeHome(runtime), "logs", "prs-poll.log");
-  mkdirSync(path.dirname(plist), { recursive: true });
-  mkdirSync(path.dirname(log), { recursive: true });
-
-  writeFileSync(
-    plist,
-    launchAgentPlist({
-      environment: {
-        PATH: runtime.env.PATH ?? "",
-        ...(runtime.env.MONKE_HOME === undefined ? {} : { MONKE_HOME: getMonkeHome(runtime) })
-      },
-      log,
-      programArguments: [mt, "prs", "poll"]
-    })
-  );
-
-  const domain = launchdDomain();
-  runtime.exec("launchctl", ["bootout", `${domain}/${POLLER_LABEL}`], { allowFailure: true });
-  runtime.exec("launchctl", ["bootstrap", domain, plist]);
-  runtime.writeStdout(
-    `Installed ${plist}; mt prs poll runs every ${POLL_INTERVAL_SECONDS / 60} minutes and logs to ${log}\n`
-  );
-}
-
-export function runPrsUninstall(runtime: Runtime) {
-  const plist = launchAgentPath(runtime);
-  runtime.exec("launchctl", ["bootout", `${launchdDomain()}/${POLLER_LABEL}`], {
-    allowFailure: true
-  });
-  rmSync(plist, { force: true });
-  runtime.writeStdout(`Removed ${plist}\n`);
-}
-
-function launchAgentPath(runtime: Runtime) {
-  return path.join(getHomeDirectory(runtime), "Library", "LaunchAgents", `${POLLER_LABEL}.plist`);
-}
-
-function launchdDomain() {
-  return `gui/${process.getuid?.() ?? 0}`;
-}
-
-function launchAgentPlist(options: {
-  environment: Record<string, string>;
-  log: string;
-  programArguments: string[];
-}) {
-  const strings = (values: string[]) =>
-    values.map((value) => `    <string>${escapeXml(value)}</string>`).join("\n");
-
-  const environment = Object.entries(options.environment)
-    .map(
-      ([key, value]) => `    <key>${escapeXml(key)}</key>\n    <string>${escapeXml(value)}</string>`
-    )
-    .join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>${POLLER_LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-${strings(options.programArguments)}
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-${environment}
-  </dict>
-  <key>StartInterval</key>
-  <integer>${POLL_INTERVAL_SECONDS}</integer>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>${escapeXml(options.log)}</string>
-  <key>StandardErrorPath</key>
-  <string>${escapeXml(options.log)}</string>
-</dict>
-</plist>
-`;
-}
-
-function escapeXml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function parsePullRequestUrl(url: string) {

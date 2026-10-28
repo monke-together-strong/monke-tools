@@ -15,14 +15,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
-import {
-  runPrsInstall,
-  runPrsList,
-  runPrsPoll,
-  runPrsTrack,
-  runPrsUninstall,
-  runPrsUntrack
-} from "./pr-tracking.ts";
+import { runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -173,20 +166,6 @@ function createProgram(runtime: Runtime) {
     .command("poll")
     .description("Hand externally merged PRs to their threads for post-merge")
     .action(() => runPrsPoll(runtime));
-
-  prs
-    .command("install")
-    .description("Run mt prs poll every five minutes with launchd")
-    .action(() => {
-      runPrsInstall(runtime);
-    });
-
-  prs
-    .command("uninstall")
-    .description("Remove the mt prs poll launchd agent")
-    .action(() => {
-      runPrsUninstall(runtime);
-    });
 
   program
     .command("chop")

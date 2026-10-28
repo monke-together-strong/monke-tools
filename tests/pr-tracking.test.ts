@@ -12,9 +12,11 @@ const prUrl = (number: number) => `https://github.com/o/r/pull/${number}`;
 interface Sandbox {
   bin: string;
   home: string;
+  launchctl: () => string[][];
   monkeHome: string;
   skill: string;
   source: string;
+  systemctl: () => string[][];
   worktree: string;
 }
 
@@ -27,14 +29,23 @@ function createSandbox(): Sandbox {
   const skill = path.join(monkeHome, "skill-registry/skills/internal/post-merge/SKILL.md");
   writeExecutable(skill, "Post-merge.\n");
 
-  return {
+  const sandbox: Sandbox = {
     bin: path.join(root, "bin"),
     home: path.join(root, "home"),
+    launchctl: () => [],
     monkeHome,
     skill,
     source,
+    systemctl: () => [],
     worktree: realpathSync.native(worktree)
   };
+
+  // Fake schedulers keep tracking from loading a real launchd or systemd job.
+  sandbox.launchctl = installRecordingCommand(sandbox, "launchctl");
+  sandbox.systemctl = installRecordingCommand(sandbox, "systemctl");
+  installRecordingCommand(sandbox, "mt");
+
+  return sandbox;
 }
 
 async function mt(
@@ -91,16 +102,12 @@ function installFakeGh(sandbox: Sandbox, states: Record<number, string>) {
   );
 }
 
-async function track(sandbox: Sandbox, number: number, checkout = sandbox.worktree) {
-  await mt(sandbox, [
-    "prs",
-    "track",
-    prUrl(number),
-    "--thread",
-    `thread-${number}`,
-    "--checkout",
-    checkout
-  ]);
+async function track(sandbox: Sandbox, number: number, platform?: NodeJS.Platform) {
+  await mt(
+    sandbox,
+    ["prs", "track", prUrl(number), "--thread", `thread-${number}`, "--checkout", sandbox.worktree],
+    platform
+  );
 }
 
 describe("mt prs", () => {
@@ -204,27 +211,55 @@ describe("mt prs", () => {
     await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(4));
   });
 
-  it("installs a launchd agent that polls every five minutes", async () => {
+  it("schedules the poll with launchd while any PR is tracked", async () => {
     const sandbox = createSandbox();
-    const launchctlCalls = installRecordingCommand(sandbox, "launchctl");
-    installRecordingCommand(sandbox, "mt");
 
-    await mt(sandbox, ["prs", "install"], "darwin");
-
-    const plist = readFileSync(
-      path.join(
-        sandbox.home,
-        "Library",
-        "LaunchAgents",
-        "com.monke-together-strong.mt-prs-poll.plist"
-      ),
-      "utf-8"
+    const plist = path.join(
+      sandbox.home,
+      "Library/LaunchAgents/com.monke-together-strong.mt-prs-poll.plist"
     );
 
-    expect(plist).toContain(
+    await track(sandbox, 1, "darwin");
+    await track(sandbox, 2, "darwin");
+
+    expect(readFileSync(plist, "utf-8")).toContain(
       `<string>${path.join(sandbox.bin, "mt")}</string>\n    <string>prs</string>\n    <string>poll</string>`
     );
-    expect(plist).toContain("<key>StartInterval</key>\n  <integer>300</integer>");
-    expect(launchctlCalls().map((call) => call[0])).toStrictEqual(["bootout", "bootstrap"]);
+    expect(sandbox.launchctl().map((call) => call[0])).toStrictEqual(["bootout", "bootstrap"]);
+
+    await mt(sandbox, ["prs", "untrack", prUrl(1)], "darwin");
+    installFakeGh(sandbox, { 2: "MERGED" });
+    installRecordingCommand(sandbox, "t3");
+    await mt(sandbox, ["prs", "poll"], "darwin");
+
+    expect(existsSync(plist)).toBeFalsy();
+    expect(sandbox.launchctl().map((call) => call[0])).toStrictEqual([
+      "bootout",
+      "bootstrap",
+      "bootout"
+    ]);
+  });
+
+  it("schedules the poll with a systemd user timer on Linux", async () => {
+    const sandbox = createSandbox();
+    const units = path.join(sandbox.home, ".config/systemd/user");
+    await track(sandbox, 1, "linux");
+
+    expect(readFileSync(path.join(units, "mt-prs-poll.service"), "utf-8")).toContain(
+      `ExecStart="${path.join(sandbox.bin, "mt")}" prs poll`
+    );
+    expect(readFileSync(path.join(units, "mt-prs-poll.timer"), "utf-8")).toContain(
+      "OnCalendar=*:0/5"
+    );
+
+    await mt(sandbox, ["prs", "untrack", prUrl(1)], "linux");
+
+    expect(existsSync(path.join(units, "mt-prs-poll.timer"))).toBeFalsy();
+    expect(sandbox.systemctl()).toStrictEqual([
+      ["--user", "daemon-reload"],
+      ["--user", "enable", "--now", "mt-prs-poll.timer"],
+      ["--user", "disable", "--now", "mt-prs-poll.timer"],
+      ["--user", "daemon-reload"]
+    ]);
   });
 });

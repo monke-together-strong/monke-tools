@@ -121,13 +121,9 @@ the whole Session.
 ## Run post-merge after external merges
 
 In T3 Code, agents track the PRs they open with `mt prs track` and untrack a PR
-before merging it themselves. Install the poller once on macOS:
-
-```bash
-mt prs install    # Run mt prs poll every five minutes with launchd
-mt prs list       # Show tracked PRs
-mt prs uninstall  # Remove the poller
-```
+before merging it themselves. While any PR is tracked, `mt prs poll` runs every
+five minutes through launchd on macOS or a systemd user timer on Linux; `mt prs
+list` shows tracked PRs.
 
 When a tracked PR merges outside its thread, `mt prs poll` asks that thread to
 run [post-merge](skills/internal/post-merge/SKILL.md), or starts a thread in the
