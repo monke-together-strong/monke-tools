@@ -37,8 +37,9 @@ Never delete dirty work, trust git ancestry alone for squash merges, or use
 A contract names the environment, deployment gate, and checks. Apply both
 sources:
 
-- **Repository contract**: root `POST_MERGE.md` when present. It covers every
-  merged PR within the scope it states.
+- **Repository contract**: root `POST_MERGE.md` at the merge commit, read with
+  `git show <mergeCommit>:POST_MERGE.md`, when present. It covers every merged
+  PR within the scope it states.
 - **PR contract**: the `## Post-Merge Verification` section of the PR body. It
   adds PR-specific checks. `Not required: <reason>` waives only this section.
 
