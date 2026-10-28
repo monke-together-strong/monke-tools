@@ -425,6 +425,28 @@ export async function pinnedSkillSource(
   return `${lock.repository}#${lock.commit}`;
 }
 
+/** Serve the importer's refetches of a remote source from the checkout already fetched at its pin. */
+function redirectFetchesToCheckout(
+  runtime: Runtime,
+  repository: string,
+  checkout: string
+): Runtime {
+  // Append to inherited Git config parameters rather than replacing them.
+  const index = Number(runtime.env.GIT_CONFIG_COUNT ?? 0);
+
+  const env = {
+    [`GIT_CONFIG_KEY_${index}`]: `url.${checkout}.insteadOf`,
+    [`GIT_CONFIG_VALUE_${index}`]: repository,
+    GIT_CONFIG_COUNT: String(index + 1)
+  };
+
+  return {
+    ...runtime,
+    execAsync: (command, args, execOptions) =>
+      runtime.execAsync(command, args, { ...execOptions, env: { ...env, ...execOptions?.env } })
+  };
+}
+
 function validateUpstreamLinks(checkout: string) {
   const root = realpathSync.native(checkout);
   const gitDirectory = path.join(root, ".git");
@@ -503,7 +525,7 @@ export async function stageGitSkillSource(options: {
       imported,
       rejectAmbiguousSelection: options.rejectAmbiguousSelection,
       retainedSkills: options.retainSelection ? options.previousRecipe?.skills : undefined,
-      runtime,
+      runtime: redirectFetchesToCheckout(runtime, descriptor.repository, checkout),
       selectFromCollection: options.selectFromCollection,
       selectors,
       source,
@@ -1332,7 +1354,7 @@ export async function restoreLockedImports(
     ignoreRepoImports(repoRoot, runtime);
   }
 
-  const restore = pLimit(4);
+  const restore = pLimit(8);
   const stagingDirectories: string[] = [];
 
   try {
