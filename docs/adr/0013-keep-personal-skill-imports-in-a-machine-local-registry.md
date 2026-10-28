@@ -5,7 +5,8 @@ recipes are now monke-tools' Repo import recipes in `monke.yml`.
 
 Installation also updates a retained source at the bundled pin. It applies
 monke-tools' Import kind changes and, unless the registry narrowed that source's
-selection, adds newly declared skills and references.
+selection, adds newly declared skills and references. At another pin, it only
+converts retained skills that monke-tools made references.
 
 Personal and private guidance, including course-provided skills, must be usable
 without adding its content or import recipes to the public monke-tools

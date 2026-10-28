@@ -1239,22 +1239,31 @@ skillInstallPreference:
     }
   );
 
-  it.each(["unnarrowed", "narrowed"] as const)(
-    "follows publisher changes to a retained bundled source whose selection is %s during Local install refresh",
-    async (selection) => {
+  it.each(["unnarrowed", "narrowed", "repinned", "interrupted"] as const)(
+    "follows publisher changes to a %s retained bundled source during Local install refresh",
+    async (retained) => {
       const sandbox = makeTempDir("local-install-bundled-changes");
       const home = path.join(sandbox, "home");
       const monkeHome = path.join(sandbox, "monke-home");
       const sourceCheckout = path.join(sandbox, "source");
       const source = "https://example.com/bundled";
       const skill = (slug: string) => ({ kind: "skill" as const, selector: slug, slug });
+
+      const reference = {
+        kind: "reference" as const,
+        selector: "engineering/diagnose",
+        slug: "diagnose"
+      };
+
+      const repinned = retained === "repinned" || retained === "interrupted";
       prepareSource(sourceCheckout);
 
       const publish = (
-        skills: { kind: "reference" | "skill"; selector: string; slug: string }[]
+        skills: { kind: "reference" | "skill"; selector: string; slug: string }[],
+        commit = "0".repeat(40)
       ) => {
         writeRepoImportRecipeStore(sourceCheckout, {
-          recipes: [{ commit: "0".repeat(40), skills, source }],
+          recipes: [{ commit, skills, source }],
           version: 4
         });
 
@@ -1289,7 +1298,7 @@ skillInstallPreference:
       );
       const registry = path.join(monkeHome, "skill-registry");
 
-      if (selection === "narrowed") {
+      if (retained === "narrowed") {
         const store = readImportRecipeStore(registry);
         writeImportRecipeStore(registry, {
           ...store,
@@ -1298,14 +1307,21 @@ skillInstallPreference:
       }
 
       rmSync(path.join(sourceCheckout, "skills/imported/diagnose"), { recursive: true });
-      write(sourceCheckout, "skills/references/imported/diagnose/MAIN.md", "Upstream.\n");
+      write(sourceCheckout, "skills/references/imported/diagnose/MAIN.md", "Bundled.\n");
       write(sourceCheckout, "skills/imported/teach/SKILL.md", "---\nname: teach\n---\nTeach.\n");
       write(
         sourceCheckout,
         "skills/internal/diagnose/SKILL.md",
         "---\nname: diagnose\n---\nWrap.\n"
       );
-      publish([{ ...skill("diagnose"), kind: "reference" }, skill("teach"), skill("tidy")]);
+      publish([reference, skill("teach"), skill("tidy")], (repinned ? "1" : "0").repeat(40));
+
+      if (retained === "interrupted") {
+        // A failed installation converted the skill before recording the reference.
+        rmSync(path.join(registry, "skills/imported/diagnose"), { recursive: true });
+        write(registry, "skills/references/imported/diagnose/MAIN.md", "Upstream.\n");
+      }
+
       await activateLocal({
         home,
         installId: "local-second",
@@ -1315,19 +1331,21 @@ skillInstallPreference:
       });
 
       const [recipe] = readImportRecipeStore(registry).recipes;
+      expect(recipe?.commit).toBe("0".repeat(40));
       expect(recipe?.skills).toStrictEqual(
-        selection === "narrowed"
-          ? [{ ...skill("diagnose"), kind: "reference" }, skill("tidy")]
-          : readImportRecipeStore(sourceCheckout).recipes[0]?.skills
+        retained === "unnarrowed"
+          ? readImportRecipeStore(sourceCheckout).recipes[0]?.skills
+          : [repinned ? { ...reference, selector: "diagnose" } : reference, skill("tidy")]
       );
       expect(existsSync(path.join(registry, "skills/imported/diagnose"))).toBeFalsy();
       expect(readFileSync(path.join(home, ".claude/skills/diagnose/SKILL.md"), "utf-8")).toContain(
         "Wrap."
       );
+      // Another pin's bundled bytes would misstate the retained recipe.
       expect(
         readFileSync(path.join(home, ".claude/references/imported/diagnose/MAIN.md"), "utf-8")
-      ).toBe("Upstream.\n");
-      expect(existsSync(path.join(home, ".claude/skills/teach"))).toBe(selection === "unnarrowed");
+      ).toBe(repinned ? "Upstream.\n" : "Bundled.\n");
+      expect(existsSync(path.join(home, ".claude/skills/teach"))).toBe(retained === "unnarrowed");
     }
   );
 
