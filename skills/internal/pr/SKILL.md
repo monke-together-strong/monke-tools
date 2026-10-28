@@ -70,7 +70,8 @@ template or unexpected in a way that affects review.
   comparisons and group multiple screenshots by claim. Number workflow states.
   Choose side-by-side or stacked layouts based on readability.
 - For correctness that requires deployment, include `## Post-Merge Verification`
-  with the environment, deployment gate, and concrete checks.
+  with any environment, deployment gate, and concrete checks that root
+  `POST_MERGE.md` does not already cover.
 
 ## Publish and verify
 

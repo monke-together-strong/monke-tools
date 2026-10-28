@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a GitHub PR after an explicit "merge" request, then clean up only proven-clean local PR worktrees or branches, switch to the PR base branch, and pull latest.
+description: Merge a GitHub PR after an explicit "merge" request.
 ---
 
 # Merge PR
@@ -15,13 +15,7 @@ A direct "merge this PR" / "merge PR #123" is approval.
 4. Close relevant issues and sub-issues - for instance, Spec issue, and breakdown issues of that Spec.
 5. Clean up proven candidates: use `mt chop <session>` from the source checkout for mt Sessions, only when every member is clean and its work has landed; retain failed teardowns for recovery. Use `git worktree remove <path>` for ordinary separate PR worktrees. Delete the PR branch only when unused and still at `headRefOid`. Keep the source checkout after chopping, or switch a retained PR checkout to `baseRefName`. Never run global `mt cleanup` here.
 6. Update the surviving checkout: use the checkout that remains open for the user after cleanup; run `git fetch origin`, `git switch <baseRefName>` if needed, then `git pull --ff-only origin <baseRefName>`.
-7. Execute any post-merge contract from the merged PR body.
-   - Use only `## Post-Merge Verification` from `gh pr view <number> --json body` as the contract source.
-   - If the section says `Not required: <reason>`, report that reason and skip verification.
-   - If the section is absent, inspect the merged change and task requirements. Skip with a reason when pre-merge evidence is sufficient (for example, docs or a local CLI cleanup). If correctness depends on deployment, migration, or the target environment, ask for the missing contract.
-   - If a required contract lacks the environment, deployment gate, or checks, ask for the missing details.
-   - Wait for the deployment gate when the section gives a discoverable signal; otherwise ask before testing.
-   - Run the listed checks and record pass/fail evidence for each one.
+7. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
 8. In T3 Code, settle the thread via `t3_thread_organize` once nothing remains open in it, such as another PR or a pending question.
 
 Never delete dirty work, trust git ancestry alone for squash merges, assume the base is `main`, or use `git reset --hard`, `git clean`, or forced worktree removal. Report the PR URL, merge method, base update, removals, post-merge verification, and any skipped cleanup.
