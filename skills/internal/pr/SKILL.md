@@ -46,9 +46,12 @@ Lead with the problem and resulting behavior. A simple change usually needs one
 or two sentences. Aim for under 200 words; expand only for a concrete review
 decision or required template field.
 
-For changes to component interactions, state transitions, schemas, API contracts,
-or key data structures, invoke `$show-me` for a small GitHub-renderable view.
-Use prose alone for simple local changes.
+For changes to public API or configuration contract, show code blocks of what a
+consumer writes.
+
+For changes to component interactions, such as a new extension point, or runtime compnent,
+or state transitions, schemas, or key data structures, apply [show-me](../../imported/show-me/SKILL.md).
+It should complement the consumer code blocks. Use prose alone for simple changes.
 
 Describe the final implementation. Keep investigation history and reviewer
 bookkeeping in work records. Keep each fact in one place and remove prose that

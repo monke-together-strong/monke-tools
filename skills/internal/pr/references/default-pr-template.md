@@ -14,7 +14,7 @@ result or limitation.
 
 ## Evidence
 
-<Decisive behavior evidence, a meaningful benchmark, or a material verification limitation.>
+<Code blocks and view from Chooose the explaination, when it calls for them.>
 ```
 
 For visual proof or deployment-dependent changes, use the sections required by
