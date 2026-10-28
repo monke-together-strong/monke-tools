@@ -27,6 +27,7 @@ Use the listed default unless an exception applies. Completion requires one of t
 - `@base-ui/react`: Use as the default primitive layer for accessible React UI behavior, including shadcn-style components that need low-level primitives.
 - `tailwindcss`: Use for utility-first styling, design tokens, responsive layout, and component styling.
 - `cn`: Use to merge Tailwind class names instead of `clsx` + `tailwind-merge`.
+- `@hugeicons/react`: Use with `@hugeicons/core-free-icons` for React icons instead of `lucide-react`. In shadcn projects, set `iconLibrary` to `hugeicons` in `components.json` so added components import Hugeicons.
 
 ## Keyboard Shortcuts And Interaction
 

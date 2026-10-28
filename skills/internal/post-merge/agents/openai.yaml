@@ -1,0 +1,5 @@
+interface:
+  display_name: "Post-Merge"
+  short_description: "Finish and verify a merged PR"
+policy:
+  allow_implicit_invocation: false

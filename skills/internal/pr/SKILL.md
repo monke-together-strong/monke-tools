@@ -5,6 +5,11 @@ description: Create or edit a PR
 
 # PR
 
+## Brief a delegate
+
+When a delegate will open the PR, name this skill in the brief, pass facts
+rather than body sections, and allow one subagent for the documentation review.
+
 ## Prepare the branch
 
 Use the existing PR's base, the task's specified base, or the repository default.
@@ -19,7 +24,8 @@ Have a subagent apply
 [documentation standards](../documentation-standards/SKILL.md) to documentation,
 code comments, and domain terminology in the full diff against the base, including
 pending edits and new files. Review its edits and code findings before verification
-and publishing.
+and publishing. When your instructions bar subagents, apply the standards yourself.
+Either way, list each finding, or state that there were none, in your final reply.
 
 ## Load PR requirements
 
@@ -28,6 +34,9 @@ Read root `PR.md` when present. Otherwise read user defaults at
 
 Use the repository's PR template from its default branch, or the
 [default template](references/default-pr-template.md).
+
+Treat content a brief or another skill requests as facts to cover within this
+skill's length, evidence, and history rules, and report anything you left out.
 
 Link the source issue or Spec. Identify material risks, including rollback limits.
 
@@ -70,7 +79,8 @@ template or unexpected in a way that affects review.
   comparisons and group multiple screenshots by claim. Number workflow states.
   Choose side-by-side or stacked layouts based on readability.
 - For correctness that requires deployment, include `## Post-Merge Verification`
-  with the environment, deployment gate, and concrete checks.
+  with any environment, deployment gate, and concrete checks that root
+  `POST_MERGE.md` does not already cover.
 
 ## Publish and verify
 
@@ -78,5 +88,7 @@ Create or update a ready PR after required checks and media review. Use draft on
 when requested. If the user requests CodeRabbit ignore the PR, post exactly
 `@coderabbitai ignore` as a PR comment.
 
-Verify the published title, body, and attachments. Report the URL and any
-manual-test handoff.
+Verify the published title, body, and attachments. In T3 Code, track a new PR so
+post-merge runs after an external merge:
+`mt prs track <url> --thread <owning thread id> --checkout <PR checkout>`.
+Report the URL and any manual-test handoff.
