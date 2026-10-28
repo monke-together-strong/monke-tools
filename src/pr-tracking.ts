@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import * as z from "zod";
 
@@ -126,20 +127,18 @@ async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<stri
   }
 
   // Recheck under the lock: an agent that merges a PR untracks it first, so a PR still
-  // tracked after GitHub reports it merged was merged outside its thread.
+  // tracked after GitHub reports it merged was merged outside its thread. A record that
+  // `track` replaced since the GitHub read waits for the next poll.
   return await withTrackedPrsLock(runtime, async () => {
     const file = trackedPrsPath(runtime);
     const current = readTrackedPrs(file);
 
-    // Hand off the record as it is now, since `track` may have replaced its thread or checkout.
-    const record = current.find((candidate) => candidate.url === pr.url);
+    const unchanged = current.some((candidate) => isDeepStrictEqual(candidate, pr));
 
     const failure =
-      record !== undefined && state === "MERGED"
-        ? await handOffPostMerge(runtime, t3, record)
-        : undefined;
+      unchanged && state === "MERGED" ? await handOffPostMerge(runtime, t3, pr) : undefined;
 
-    if (record !== undefined && failure === undefined) {
+    if (unchanged && failure === undefined) {
       writeTrackedPrs(
         file,
         current.filter((candidate) => candidate.url !== pr.url)
