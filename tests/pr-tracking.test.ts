@@ -60,7 +60,9 @@ async function mt(
     env: {
       HOME: sandbox.home,
       MONKE_HOME: sandbox.monkeHome,
-      PATH: `${sandbox.bin}${path.delimiter}${process.env.PATH ?? ""}`
+      PATH: `${sandbox.bin}${path.delimiter}${process.env.PATH ?? ""}`,
+      // The runtime inherits the process environment, so pin systemd's user directory too.
+      XDG_CONFIG_HOME: path.join(sandbox.home, ".config")
     },
     onStdout(text) {
       stdout += text;
