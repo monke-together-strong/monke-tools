@@ -70,7 +70,7 @@ skills:
     source: https://github.com/t3dotgg/tstack
     skills:
       - slug: council
-        modelInvocation: deny
+        kind: reference
   - acceptOpenClawRisks: true
     commit: 3b7f365f91c5e7f31ae9825a641775d393cbc654
     source: openclaw/agent-skills

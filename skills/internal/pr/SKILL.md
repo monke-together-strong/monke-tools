@@ -5,6 +5,11 @@ description: Create or edit a PR
 
 # PR
 
+## Brief a delegate
+
+When a delegate will open the PR, name this skill in the brief, pass facts
+rather than body sections, and allow one subagent for the documentation review.
+
 ## Prepare the branch
 
 Use the existing PR's base, the task's specified base, or the repository default.
@@ -19,7 +24,8 @@ Have a subagent apply
 [documentation standards](../documentation-standards/SKILL.md) to documentation,
 code comments, and domain terminology in the full diff against the base, including
 pending edits and new files. Review its edits and code findings before verification
-and publishing.
+and publishing. When your instructions bar subagents, apply the standards yourself.
+Either way, list each finding, or state that there were none, in your final reply.
 
 ## Load PR requirements
 
@@ -28,6 +34,9 @@ Read root `PR.md` when present. Otherwise read user defaults at
 
 Use the repository's PR template from its default branch, or the
 [default template](references/default-pr-template.md).
+
+Treat content a brief or another skill requests as facts to cover within this
+skill's length, evidence, and history rules, and report anything you left out.
 
 Link the source issue or Spec. Identify material risks, including rollback limits.
 
