@@ -41,12 +41,21 @@ export function schedulePoll(runtime: Runtime) {
 
   mkdirSync(path.dirname(pollLogPath(runtime)), { recursive: true });
 
-  for (const [file, contents] of Object.entries(job.files)) {
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, contents);
-  }
+  try {
+    for (const [file, contents] of Object.entries(job.files)) {
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, contents);
+    }
 
-  job.load();
+    job.load();
+  } catch (cause) {
+    // Leave no marker behind, so the next `track` retries the install.
+    for (const file of Object.keys(job.files)) {
+      rmSync(file, { force: true });
+    }
+
+    throw cause;
+  }
 }
 
 /** Remove the scheduled poll, such as when no PR is tracked. */

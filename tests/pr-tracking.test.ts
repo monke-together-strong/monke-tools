@@ -242,6 +242,22 @@ describe("mt prs", () => {
     ]);
   });
 
+  it("retries scheduling on the next track when loading the job fails", async () => {
+    const sandbox = createSandbox();
+
+    const plist = path.join(
+      sandbox.home,
+      "Library/LaunchAgents/com.monke-together-strong.mt-prs-poll.plist"
+    );
+
+    installRecordingCommand(sandbox, "launchctl", '[ "$1" = "bootstrap" ] && exit 1\nexit 0');
+
+    await expect(track(sandbox, 1, "darwin")).rejects.toThrow(
+      "Command failed: launchctl bootstrap"
+    );
+    expect(existsSync(plist)).toBeFalsy();
+  });
+
   it("schedules the poll with a systemd user timer on Linux", async () => {
     const sandbox = createSandbox();
     const units = path.join(sandbox.home, ".config/systemd/user");
