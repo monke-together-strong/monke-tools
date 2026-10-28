@@ -71,6 +71,8 @@ return to observation. For the current head, require all of the following:
   evidenced external cause.
 - Required reviews and automatic reviews that started have finished. Optional
   non-starters are recorded as unavailable, and existing feedback is triaged.
+- Every reviewer thread you replied to has an answer, or five minutes have
+  passed without one.
 - No required changes or meaningful findings remain, and the PR is mergeable.
 
 With explicit merge authorization, including standing instructions such as
