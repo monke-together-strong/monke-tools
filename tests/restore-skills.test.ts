@@ -65,16 +65,22 @@ cp -R "$4/skills/shared" .agents/skills/shared
   it("serves importer fetches of a remote source from its pinned checkout", async () => {
     const sandbox = makeTempDir("remote-skill-restore");
 
+    const skill = (body: string) =>
+      `---\nname: remote\ndescription: Remote fixture.\n---\n${body}\n`;
+
     const upstream = createRepo(path.join(sandbox, "upstream"), {
-      "skills/remote/SKILL.md": "---\nname: remote\ndescription: Remote fixture.\n---\nRemote.\n"
+      "skills/remote/SKILL.md": skill("Pinned.")
     });
 
+    const commit = git(upstream, ["rev-parse", "HEAD"]);
+    write(upstream, "skills/remote/SKILL.md", skill("Latest."));
+    git(upstream, ["commit", "-am", "advance upstream"]);
     const target = path.join(sandbox, "target");
 
     writeImportRecipeStore(target, {
       recipes: [
         {
-          commit: git(upstream, ["rev-parse", "HEAD"]),
+          commit,
           skills: [{ kind: "skill", selector: "remote", slug: "remote" }],
           source: "https://example.test/upstream"
         }
@@ -119,7 +125,7 @@ cp -R checkout/skills/remote .agents/skills/remote
       vi.unstubAllEnvs();
     }
 
-    expect(read(target, "skills/imported/remote/SKILL.md")).toContain("Remote.");
+    expect(read(target, "skills/imported/remote/SKILL.md")).toContain("Pinned.");
     const [sourceUrl, siblingUrl] = read(sandbox, "importer-urls").trim().split("\n");
     expect(sourceUrl).toMatch(/\/upstream-validation$/u);
     expect(siblingUrl).toBe(`${sandbox}/sibling`);
