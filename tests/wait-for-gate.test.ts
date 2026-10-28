@@ -164,6 +164,15 @@ describe("waitForGate on a deploy job within a pipeline", () => {
       runs: [run("completed", "success")]
     },
     {
+      expected: { detail: `Deploy skipped; upstream failed: Test: ${url}`, status: "failed" },
+      jobs: [
+        jobs(["Test", "in_progress", null], ["Deploy", "completed", "skipped"]),
+        jobs(["Test", "completed", "failure"], ["Deploy", "completed", "skipped"])
+      ],
+      name: "waits for the run before reporting a skipped deploy job",
+      runs: [run("in_progress")]
+    },
+    {
       expected: { detail: `Deploy is not started: ${url}`, status: "timed_out" },
       jobs: [jobs(["Test", "in_progress", null])],
       name: "times out while the pipeline is still running",
