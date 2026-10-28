@@ -14,7 +14,8 @@ import path from "node:path";
 import {
   assertManagedGuidanceRoots,
   copyStagedGuidanceToManagedRoots,
-  importedGuidancePath
+  importedGuidancePath,
+  transformPreparedReference
 } from "../scripts/import-guidance.ts";
 import {
   normalizeImportRecipeStore,
@@ -512,7 +513,12 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
 
   const imports: BundledImport[] = [
     ...updates,
-    ...additions.map((recipe) => ({ copied: recipe.skills, obsolete: [], recipe }))
+    ...additions.map((recipe) => ({
+      converted: false,
+      copied: recipe.skills,
+      obsolete: [],
+      recipe
+    }))
   ];
 
   const next = normalizeImportRecipeStore({
@@ -531,6 +537,8 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
 
 /** Bundled guidance a registry copies for one recipe, replacing its obsolete items. */
 interface BundledImport {
+  /** Convert the registry's retained skills to the copied references instead of copying bytes. */
+  converted: boolean;
   copied: SkillImportRecipe["skills"];
   obsolete: SkillImportRecipe["skills"];
   recipe: SkillImportRecipe;
@@ -538,23 +546,35 @@ interface BundledImport {
 
 /**
  * Follow the publisher's Import kinds and, for an unnarrowed selection, its added guidance. Bundled
- * bytes match a retained recipe only at the same pin. Items that keep their kind keep their
+ * bytes match a retained recipe only at the same pin. At another pin, only skills that became
+ * references follow, converted from the retained bytes. Items that keep their kind keep their
  * overrides.
  */
 function followBundledRecipe(
   recipe: SkillImportRecipe,
   bundled: SkillImportRecipe
 ): BundledImport | undefined {
-  if (recipe.localSource || !recipe.commit || recipe.commit !== bundled.commit) {
+  if (recipe.localSource || !recipe.commit) {
     return undefined;
   }
 
-  const copied = bundled.skills.filter((declared) => {
+  const converted = recipe.commit !== bundled.commit;
+
+  const copied = bundled.skills.flatMap((declared) => {
     const retained = recipe.skills.find((item) => item.slug === declared.slug);
 
-    return retained
+    if (converted) {
+      // Only the kind follows; the retained selector still resolves at the retained pin.
+      return retained?.kind === "skill" && declared.kind === "reference"
+        ? [{ ...declared, selector: retained.selector }]
+        : [];
+    }
+
+    const follows = retained
       ? retained.kind !== declared.kind
       : !recipe.selection || recipe.selection.includes("*");
+
+    return follows ? [declared] : [];
   });
 
   if (copied.length === 0) {
@@ -565,6 +585,7 @@ function followBundledRecipe(
     copied.some((declared) => declared.slug === item.slug);
 
   return {
+    converted,
     copied,
     obsolete: recipe.skills.filter(replaced),
     recipe: { ...recipe, skills: [...recipe.skills.filter((item) => !replaced(item)), ...copied] }
@@ -572,16 +593,33 @@ function followBundledRecipe(
 }
 
 function copyBundledImports(root: string, guidance: string, imports: BundledImport[]) {
-  for (const { copied, obsolete, recipe } of imports) {
-    for (const item of obsolete) {
-      rmSync(importedGuidancePath(root, item), { force: true, recursive: true });
-    }
-
+  for (const { converted, copied, obsolete, recipe } of imports) {
     for (const item of copied) {
-      const source = importedGuidancePath(guidance, item);
+      const source = converted
+        ? importedGuidancePath(root, { ...item, kind: "skill" })
+        : importedGuidancePath(guidance, item);
+
       const target = importedGuidancePath(root, item);
+
+      if (converted) {
+        // An interrupted conversion may have already replaced its retained skill.
+        if (!existsSync(source)) {
+          continue;
+        }
+
+        rmSync(target, { force: true, recursive: true });
+      }
+
       mkdirSync(path.dirname(target), { recursive: true });
       cpSync(source, target, { recursive: true, verbatimSymlinks: true });
+
+      if (converted) {
+        transformPreparedReference(target);
+      }
+    }
+
+    for (const item of obsolete) {
+      rmSync(importedGuidancePath(root, item), { force: true, recursive: true });
     }
 
     rememberRestoredRecipe(root, recipe);

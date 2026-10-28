@@ -88,5 +88,7 @@ Create or update a ready PR after required checks and media review. Use draft on
 when requested. If the user requests CodeRabbit ignore the PR, post exactly
 `@coderabbitai ignore` as a PR comment.
 
-Verify the published title, body, and attachments. Report the URL and any
-manual-test handoff.
+Verify the published title, body, and attachments. In T3 Code, track a new PR so
+post-merge runs after an external merge:
+`mt prs track <url> --thread <owning thread id> --checkout <PR checkout>`.
+Report the URL and any manual-test handoff.

@@ -54,12 +54,12 @@ In T3 Code, rename the thread with `t3_thread_update` to
 `Verify #<number>: <subject>`, where the subject names the behavior under check
 and its environment, such as `Verify #123: web embeds on production`.
 
-Run [wait-for-gate](scripts/wait-for-gate.ts) on the merge commit and wait for it
-to exit:
+Run [wait-for-gate](scripts/wait-for-gate.ts) from this skill's directory on the
+merge commit, and wait for it to exit:
 
 ```sh
-bun scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
-bun scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --status <context>
+bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
+bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --status <context>
 ```
 
 - **Deployment**: the deploy job within its workflow, or the commit status a

@@ -121,6 +121,8 @@ Global registries start with monke-tools' imports and retain their own selection
 and policies. Installation adds newly bundled sources without replaying personal
 installers. For a retained source at the bundled pin, installation also applies
 monke-tools' Import kind changes. Installation adds newly declared skills and
-references unless the registry narrowed that source's selection. Removing a
+references unless the registry narrowed that source's selection. At another pin,
+installation keeps that pin and only converts retained skills that monke-tools
+made references, so wrappers of the same name can install. Removing a
 source records that choice so later installations leave it removed. Existing
 machine registries migrate to compact recipes on first read.

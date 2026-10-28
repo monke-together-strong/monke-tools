@@ -15,6 +15,14 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import {
+  runPrsInstall,
+  runPrsList,
+  runPrsPoll,
+  runPrsTrack,
+  runPrsUninstall,
+  runPrsUntrack
+} from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -134,6 +142,50 @@ function createProgram(runtime: Runtime) {
     .passThroughOptions()
     .action(async (command, args) => {
       process.exitCode = await runResourcesExec(runtime, command, args);
+    });
+
+  const prs = program
+    .command("prs")
+    .description("Track PRs so post-merge runs after an external merge");
+
+  prs
+    .command("track")
+    .description("Track an open PR with the T3 thread and checkout that own it")
+    .argument("<url>")
+    .requiredOption("--thread <id>", "T3 thread that owns the PR")
+    .requiredOption("--checkout <path>", "Checkout the PR was built in")
+    .action((url, options) => runPrsTrack(runtime, url, options));
+
+  prs
+    .command("untrack")
+    .description("Stop tracking a PR")
+    .argument("<url>")
+    .action((url) => runPrsUntrack(runtime, url));
+
+  prs
+    .command("list")
+    .description("List tracked PRs")
+    .action(() => {
+      runPrsList(runtime);
+    });
+
+  prs
+    .command("poll")
+    .description("Hand externally merged PRs to their threads for post-merge")
+    .action(() => runPrsPoll(runtime));
+
+  prs
+    .command("install")
+    .description("Run mt prs poll every five minutes with launchd")
+    .action(() => {
+      runPrsInstall(runtime);
+    });
+
+  prs
+    .command("uninstall")
+    .description("Remove the mt prs poll launchd agent")
+    .action(() => {
+      runPrsUninstall(runtime);
     });
 
   program
