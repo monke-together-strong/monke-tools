@@ -160,9 +160,13 @@ async function pollWorkflow(
 
   const job = jobs.find((candidate) => candidate.name === gate.job);
 
-  if (job?.status === "completed") {
-    const otherFailedJobs = failedJobs.filter((name) => name !== job.name);
+  const otherFailedJobs = failedJobs.filter((name) => name !== gate.job);
 
+  // A skip is only final once the run ends, since a later failure turns it into an upstream failure.
+  const skipSettled =
+    job?.conclusion !== "skipped" || otherFailedJobs.length > 0 || run.status === "completed";
+
+  if (job?.status === "completed" && skipSettled) {
     return conclude(job.name, job.conclusion, otherFailedJobs, run.html_url);
   }
 
@@ -174,7 +178,10 @@ async function pollWorkflow(
   }
 
   return {
-    detail: `${gate.job} is ${job?.status ?? "not started"}: ${run.html_url}`,
+    detail:
+      job?.conclusion === "skipped"
+        ? `${gate.job} skipped; waiting for ${gate.workflow} to finish: ${run.html_url}`
+        : `${gate.job} is ${job?.status ?? "not started"}: ${run.html_url}`,
     status: "pending"
   };
 }
