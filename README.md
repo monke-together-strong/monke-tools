@@ -118,6 +118,21 @@ mt resources release            # Release allocations after use
 See [resource commands](skills/references/internal/RESOURCES.md) for execution and recovery. Release keeps the checkout and infrastructure; `mt chop` removes
 the whole Session.
 
+## Run post-merge after external merges
+
+In T3 Code, agents track the PRs they open with `mt prs track` and untrack a PR
+before merging it themselves. Install the poller once on macOS:
+
+```bash
+mt prs install    # Run mt prs poll every five minutes with launchd
+mt prs list       # Show tracked PRs
+mt prs uninstall  # Remove the poller
+```
+
+When a tracked PR merges outside its thread, `mt prs poll` asks that thread to
+run [post-merge](skills/internal/post-merge/SKILL.md), or starts a thread in the
+source checkout if the thread rejects the message.
+
 ## Configure a repo
 
 Add `monke.yml` at the repo root. For example, this maps an assigned session port into `PORT` in `apps/api/.env`:
