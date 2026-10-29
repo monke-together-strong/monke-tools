@@ -662,29 +662,47 @@ async function stageOwnGitSkills(options: {
 
   const { explicit, inspectCollection, ownSelectors, selected } = selectionOptions;
 
-  const collection = await stagePublisherCollection({
-    runtime,
-    selectFromCollection,
-    selection: selectionOptions,
-    source,
-    stagingDirectory
-  });
-
-  const { catalog } = collection;
-  let { output } = collection;
-  let securityAssessments: SecurityRiskAssessment[] | undefined;
-
-  if (inspectCollection && (explicit || rejectAmbiguousSelection)) {
-    await mergeAlternatePublisherCatalog({
-      catalog,
-      includeInternal:
-        selectFromCollection || !["1", "true"].includes(runtime.env.INSTALL_INTERNAL_SKILLS ?? ""),
-      rejectAmbiguity: rejectAmbiguousSelection || selectFromCollection,
+  // The default and alternate catalog installs use separate directories, so run them concurrently.
+  const [collectionResult, alternateResult] = await Promise.allSettled([
+    stagePublisherCollection({
       runtime,
       selectFromCollection,
       selection: selectionOptions,
       source,
       stagingDirectory
+    }),
+    inspectCollection && (explicit || rejectAmbiguousSelection)
+      ? installAlternatePublisherCatalog({
+          includeInternal:
+            selectFromCollection ||
+            !["1", "true"].includes(runtime.env.INSTALL_INTERNAL_SKILLS ?? ""),
+          runtime,
+          source,
+          stagingDirectory
+        })
+      : undefined
+  ]);
+
+  if (collectionResult.status === "rejected") {
+    throw collectionResult.reason;
+  }
+
+  if (alternateResult.status === "rejected") {
+    throw alternateResult.reason;
+  }
+
+  const { catalog } = collectionResult.value;
+  let { output } = collectionResult.value;
+  let securityAssessments: SecurityRiskAssessment[] | undefined;
+
+  if (alternateResult.value) {
+    mergeAlternatePublisherCatalog({
+      alternate: alternateResult.value,
+      catalog,
+      rejectAmbiguity: rejectAmbiguousSelection || selectFromCollection,
+      selectFromCollection,
+      selection: selectionOptions,
+      source
     });
   }
 
@@ -802,46 +820,40 @@ async function stagePublisherCollection(options: {
   return { catalog, output };
 }
 
-async function mergeAlternatePublisherCatalog(options: {
-  catalog: PublisherSkillCatalog;
+async function installAlternatePublisherCatalog(options: {
   includeInternal: boolean;
-  rejectAmbiguity: boolean;
   runtime: Runtime;
-  selectFromCollection: boolean;
-  selection: ReturnType<typeof publisherSkillSelection>;
   source: string;
   stagingDirectory: string;
 }) {
-  const {
-    catalog,
-    includeInternal,
-    rejectAmbiguity,
-    runtime,
-    selectFromCollection,
-    selection,
-    source,
-    stagingDirectory
-  } = options;
-
-  const { explicit, ownSelectors } = selection;
-  const internalDirectory = path.join(stagingDirectory, "publisher-alternate-collection");
-  mkdirSync(internalDirectory, { recursive: true });
+  const directory = path.join(options.stagingDirectory, "publisher-alternate-collection");
+  mkdirSync(directory, { recursive: true });
 
   const { empty, installed } = await installPublisherSkills({
     allowEmptyCollection: true,
-    directory: internalDirectory,
-    includeInternal,
+    directory,
+    includeInternal: options.includeInternal,
     inspectCollection: true,
-    runtime,
+    runtime: options.runtime,
     selectors: ["*"],
-    source
+    source: options.source
   });
 
-  if (empty) {
-    return;
-  }
+  return empty ? undefined : { directory, installed };
+}
 
-  const assessments = readJsonSecurityRiskAssessments(installed.stdout);
+function mergeAlternatePublisherCatalog(options: {
+  alternate: { directory: string; installed: ExecResult };
+  catalog: PublisherSkillCatalog;
+  rejectAmbiguity: boolean;
+  selectFromCollection: boolean;
+  selection: ReturnType<typeof publisherSkillSelection>;
+  source: string;
+}) {
+  const { alternate, catalog, rejectAmbiguity, selectFromCollection, selection, source } = options;
+  const { explicit, ownSelectors } = selection;
+  const internalDirectory = alternate.directory;
+  const assessments = readJsonSecurityRiskAssessments(alternate.installed.stdout);
 
   for (const item of stagedSkillGuidance(internalDirectory, { skills: [], source })) {
     const selectedOwn =
