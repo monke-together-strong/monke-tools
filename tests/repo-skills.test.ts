@@ -1699,6 +1699,10 @@ else console.log(table);
           ]
         })
       );
+      // Update reports assessments only for sources it restages.
+      write(publisher, "README.md", "Publisher advances.\n");
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Advance publisher"]);
       messages.length = 0;
       await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
       const output = stripVTControlCharacters(messages.join(""));
@@ -2509,6 +2513,28 @@ else console.log(table);
     await expect(
       runCliAsync(["skills", "add", `${publisher}#HEAD`, "--ref"], runtime)
     ).rejects.toThrow("--ref requires --repo");
+  });
+
+  it("restages a source during update only when its pin advances or its files drift", async () => {
+    const { bin, messages, repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    const log = path.join(bin, "npx.log");
+    renameSync(path.join(bin, "npx"), path.join(bin, "npx-fixture"));
+    writeExecutable(
+      path.join(bin, "npx"),
+      `#!/bin/sh\necho "$@" >> ${JSON.stringify(log)}\nexec ${JSON.stringify(path.join(bin, "npx-fixture"))} "$@"\n`
+    );
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+
+    await runCliAsync(["skills", "update", "--repo"], runtime);
+    expect(existsSync(log)).toBeFalsy();
+    expect(messages.join("")).toContain("No skill changes.");
+
+    write(repo, "skills/imported/first/SKILL.md", "Drifted.\n");
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+    expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
+    expect(existsSync(log)).toBeTruthy();
   });
 
   it("prepares Git sources concurrently during update and prunes guidance removed by hand", async () => {

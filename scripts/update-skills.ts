@@ -52,6 +52,7 @@ import {
   describeSkillSource,
   guidanceDigest,
   ignoreRepoImports,
+  isSkillRecipeRestored,
   pruneImportedGuidance,
   rememberRestoredRecipe,
   stageGitSkillSource,
@@ -384,6 +385,11 @@ async function updateSkills(
       // oxlint-disable-next-line no-await-in-loop
       const prepared = await prepare(recipe, index);
 
+      if (!prepared) {
+        acceptedGuidance.push(...recipe.skills);
+        continue;
+      }
+
       const {
         assessmentOutput,
         installOutput,
@@ -616,51 +622,47 @@ function createGitSkillPreparer(options: {
   runtime: Runtime;
 }) {
   const { before, recipes, repoRoot, runtime } = options;
-  const limit = pLimit(4);
+  const limit = pLimit(8);
 
   const prepared = new Map<
     string,
-    PromiseSettledResult<Awaited<ReturnType<typeof prepareGitSkillUpdate>>>
+    Promise<PromiseSettledResult<Awaited<ReturnType<typeof prepareGitSkillUpdate>>>[]>
   >();
 
-  return async (recipe: SkillImportRecipe, index: number) => {
-    if (!prepared.has(recipe.source)) {
-      const group: SkillImportRecipe[] = [];
+  // Settle each preparation so its failure surfaces when publication reaches its recipe.
+  const start = (recipe: SkillImportRecipe) => {
+    prepared.set(
+      recipe.source,
+      Promise.allSettled([
+        limit(() =>
+          prepareGitSkillUpdate(repoRoot, recipe, before, runtime, options.revisions, options.repo)
+        )
+      ])
+    );
+  };
 
+  // Installer commands cannot change remote sources, so their preparation need not wait.
+  for (const recipe of recipes) {
+    if (!recipe.localSource && isRemoteSkillSource(recipe, repoRoot)) {
+      start(recipe);
+    }
+  }
+
+  return async (recipe: SkillImportRecipe, index: number) => {
+    // Local Git sources prepare after earlier installer commands, which may change them.
+    if (!prepared.has(recipe.source)) {
       for (const candidate of recipes.slice(index)) {
         if (candidate.localSource) {
           break;
         }
 
-        group.push(candidate);
-      }
-
-      // Installer commands are barriers; wait for every preparation before publication.
-      const results = await Promise.allSettled(
-        group.map((candidate) =>
-          limit(() =>
-            prepareGitSkillUpdate(
-              repoRoot,
-              candidate,
-              before,
-              runtime,
-              options.revisions,
-              options.repo
-            )
-          )
-        )
-      );
-
-      for (const [position, candidate] of group.entries()) {
-        const result = results[position];
-
-        if (result) {
-          prepared.set(candidate.source, result);
+        if (!prepared.has(candidate.source)) {
+          start(candidate);
         }
       }
     }
 
-    const result = prepared.get(recipe.source);
+    const [result] = (await prepared.get(recipe.source)) ?? [];
     prepared.delete(recipe.source);
 
     if (!result) {
@@ -673,6 +675,15 @@ function createGitSkillPreparer(options: {
 
     return result.value;
   };
+}
+
+function isRemoteSkillSource(recipe: SkillImportRecipe, repoRoot: string) {
+  try {
+    return !path.isAbsolute(describeSkillSource(recipe.source, repoRoot).repository);
+  } catch {
+    // An earlier installer command may create this local path.
+    return false;
+  }
 }
 
 async function prepareGitSkillUpdate(
@@ -714,6 +725,17 @@ async function prepareGitSkillUpdate(
     }
 
     const revision = await pendingRevision;
+
+    // Restaging an intact restore at its current pin would reproduce the same guidance.
+    if (
+      revision.commit === recipe.commit &&
+      revision.source === recipe.source &&
+      isSkillRecipeRestored(repoRoot, recipe)
+    ) {
+      rmSync(stagingDirectory, { force: true, recursive: true });
+
+      return;
+    }
 
     const installOutput = await stageGitSkillSource({
       includeDeclaredImports: !repo,

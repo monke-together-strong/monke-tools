@@ -27,6 +27,14 @@ function snapshot(root: string, slugs: string[]) {
   }
 }
 
+function respond(args: string[] | undefined, summary: string) {
+  const output = args?.[args.indexOf("--output-last-message") + 1];
+  ok(output);
+  writeFileSync(output, summary);
+
+  return { exitCode: 0, stderr: "", stdout: "" };
+}
+
 describe("skill update summaries", () => {
   it("summarizes added, removed, and supporting-file changes in a read-only run", async () => {
     const root = makeTempDir("skill-summary");
@@ -38,13 +46,12 @@ describe("skill update summaries", () => {
     write(after, "skills/imported/alpha/reference.md", "New guidance.");
     const runtime = createTestRuntime({ cwd: root });
 
-    const exec = vi.fn<typeof runtime.execAsync>(async (_command, args = []) => {
-      const output = args[args.indexOf("--output-last-message") + 1];
-      ok(output);
-      writeFileSync(output, "# Skill update summary\n\n## alpha\n\nUpdated reference.");
-
-      return { exitCode: 0, stderr: "", stdout: "" };
-    });
+    const exec = vi.fn<typeof runtime.execAsync>(async (_command, args, options) =>
+      respond(
+        args,
+        `- Updated ${options?.stdin?.match(/imported skill (?<slug>[\w-]+)\./u)?.groups?.slug}.`
+      )
+    );
 
     runtime.execAsync = exec;
     const messages: string[] = [];
@@ -56,23 +63,94 @@ describe("skill update summaries", () => {
         messages.push(message);
       }
     });
-    expect(exec).toHaveBeenCalledOnce();
-    const [call] = exec.mock.calls;
-    ok(call);
-    const [command, args, options] = call;
-    expect(command).toBe("codex");
-    expect(args).toContain("--ephemeral");
-    expect(args?.slice(args.indexOf("--sandbox"), args.indexOf("--sandbox") + 2)).toStrictEqual([
-      "--sandbox",
-      "read-only"
-    ]);
-    expect(options?.stdin).toContain(path.join(before, "skills/imported/alpha"));
-    expect(options?.stdin).toContain(path.join(after, "skills/imported/alpha"));
-    expect(options?.stdin).toContain("skills/imported/added");
-    expect(options?.stdin).toContain("skills/imported/removed");
-    expect(options?.stdin).not.toContain("skills/imported/unchanged");
-    expect(read(after, SKILL_SUMMARY_FILE)).toContain("Updated reference.");
-    expect(messages.join("")).toContain("Updated reference.");
+    expect(exec).toHaveBeenCalledTimes(3);
+
+    const prompts = exec.mock.calls.map(([command, args, options]) => {
+      expect(command).toBe("codex");
+      expect(args).toContain("--ephemeral");
+      expect(args?.slice(args.indexOf("--sandbox"), args.indexOf("--sandbox") + 2)).toStrictEqual([
+        "--sandbox",
+        "read-only"
+      ]);
+
+      return options?.stdin ?? "";
+    });
+
+    const alpha = prompts.find((prompt) => prompt.includes("skill alpha."));
+    expect(alpha).toContain(path.join(before, "skills/imported/alpha"));
+    expect(alpha).toContain(path.join(after, "skills/imported/alpha"));
+    expect(prompts.find((prompt) => prompt.includes("skill added."))).toContain(
+      "Before: absent; the skill was added"
+    );
+    expect(prompts.find((prompt) => prompt.includes("skill removed."))).toContain(
+      "After: absent; the skill was removed"
+    );
+    expect(prompts.join("")).not.toContain("unchanged");
+    expect(read(after, SKILL_SUMMARY_FILE)).toBe(
+      "# Skill update summary\n\n## alpha\n\n- Updated alpha.\n\n## removed\n\n- Updated removed.\n\n## added\n\n- Updated added.\n"
+    );
+    expect(messages.join("")).toContain("## alpha\n\n- Updated alpha.");
+  });
+
+  it("summarizes a change shared by collections once and labels distinct checkout changes", async () => {
+    const root = makeTempDir("skill-summary-shared");
+    const before = path.join(root, "before");
+    const after = path.join(root, "after");
+
+    for (const collection of ["", "repositories/publisher"]) {
+      snapshot(path.join(before, collection), ["shared", "own"]);
+      snapshot(path.join(after, collection), ["shared", "own"]);
+      write(after, path.join(collection, "skills/imported/shared/SKILL.md"), "Shared update.");
+    }
+
+    write(after, "skills/imported/own/SKILL.md", "Consumer update.");
+    write(after, "repositories/publisher/skills/imported/own/SKILL.md", "Publisher update.");
+    const runtime = createTestRuntime({ cwd: root });
+    let running = 0;
+    let overlapped = false;
+
+    const exec = vi.fn<typeof runtime.execAsync>(async (_command, args) => {
+      running += 1;
+      overlapped ||= running > 1;
+      await Bun.sleep(20);
+      running -= 1;
+
+      return respond(args, "- Changed.");
+    });
+
+    runtime.execAsync = exec;
+
+    await summarizeSkillChanges({
+      after,
+      before,
+      collections: ["repositories/publisher"],
+      runtime,
+      writeMessage() {}
+    });
+    expect(exec).toHaveBeenCalledTimes(3);
+    expect(overlapped).toBeTruthy();
+    expect(read(after, SKILL_SUMMARY_FILE)).toBe(
+      "# Skill update summary\n\n## own\n\n- Changed.\n\n## shared\n\n- Changed.\n\n## own in publisher\n\n- Changed.\n"
+    );
+  });
+
+  it("keeps successful skill summaries when another skill's summary times out", async () => {
+    const root = makeTempDir("skill-summary-partial");
+    const before = path.join(root, "before");
+    const after = path.join(root, "after");
+    snapshot(before, []);
+    snapshot(after, ["fast", "slow"]);
+    const runtime = createTestRuntime({ cwd: root });
+
+    runtime.execAsync = async (_command, args, options) =>
+      options?.stdin?.includes("skill slow.")
+        ? { exitCode: 1, stderr: "", stdout: "", timedOut: true }
+        : respond(args, "- Added fast guidance.");
+
+    await summarizeSkillChanges({ after, before, runtime, writeMessage() {} });
+    expect(read(after, SKILL_SUMMARY_FILE)).toBe(
+      "# Skill update summary\n\n## fast\n\n- Added fast guidance.\n\n## slow\n\nSummary unavailable: Codex timed out\n"
+    );
   });
 
   it("removes a partial summary after Codex fails and keeps the updated guidance", async () => {
