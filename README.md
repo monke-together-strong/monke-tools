@@ -120,8 +120,16 @@ the whole Session.
 
 ## Run post-merge after external merges
 
-In T3 Code, agents track the PRs they open with `mt prs track` and untrack a PR
-before merging it themselves. While any PR is tracked, `mt prs poll` runs every
+In T3 Code, create and track a PR in one command:
+
+```bash
+mt prs create --thread <thread-id> --checkout <checkout> -- \
+  --base main --head <branch> --title <title> --body-file <body-file>
+```
+
+The command reports success after tracking is saved and the poller is scheduled.
+Use `mt prs track` for an existing PR and untrack a PR before merging it yourself.
+While any PR is tracked, `mt prs poll` runs every
 five minutes through launchd on macOS or a systemd user timer on Linux; `mt prs
 list` shows tracked PRs.
 

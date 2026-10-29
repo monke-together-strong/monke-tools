@@ -35,7 +35,8 @@ For acquiring, using, releasing, or recovering checkout resources, read
 ## Release and remove
 
 A Session member selects the whole Session for Chop. From source, provide an explicit
-target. Dirty files block removal; ignored files are deleted with the worktree.
+target. [Clear reproducible generated changes](../../references/internal/CLEANUP_RECOVERY.md#generated-output)
+in each member; remaining dirty files block removal. Ignored files are deleted with the worktree.
 Use `--force` only when discarding that work is authorized. Preserve local branches.
 
 Preview global Cleanup with `mt cleanup --dry-run` before running `mt cleanup`;

@@ -4,9 +4,10 @@ import { isDeepStrictEqual } from "node:util";
 
 import * as z from "zod";
 
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { schedulePoll, unschedulePoll } from "./poll-scheduler.ts";
 import { findExecutable, getHomeDirectory, getMonkeHome, withScopedLockAsync } from "./runtime.ts";
+import { shellQuote } from "./shell-quote.ts";
 import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
@@ -32,6 +33,31 @@ const TrackedPrsFileSchema = z.strictObject({
 const PullRequestStateSchema = z.object({ state: z.enum(["CLOSED", "MERGED", "OPEN"]) });
 
 type TrackedPr = z.infer<typeof TrackedPrSchema>;
+
+/** Publish through gh, then persist tracking and schedule the post-merge poll before success. */
+export async function runPrsCreate(
+  runtime: Runtime,
+  args: string[],
+  options: { checkout: string; thread: string }
+) {
+  const checkout = gitOutput(runtime, path.resolve(runtime.cwd, options.checkout), [
+    "rev-parse",
+    "--show-toplevel"
+  ]);
+
+  const created = await runtime.execAsync("gh", ["pr", "create", ...args], { cwd: checkout });
+  const { url } = parsePullRequestUrl(created.stdout.trim());
+
+  try {
+    await runPrsTrack(runtime, url, { ...options, checkout });
+  } catch (cause) {
+    throw new MonkeError(
+      `Created ${url}, but post-merge tracking is incomplete: ${errorMessage(ThrownValueSchema.parse(cause))}\n` +
+        `Register this existing PR with mt prs track ${url} --thread ${shellQuote(options.thread)} --checkout ${shellQuote(checkout)}`,
+      { cause }
+    );
+  }
+}
 
 /** Track an open PR so `mt prs poll` can hand its post-merge work back to its thread. */
 export async function runPrsTrack(
@@ -64,8 +90,8 @@ export async function runPrsTrack(
     ...prs.filter((tracked) => tracked.url !== record.url),
     record
   ]);
-  runtime.writeStdout(`Tracking ${record.url}\n`);
   schedulePoll(runtime);
+  runtime.writeStdout(`Tracking ${record.url}\n`);
 }
 
 /** Stop tracking a PR, such as right before an agent merges it. */

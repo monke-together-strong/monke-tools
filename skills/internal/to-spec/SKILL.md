@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 Follow [Matt Pocock's base spec workflow](../../references/imported/to-spec/MAIN.md).
 
+Before presenting a spec for approval, compare it against earlier agreements and relevant ADRs, accounting for intentional exclusions.
+
 Before publishing, commit the session's documentation changes that aren't on the default branch, such as Glossary and ADR edits, to a work branch and push it. Start the spec with `Working branch: <branch URL>`, so the implementation builds on it.
 
 The spec is meant to ship as 1 PR. Anything that should be done post PR merge, should be called out separately in the spec.

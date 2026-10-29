@@ -51,7 +51,8 @@ function createSandbox(): Sandbox {
 async function mt(
   sandbox: Sandbox,
   args: string[],
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  onStdout?: (text: string) => void
 ): Promise<string> {
   let stdout = "";
 
@@ -66,6 +67,7 @@ async function mt(
     },
     onStdout(text) {
       stdout += text;
+      onStdout?.(text);
     },
     platform
   });
@@ -113,6 +115,96 @@ async function track(sandbox: Sandbox, number: number, platform?: NodeJS.Platfor
 }
 
 describe("mt prs", () => {
+  it("creates in the PR checkout and registers tracking and scheduling before success", async () => {
+    const sandbox = createSandbox();
+
+    const ghCalls = installRecordingCommand(
+      sandbox,
+      "gh",
+      `test "$PWD" = '${sandbox.worktree}' || exit 1\nprintf '${prUrl(661)}\\n'`
+    );
+
+    const args = ["--base", "main", "--title", "One rule", "--body-file", "body.md"];
+
+    await expect(
+      mt(sandbox, [
+        "prs",
+        "create",
+        "--thread",
+        "thread-661",
+        "--checkout",
+        sandbox.worktree,
+        "--",
+        ...args
+      ])
+    ).resolves.toBe(`Tracking ${prUrl(661)}\n`);
+    expect(ghCalls()).toStrictEqual([["pr", "create", ...args]]);
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toBe(
+      `${prUrl(661)}\tthread thread-661\tcheckout ${sandbox.worktree}\n`
+    );
+    expect([...sandbox.launchctl(), ...sandbox.systemctl()].length).toBeGreaterThan(0);
+  });
+
+  it("rejects publishing when GitHub created the PR but poll scheduling fails", async () => {
+    const sandbox = createSandbox();
+    const ghCalls = installRecordingCommand(sandbox, "gh", `printf '${prUrl(661)}\\n'`);
+    installRecordingCommand(sandbox, "launchctl", '[ "$1" = "bootstrap" ] && exit 1\nexit 0');
+    let stdout = "";
+
+    await expect(
+      mt(
+        sandbox,
+        [
+          "prs",
+          "create",
+          "--thread",
+          "thread-661",
+          "--checkout",
+          sandbox.worktree,
+          "--",
+          "--title",
+          "One rule",
+          "--body",
+          "Description"
+        ],
+        "darwin",
+        (text) => {
+          stdout += text;
+        }
+      )
+    ).rejects.toThrow(`Created ${prUrl(661)}, but post-merge tracking is incomplete`);
+    expect(stdout).toBe("");
+    expect(ghCalls()).toHaveLength(1);
+    // Retain the registration so `track` can retry scheduling without creating another PR.
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(661));
+    installRecordingCommand(sandbox, "launchctl");
+    await track(sandbox, 661, "darwin");
+    expect(ghCalls()).toHaveLength(1);
+  });
+
+  it("leaves no registration when GitHub creation fails", async () => {
+    const sandbox = createSandbox();
+    installRecordingCommand(sandbox, "gh", 'echo "creation failed" >&2\nexit 1');
+
+    await expect(
+      mt(sandbox, [
+        "prs",
+        "create",
+        "--thread",
+        "thread-661",
+        "--checkout",
+        sandbox.worktree,
+        "--",
+        "--title",
+        "One rule",
+        "--body",
+        "Description"
+      ])
+    ).rejects.toThrow("creation failed");
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
+    expect([...sandbox.launchctl(), ...sandbox.systemctl()]).toStrictEqual([]);
+  });
+
   it("tracks a PR with its thread and checkout until it is untracked", async () => {
     const sandbox = createSandbox();
     await track(sandbox, 7);

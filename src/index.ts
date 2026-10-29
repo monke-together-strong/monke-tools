@@ -15,7 +15,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
-import { runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
+import { runPrsCreate, runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -140,6 +140,14 @@ function createProgram(runtime: Runtime) {
   const prs = program
     .command("prs")
     .description("Track PRs so post-merge runs after an external merge");
+
+  prs
+    .command("create")
+    .description("Create a PR and register its post-merge tracking before reporting success")
+    .argument("<gh-args...>", "gh pr create arguments, after --")
+    .requiredOption("--thread <id>", "T3 thread that owns the PR")
+    .requiredOption("--checkout <path>", "Checkout the PR was built in")
+    .action((args, options) => runPrsCreate(runtime, args, options));
 
   prs
     .command("track")

@@ -17,8 +17,10 @@ reports `MERGED`.
 
 1. Close relevant issues and sub-issues, such as the Spec issue and its
    breakdown issues.
-2. List worktrees and local branches. A worktree is a cleanup candidate only
-   when its branch equals `headRefName`, `git status --short` is empty, and
+2. List worktrees and local branches, and
+   [clear reproducible generated changes](../../references/internal/CLEANUP_RECOVERY.md#generated-output).
+   A worktree is a cleanup candidate only when its branch equals `headRefName`,
+   `git status --short` is empty, and
    `HEAD` equals `headRefOid`. A local branch is a candidate only when no
    worktree uses it and its tip equals `headRefOid`.
 3. Clean up candidates. Use `mt chop <session>` from the source checkout for mt
@@ -29,8 +31,8 @@ reports `MERGED`.
    `git pull --ff-only origin <baseRefName>`. Switch a retained PR checkout to
    `baseRefName`, and leave other checkouts on their branches.
 
-Never delete dirty work, trust git ancestry alone for squash merges, or use
-`git reset --hard`, `git clean`, or forced worktree removal.
+Never discard authored or unclassified changes, trust git ancestry alone for
+squash merges, or use `git reset --hard`, `git clean`, or forced worktree removal.
 
 ## Load the contracts
 
@@ -81,10 +83,6 @@ Run every check from each applicable contract and record its result and evidence
 On a failed gate or check, investigate with `$diagnosing-bugs`. For a repo-owned
 defect, open a root-cause fix PR with `$pr`, linking the merged PR.
 
-## Settle and report
-
-In T3 Code, settle the thread with `t3_thread_organize` once nothing remains
-open in it, such as a fix PR, a release PR handoff, or a pending question.
-
+## Report
 Report the base update, removals, skipped cleanup, contract sources, each check's
-result and evidence, any fix PR or release PR handoff, and any skip reason.
+result and evidence, any fix PR or release PR handoff, and any skip reason, any pending items.

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Retro Sweep"
+  short_description: "Retrospective across recent threads, repo then global"
+policy:
+  allow_implicit_invocation: false

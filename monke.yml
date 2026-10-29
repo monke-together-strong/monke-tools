@@ -46,7 +46,8 @@ skills:
       - to-questionnaire
       - slug: to-spec
         kind: reference
-      - to-tickets
+      - slug: to-tickets
+        kind: reference
       - triage
       - wait-what
       - wayfinder

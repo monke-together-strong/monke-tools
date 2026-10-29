@@ -7,6 +7,15 @@ Preview with `mt cleanup --dry-run`; use `--json` for structured results.
 A Session is removable only when every member's work is preserved and ownership
 is verified. An unavailable check is a blocker, not permission to force removal.
 
+### Generated output
+
+Generated files do not block cleanup. Verify their changes, including staged
+versions, can be reproduced from preserved inputs. Restore those tracked paths
+from HEAD in both index and working tree; delete verified untracked outputs.
+Recheck status and preserve authored or uncertain changes.
+
+## Discovery and recovery
+
 Discovery includes the invoking checkout's Source and Sources recorded in retained
 Sessions.
 Add other repositories with repeatable `--source <repo>` options, including when

@@ -88,11 +88,19 @@ template or unexpected in a way that affects review.
 
 ## Publish and verify
 
-Create or update a ready PR after required checks and media review. Use draft only
-when requested. If the user requests CodeRabbit ignore the PR, post exactly
-`@coderabbitai ignore` as a PR comment.
+Create or update a ready PR after required checks and media review. In T3 Code,
+create it through `mt prs create` so publishing includes post-merge registration:
 
-Verify the published title, body, and attachments. In T3 Code, track a new PR so
-post-merge runs after an external merge:
-`mt prs track <url> --thread <owning thread id> --checkout <PR checkout>`.
-Report the URL and any manual-test handoff.
+```sh
+mt prs create --thread <owning-thread-id> --checkout <PR-checkout> -- \
+  --base <base> --head <branch> --title <title> --body-file <body-file>
+```
+
+The command succeeds after tracking is saved and the poller is scheduled. If
+registration fails after creation, follow its recovery command for the existing PR.
+Outside T3 Code, use `gh pr create`. Update existing PRs with `gh pr edit`.
+Use draft only when requested. If the user requests CodeRabbit ignore the PR,
+post exactly `@coderabbitai ignore` as a PR comment.
+
+Verify the published title, body, and attachments. Report the URL and any
+manual-test handoff.
