@@ -3,6 +3,10 @@
 Each repo declares Session behavior, checkout resources, and published guidance
 in a root `monke.yml`. All sections are optional.
 
+Commit `monke.yml` to share it, or gitignore it in the Source checkout to keep it
+local. Spawns use the local file when their branch has none and copy it into the
+Session worktree; list gitignored resource modules in `seedPaths`.
+
 ```yaml
 apps:
   api:
@@ -31,7 +35,7 @@ bootstrapCommand: pnpm install
 
 ## Seed and bootstrap
 
-Spawn copies `.env` / `.env.*`, `CLAUDE.local.md`, `AGENTS.override.md`, and root `.claude/settings.local.json` automatically; don't list them. `seedPaths` copies source files or directories into session worktrees without overwriting session-local content. Missing seed paths warn; copy failures stop preparation.
+Spawn automatically copies `.env` / `.env.*`, `CLAUDE.local.md`, and `AGENTS.override.md` from any directory, plus root `.claude/settings.local.json`, `PR.md`, and `monke.yml`; don't list them. `seedPaths` copies source files or directories into session worktrees without overwriting session-local content. Missing seed paths warn; copy failures stop preparation.
 
 `bootstrapCommand` runs in the session worktree after env/path and deterministic resource values are written. Dynamic resource commands run afterward so their modules can use installed dependencies.
 

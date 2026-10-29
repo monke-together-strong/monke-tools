@@ -1819,6 +1819,42 @@ apps:
     }
   });
 
+  it("reads a gitignored Source checkout monke.yml for spawn -m", () => {
+    const { binDirectory, config, home, repoRoot } = createLocalConfigRepo(
+      "single-repo-main-ignored-config",
+      "monke.yml\n"
+    );
+
+    runMonke({
+      args: ["spawn", "local-config", "-m"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "local-config");
+    expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
+    expect(read(worktreeRoot, "monke.yml")).toBe(config);
+  });
+
+  it("ignores an untracked, non-ignored Source checkout monke.yml for spawn -m", () => {
+    const { binDirectory, home, repoRoot } = createLocalConfigRepo(
+      "single-repo-main-untracked-config",
+      ""
+    );
+
+    const result = runMonkeCapturingFailure({
+      args: ["spawn", "local-config", "-m"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(result.stderr).toContain(
+      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+    );
+  });
+
   it("rewrites one local port key into multiple same-repo app env files on spawn", () => {
     const sandbox = makeTempDir("single-repo-shared-port");
     const binDirectory = path.join(sandbox, "bin");
@@ -2779,4 +2815,31 @@ function captureThrowMessage(action: () => void) {
   }
 
   throw new Error("Expected action to throw");
+}
+
+function createLocalConfigRepo(prefix: string, gitignore: string) {
+  const sandbox = makeTempDir(prefix);
+
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": gitignore,
+    "apps/api/.env.local": "PORT=3000\n"
+  });
+
+  const config = `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`;
+
+  write(repoRoot, "monke.yml", config);
+
+  return {
+    binDirectory: path.join(sandbox, "bin"),
+    config,
+    home: path.join(sandbox, "home"),
+    repoRoot
+  };
 }

@@ -83,7 +83,8 @@ template or unexpected in a way that affects review.
   Choose side-by-side or stacked layouts based on readability.
 - For correctness that requires deployment, include `## Post-Merge Verification`
   with any environment, deployment gate, and concrete checks that root
-  `POST_MERGE.md` does not already cover.
+  `POST_MERGE.md` does not already cover. When it is absent, read the Source
+  checkout's root `POST_MERGE.md` if git ignores it there.
 
 ## Publish and verify
 

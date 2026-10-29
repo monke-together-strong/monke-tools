@@ -726,11 +726,27 @@ function spawnRootConfigExists(
   rootSourceRoot: string,
   configRef: string | undefined
 ) {
-  if (configRef !== undefined) {
-    return gitPathExistsAtRef(runtime, rootSourceRoot, configRef, "monke.yml");
+  const ref = configRefOrLocal(runtime, rootSourceRoot, configRef);
+
+  if (ref !== undefined) {
+    return gitPathExistsAtRef(runtime, rootSourceRoot, ref, "monke.yml");
   }
 
   return existsSync(path.join(rootSourceRoot, "monke.yml"));
+}
+
+/** A gitignored Source checkout monke.yml stands in for a ref that has none. */
+function configRefOrLocal(runtime: Runtime, sourceRoot: string, ref: string | undefined) {
+  if (ref === undefined || gitPathExistsAtRef(runtime, sourceRoot, ref, "monke.yml")) {
+    return ref;
+  }
+
+  const ignored = runtime.exec("git", ["check-ignore", "-q", "monke.yml"], {
+    allowFailure: true,
+    cwd: sourceRoot
+  });
+
+  return ignored.exitCode === 0 ? undefined : ref;
 }
 
 /** Everything one config-less Spawn needs to prepare and record its Root repo Session worktree. */
@@ -986,14 +1002,14 @@ function loadGraphAtRefs(
 ) {
   return loadResolvedGraph(runtime, rootSourceRoot, {
     pathExists(sourceRoot, relativePath) {
-      const ref = refForRepo(sourceRoot);
+      const ref = configRefOrLocal(runtime, sourceRoot, refForRepo(sourceRoot));
 
       return ref === undefined
         ? existsSync(path.join(sourceRoot, relativePath))
         : gitPathExistsAtRef(runtime, sourceRoot, ref, relativePath);
     },
     readRepoConfig(sourceRoot) {
-      const ref = refForRepo(sourceRoot);
+      const ref = configRefOrLocal(runtime, sourceRoot, refForRepo(sourceRoot));
 
       return ref === undefined
         ? readFileSync(path.join(sourceRoot, "monke.yml"), "utf-8")

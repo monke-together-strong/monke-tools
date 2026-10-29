@@ -14,7 +14,10 @@ export interface CollectBaselinePortsFromRootOptions {
   sourceRoot: string;
 }
 
-/** Seed local env and agent files and configured seed paths from the source checkout. */
+/**
+ * Seed local env, agent, PR, and Monke config files and configured seed paths from the source
+ * checkout.
+ */
 export function seedWorktreeFiles(
   config: RepoConfig,
   worktreeRoot: string,
@@ -202,7 +205,10 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>) 
 function listLocalFiles(root: string) {
   // Bun implements node:fs glob natively and exposes exclusions that Bun.Glob itself lacks.
   return globSync(
-    ["**/{.env{,.*},CLAUDE.local.md,AGENTS.override.md}", ".claude/settings.local.json"],
+    [
+      "**/{.env{,.*},CLAUDE.local.md,AGENTS.override.md}",
+      "{.claude/settings.local.json,PR.md,monke.yml}"
+    ],
     {
       cwd: root,
       exclude: ["**/.git/**", "**/.monke/**", "**/node_modules/**"]

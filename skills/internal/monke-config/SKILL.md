@@ -13,3 +13,5 @@ Monke's workflow skills also read these optional root files, each defined by its
 - `PR.md`: the repo's PR requirements for [pr](../pr/SKILL.md), in place of the user's defaults.
 - `POST_MERGE.md`: the repository contract for [post-merge](../post-merge/SKILL.md). It states
   the merged PRs it covers and names their environment, deployment gate, and checks.
+
+Commit either file to share it, or gitignore it in the Source checkout to keep it local.

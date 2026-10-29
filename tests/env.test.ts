@@ -17,6 +17,8 @@ describe("environment rewriting", () => {
     write(sourceRoot, "CLAUDE.local.md", "claude\n");
     write(sourceRoot, "apps/api/AGENTS.override.md", "codex\n");
     write(sourceRoot, ".claude/settings.local.json", "{}\n");
+    write(sourceRoot, "PR.md", "pr\n");
+    write(sourceRoot, "monke.yml", "apps: {}\n");
     write(sourceRoot, ".git/.env", "GIT=1\n");
     write(sourceRoot, ".monke/.env.generated", "MONKE=1\n");
     write(sourceRoot, "node_modules/example/.env", "DEPENDENCY=1\n");
@@ -41,6 +43,8 @@ describe("environment rewriting", () => {
     expect(read(worktreeRoot, "CLAUDE.local.md")).toBe("claude\n");
     expect(read(worktreeRoot, "apps/api/AGENTS.override.md")).toBe("codex\n");
     expect(read(worktreeRoot, ".claude/settings.local.json")).toBe("{}\n");
+    expect(read(worktreeRoot, "PR.md")).toBe("pr\n");
+    expect(read(worktreeRoot, "monke.yml")).toBe("apps: {}\n");
     expect(existsSync(path.join(worktreeRoot, ".git/.env"))).toBeFalsy();
     expect(existsSync(path.join(worktreeRoot, ".monke/.env.generated"))).toBeFalsy();
     expect(existsSync(path.join(worktreeRoot, "node_modules/example/.env"))).toBeFalsy();

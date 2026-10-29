@@ -38,8 +38,10 @@ A contract names the environment, deployment gate, and checks. Apply both
 sources:
 
 - **Repository contract**: root `POST_MERGE.md` at the merge commit, read with
-  `git show <mergeCommit>:POST_MERGE.md`, when present. It covers every merged
-  PR within the scope it states.
+  `git show <mergeCommit>:POST_MERGE.md`. When the merge commit has none, use the
+  Source checkout's root `POST_MERGE.md` if
+  `git -C <source checkout> check-ignore -q POST_MERGE.md` confirms it is
+  local-only. It covers every merged PR within the scope it states.
 - **PR contract**: the `## Post-Merge Verification` section of the PR body. It
   adds PR-specific checks. `Not required: <reason>` waives only this section.
 
