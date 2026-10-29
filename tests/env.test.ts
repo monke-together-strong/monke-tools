@@ -8,12 +8,15 @@ import type { RepoConfig } from "../src/types.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
 describe("environment rewriting", () => {
-  it("discovers env files with seedWorktreeFiles while pruning managed and dependency trees", () => {
+  it("discovers env and local agent files with seedWorktreeFiles while pruning managed and dependency trees", () => {
     const sandbox = makeTempDir("env-seed-discovery");
     const sourceRoot = path.join(sandbox, "source");
     const worktreeRoot = path.join(sandbox, "worktree");
     write(sourceRoot, ".env", "ROOT=1\n");
     write(sourceRoot, "apps/api/.env.local", "APP=1\n");
+    write(sourceRoot, "CLAUDE.local.md", "claude\n");
+    write(sourceRoot, "apps/api/AGENTS.override.md", "codex\n");
+    write(sourceRoot, ".claude/settings.local.json", "{}\n");
     write(sourceRoot, ".git/.env", "GIT=1\n");
     write(sourceRoot, ".monke/.env.generated", "MONKE=1\n");
     write(sourceRoot, "node_modules/example/.env", "DEPENDENCY=1\n");
@@ -35,6 +38,9 @@ describe("environment rewriting", () => {
 
     expect(read(worktreeRoot, ".env")).toBe("ROOT=1\n");
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("APP=1\n");
+    expect(read(worktreeRoot, "CLAUDE.local.md")).toBe("claude\n");
+    expect(read(worktreeRoot, "apps/api/AGENTS.override.md")).toBe("codex\n");
+    expect(read(worktreeRoot, ".claude/settings.local.json")).toBe("{}\n");
     expect(existsSync(path.join(worktreeRoot, ".git/.env"))).toBeFalsy();
     expect(existsSync(path.join(worktreeRoot, ".monke/.env.generated"))).toBeFalsy();
     expect(existsSync(path.join(worktreeRoot, "node_modules/example/.env"))).toBeFalsy();

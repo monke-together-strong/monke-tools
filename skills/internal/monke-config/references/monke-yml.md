@@ -31,7 +31,7 @@ bootstrapCommand: pnpm install
 
 ## Seed and bootstrap
 
-`seedPaths` copies source files or directories into session worktrees without overwriting session-local content. Missing seed paths warn; copy failures stop preparation.
+Spawn copies `.env` / `.env.*`, `CLAUDE.local.md`, `AGENTS.override.md`, and root `.claude/settings.local.json` automatically; don't list them. `seedPaths` copies source files or directories into session worktrees without overwriting session-local content. Missing seed paths warn; copy failures stop preparation.
 
 `bootstrapCommand` runs in the session worktree after env/path and deterministic resource values are written. Dynamic resource commands run afterward so their modules can use installed dependencies.
 

@@ -45,7 +45,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Seed path**: A repo-relative file or directory copied into a newly spawned session worktree.
 
-**Seed material**: The source-checkout files copied into a newly spawned session worktree before env rewrites, including discovered env files and configured Seed paths.
+**Seed material**: The source-checkout files copied into a newly spawned session worktree before env rewrites, including discovered env files, local agent files, and configured Seed paths.
 
 **Bootstrap command**: A repo-scoped shell command run after env syncing to prepare a materialized worktree.
 

@@ -142,7 +142,7 @@ apps:
         env: PORT
 ```
 
-The [configuration reference](skills/internal/monke-config/references/monke-yml.md) covers dependency repos, custom env files, bootstrap, seed files, and checkout resources.
+The [configuration reference](skills/internal/monke-config/references/monke-yml.md) covers dependency repos, custom env files, bootstrap, seed files, and checkout resources. Optional root `PR.md` and `POST_MERGE.md` files configure the [pr](skills/internal/pr/SKILL.md) and [post-merge](skills/internal/post-merge/SKILL.md) skills; see [monke-config](skills/internal/monke-config/SKILL.md).
 
 ## Agent skills
 
@@ -166,7 +166,7 @@ Project registrations stay in shared Git metadata, and generated links are local
 ignored. Spawn, materialize, and setup recreate links in each checkout. After a
 selection change or removal, run `mt setup` in other existing worktrees.
 
-Monke's skills cover [worktrees and Sessions](skills/internal/monke-worktrees/SKILL.md), [diff review](skills/internal/monke-diff/SKILL.md), and [skill management](skills/internal/monke-skills/SKILL.md). Link directly to the manual-only [configuration](skills/internal/monke-config/SKILL.md) and [installation](skills/internal/monke-install/SKILL.md) skills when needed. Other workflows live in [internal skills](skills/internal) and [imported guidance](docs/skill-imports.md). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
+Monke's skills cover [worktrees and Sessions](skills/internal/monke-worktrees/SKILL.md), [diff review](skills/internal/monke-diff/SKILL.md), [skill management](skills/internal/monke-skills/SKILL.md), and [repo configuration](skills/internal/monke-config/SKILL.md). Link directly to the manual-only [installation](skills/internal/monke-install/SKILL.md) skill when needed. Other workflows live in [internal skills](skills/internal) and [imported guidance](docs/skill-imports.md). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
 
 Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
 

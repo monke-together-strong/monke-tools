@@ -14,7 +14,7 @@ export interface CollectBaselinePortsFromRootOptions {
   sourceRoot: string;
 }
 
-/** Seed local env files and configured seed paths from the source checkout. */
+/** Seed local env and agent files and configured seed paths from the source checkout. */
 export function seedWorktreeFiles(
   config: RepoConfig,
   worktreeRoot: string,
@@ -22,7 +22,7 @@ export function seedWorktreeFiles(
 ) {
   const seededPaths = new Set<string>();
 
-  for (const relativePath of listEnvFiles(config.sourceRoot)) {
+  for (const relativePath of listLocalFiles(config.sourceRoot)) {
     seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, false, seededPaths, onWarning);
   }
 
@@ -199,12 +199,15 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>) 
   writeFileSync(filePath, rewritten.join("\n"), "utf-8");
 }
 
-function listEnvFiles(root: string) {
+function listLocalFiles(root: string) {
   // Bun implements node:fs glob natively and exposes exclusions that Bun.Glob itself lacks.
-  return globSync("**/.env{,.*}", {
-    cwd: root,
-    exclude: ["**/.git/**", "**/.monke/**", "**/node_modules/**"]
-  }).toSorted();
+  return globSync(
+    ["**/{.env{,.*},CLAUDE.local.md,AGENTS.override.md}", ".claude/settings.local.json"],
+    {
+      cwd: root,
+      exclude: ["**/.git/**", "**/.monke/**", "**/node_modules/**"]
+    }
+  ).toSorted();
 }
 
 function seedRelativePath(
