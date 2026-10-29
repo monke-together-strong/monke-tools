@@ -96,9 +96,8 @@ cp -R "$4/skills/shared" .agents/skills/shared
       `#!/bin/sh
 set -eu
 url=\${4%%#*}
-for remote in "$url" https://example.test/sibling; do
-  git ls-remote --get-url "$remote" >> ${JSON.stringify(importerUrls)}
-done
+# Default and internal discovery run concurrently, so append each call's URLs as one line.
+echo "$(git ls-remote --get-url "$url") $(git ls-remote --get-url https://example.test/sibling)" >> ${JSON.stringify(importerUrls)}
 git clone --quiet "$url" checkout
 mkdir -p .agents/skills
 cp -R checkout/skills/remote .agents/skills/remote
@@ -126,9 +125,12 @@ cp -R checkout/skills/remote .agents/skills/remote
     }
 
     expect(read(target, "skills/imported/remote/SKILL.md")).toContain("Pinned.");
-    const [sourceUrl, siblingUrl] = read(sandbox, "importer-urls").trim().split("\n");
-    expect(sourceUrl).toMatch(/\/upstream-validation$/u);
-    expect(siblingUrl).toBe(`${sandbox}/sibling`);
+
+    for (const line of read(sandbox, "importer-urls").trim().split("\n")) {
+      const [sourceUrl, siblingUrl] = line.split(" ");
+      expect(sourceUrl).toMatch(/\/upstream-validation$/u);
+      expect(siblingUrl).toBe(`${sandbox}/sibling`);
+    }
   });
 
   it.each([

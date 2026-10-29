@@ -115,14 +115,17 @@ checkouts: the local Monke installation's source checkout and linked repositorie
 Each checkout keeps its selections and overrides. Review and commit the changed
 YAML files. See [connected update scope](https://github.com/monke-together-strong/monke-tools/blob/main/docs/skill-imports.md#review-updates)
 for project, release, and installer behavior.
-Up to four Git sources prepare concurrently. Linked
+Update reinstalls a Git source only when its ref resolves to a new commit or its
+restored guidance no longer matches the pin. Up to eight Git sources prepare
+concurrently. Remote Git sources do not wait for installer commands. Linked
 sources, installer commands, and publication run in recipe order.
 
 When skill or reference content changes, Monke invokes the installed Codex CLI
-with your configured model in a read-only session. Codex summarizes each changed
-skill or reference in the terminal and in `SKILL_UPDATE_SUMMARY.md` in the saved
-comparison. If Codex is unavailable or fails, Monke prints a warning and keeps the
-update and comparison.
+with your configured model in read-only sessions, up to eight at once. Codex
+summarizes each changed skill or reference in the terminal and in
+`SKILL_UPDATE_SUMMARY.md` in the saved comparison. Identical changes across
+connected checkouts and installed skills share one summary. If Codex is
+unavailable or fails, Monke prints a warning and keeps the update and comparison.
 
 Updates retain successful sources even if another fails.
 Connected publisher updates remain accepted if consumer publication fails.
