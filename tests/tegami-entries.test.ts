@@ -7,12 +7,37 @@ import * as z from "zod";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
-/** The packages Tegami publishes, read from the same config the release workflow runs. */
-function tegamiPackages() {
-  const source = readFileSync(path.join(repositoryRoot, "scripts/tegami.mts"), "utf-8");
-  const block = /packages:\s*\{(?<body>[\s\S]*?)\n {2}\}/u.exec(source)?.groups?.body ?? "";
+const PackageManifestSchema = z.object({
+  name: z.string(),
+  private: z.boolean().optional(),
+  version: z.string().optional()
+});
 
-  return new Set([...block.matchAll(/"(?<name>[^"]+)":/gu)].map((match) => match.groups?.name));
+/** Tegami's npm provider publishes versioned, non-private workspace packages. */
+function tegamiPackages() {
+  const root: unknown = JSON.parse(
+    readFileSync(path.join(repositoryRoot, "package.json"), "utf-8")
+  );
+
+  const { workspaces } = z.object({ workspaces: z.array(z.string()) }).parse(root);
+  const manifests = new Set(["package.json"]);
+
+  for (const workspace of workspaces) {
+    for (const manifest of new Bun.Glob(`${workspace}/package.json`).scanSync(repositoryRoot)) {
+      manifests.add(manifest);
+    }
+  }
+
+  return new Set(
+    [...manifests]
+      .map((manifest) =>
+        PackageManifestSchema.parse(
+          JSON.parse(readFileSync(path.join(repositoryRoot, manifest), "utf-8"))
+        )
+      )
+      .filter((manifest) => manifest.version !== undefined && manifest.private !== true)
+      .map((manifest) => manifest.name)
+  );
 }
 
 const FrontmatterSchema = z.object({
@@ -28,7 +53,7 @@ describe("Tegami release entries", () => {
     name.endsWith(".md")
   );
 
-  it("names at least one package in the release config", () => {
+  it("has at least one publishable workspace package", () => {
     expect(published.size).toBeGreaterThan(0);
   });
 
