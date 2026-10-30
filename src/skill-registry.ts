@@ -301,6 +301,9 @@ async function runSkillsRegistryLocked(
           return publishUpdate ? publishUpdate(publish, withSnapshotLocks) : publish();
         },
         publisherRepos: repositories.publishers,
+        // A local install's checkout can change declarations between installs, such as making an
+        // import a reference behind a same-slug wrapper.
+        reconcile: projectRoot ? undefined : () => followBundledImports(runtime, root, guidance),
         repoRoot: root,
         runtime,
         validatePrepared(prepared, recipe) {
@@ -624,6 +627,23 @@ function copyBundledImports(root: string, guidance: string, imports: BundledImpo
 
     rememberRestoredRecipe(root, recipe);
   }
+}
+
+/** Follow the bundled declarations, returning the guidance they replaced and copied. */
+function followBundledImports(runtime: Runtime, root: string, guidance: string) {
+  const { imports, next } = planRegistryImports(root, guidance, true);
+
+  if (imports.length === 0) {
+    return [];
+  }
+
+  // A followed skill can collide with another owner of its slug, so validate before persisting.
+  preflightSkillRegistryInstall(runtime, guidance);
+  assertSkillRestoreMarker(root);
+  copyBundledImports(root, guidance, imports);
+  writeImportRecipeStore(root, next);
+
+  return imports.flatMap(({ copied, obsolete }) => [...obsolete, ...copied]);
 }
 
 function initializeSkillRegistry(runtime: Runtime, guidance: string, includeNewSources = false) {

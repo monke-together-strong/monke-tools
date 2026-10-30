@@ -218,6 +218,78 @@ describe("updates through connected local repositories", () => {
     expect(diff).toContain("Second version.");
   });
 
+  it.each([false, true])(
+    "follows a wrapped import's kind change on bare update with advanced=%s",
+    async (advanced) => {
+      const f = fixture();
+      const publisher = { ...f.runtime, cwd: f.checkout };
+      saveGlobalMonkeConfig(f.monkeHome, {
+        diffAdapter: "codiff",
+        skillInstallPreference: { targets: [{ kind: "claude" }] },
+        version: 1
+      });
+      await runCliAsync(
+        ["skills", "add", f.upstream, "--repo", "--skill", "base", "extra"],
+        publisher
+      );
+      // Any global Skill command creates the registry from the bundled declarations.
+      await runCliAsync(["skills", "list"], f.runtime);
+      const document = parseDocument(read(f.checkout, "monke.yml"));
+      document.setIn(["skills", 0, "skills", 0], { kind: "reference", slug: "base" });
+      write(f.checkout, "monke.yml", document.toString());
+      await runCliAsync(["skills", "restore", "--repo"], publisher);
+      write(f.checkout, "skills/internal/base/SKILL.md", "---\nname: base\n---\nWrap.\n");
+
+      if (advanced) {
+        f.advance();
+      }
+
+      await runCliAsync(["skills", "update"], f.runtime);
+
+      const registry = path.join(f.monkeHome, "skill-registry");
+      expect(readImportRecipeStore(registry).recipes[0]?.skills).toContainEqual(
+        expect.objectContaining({ kind: "reference", slug: "base" })
+      );
+      expect(existsSync(path.join(registry, "skills/imported/base"))).toBeFalsy();
+      expect(read(f.home, ".claude/skills/base/SKILL.md")).toContain("Wrap.");
+      expect(read(f.home, ".claude/references/imported/base/MAIN.md")).toContain(
+        advanced ? "Second version." : "First version."
+      );
+      const diff = reviewDiff(f.reviewLog);
+      expect(diff).toContain("a/skills/imported/base/SKILL.md");
+      expect(diff).toContain("b/skills/references/imported/base/MAIN.md");
+    }
+  );
+
+  it("rejects a followed import that collides with a wrapper before changing the registry", async () => {
+    const f = fixture();
+    const publisher = { ...f.runtime, cwd: f.checkout };
+    saveGlobalMonkeConfig(f.monkeHome, {
+      diffAdapter: "codiff",
+      skillInstallPreference: { targets: [{ kind: "claude" }] },
+      version: 1
+    });
+    await runCliAsync(
+      ["skills", "add", f.upstream, "--repo", "--ref", "--skill", "base"],
+      publisher
+    );
+    await runCliAsync(["skills", "list"], f.runtime);
+    const document = parseDocument(read(f.checkout, "monke.yml"));
+    document.setIn(["skills", 0, "skills", 0], "base");
+    write(f.checkout, "monke.yml", document.toString());
+    await runCliAsync(["skills", "restore", "--repo"], publisher);
+    write(f.checkout, "skills/internal/base/SKILL.md", "---\nname: base\n---\nWrap.\n");
+    const registry = path.join(f.monkeHome, "skill-registry");
+    const lock = read(registry, "skills.lock.json");
+
+    await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(
+      /duplicate Skill name base/u
+    );
+
+    expect(read(registry, "skills.lock.json")).toBe(lock);
+    expect(existsSync(path.join(registry, "skills/imported/base"))).toBeFalsy();
+  });
+
   it.each([false, true])("updates linked publishers once with project=%s", async (project) => {
     const f = fixture();
 
