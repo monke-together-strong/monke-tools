@@ -347,8 +347,11 @@ async function updateSkills(
     store
   });
 
+  let reconciled: SkillImportRecipeSkill[] = [];
+
   if (dependencies.reconcile) {
-    acceptedGuidance.push(...dependencies.reconcile());
+    reconciled = dependencies.reconcile();
+    acceptedGuidance.push(...reconciled);
     store = readStore(repoRoot);
   }
 
@@ -357,6 +360,7 @@ async function updateSkills(
   const prepare = createGitSkillPreparer({
     before,
     recipes,
+    reconciled,
     repo: dependencies.repo,
     repoRoot,
     revisions,
@@ -623,6 +627,7 @@ function skillUpdateFailure(failures: string[], ...otherFailures: (string | unde
 function createGitSkillPreparer(options: {
   before: string;
   recipes: SkillImportRecipe[];
+  reconciled: readonly SkillImportRecipeSkill[];
   repo?: boolean;
   repoRoot: string;
   revisions: Map<string, ReturnType<typeof resolveSkillRevision>>;
@@ -642,7 +647,15 @@ function createGitSkillPreparer(options: {
       recipe.source,
       Promise.allSettled([
         limit(() =>
-          prepareGitSkillUpdate(repoRoot, recipe, before, runtime, options.revisions, options.repo)
+          prepareGitSkillUpdate(
+            repoRoot,
+            recipe,
+            before,
+            runtime,
+            options.revisions,
+            options.reconciled,
+            options.repo
+          )
         )
       ])
     );
@@ -699,6 +712,7 @@ async function prepareGitSkillUpdate(
   before: string,
   runtime: Runtime,
   revisions: Map<string, ReturnType<typeof resolveSkillRevision>>,
+  reconciled: readonly SkillImportRecipeSkill[],
   repo?: boolean
 ) {
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
@@ -710,6 +724,11 @@ async function prepareGitSkillUpdate(
       await restoreLockedRecipe(repoRoot, recipe, true, runtime);
 
       for (const item of recipe.skills) {
+        // Reconciled guidance keeps its captured baseline so the comparison shows the change.
+        if (reconciled.some((other) => other.kind === item.kind && other.slug === item.slug)) {
+          continue;
+        }
+
         const target = importedGuidancePath(before, item);
         rmSync(target, { force: true, recursive: true });
         cpSync(importedGuidancePath(repoRoot, item), target, {

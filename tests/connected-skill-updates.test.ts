@@ -255,7 +255,9 @@ describe("updates through connected local repositories", () => {
       expect(read(f.home, ".claude/references/imported/base/MAIN.md")).toContain(
         advanced ? "Second version." : "First version."
       );
-      expect(reviewDiff(f.reviewLog)).toContain("diff --git a/skills/imported/base/SKILL.md");
+      const diff = reviewDiff(f.reviewLog);
+      expect(diff).toContain("a/skills/imported/base/SKILL.md");
+      expect(diff).toContain("b/skills/references/imported/base/MAIN.md");
     }
   );
 
