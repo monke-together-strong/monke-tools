@@ -66,6 +66,9 @@ its source checkout. Adding a local source connects its Git checkout through
 the saved link. Monke advances each connected checkout's `monke.yml` imports
 and generated guidance once, preserving that checkout's selections and overrides.
 It includes those changes in the same comparison as the installed collection.
+Before refreshing installed skills, the global registry follows monke-tools'
+declarations as installation does. Those changes appear in the comparison and
+stay in place if a later source fails.
 Successful publisher updates remain in place if refreshing an installed collection
 fails. If saving the comparison fails, retrying retains the original publisher
 YAML and guidance in the next comparison.
@@ -124,5 +127,7 @@ monke-tools' Import kind changes. Installation adds newly declared skills and
 references unless the registry narrowed that source's selection. At another pin,
 installation keeps that pin and only converts retained skills that monke-tools
 made references, so wrappers of the same name can install. Removing a
-source records that choice so later installations leave it removed. Existing
-machine registries migrate to compact recipes on first read.
+source records that choice so later installations leave it removed. Bare
+`mt skills update` applies the same rules, so a wrapper in a local install's
+checkout installs without reinstalling. Existing machine registries
+migrate to compact recipes on first read.

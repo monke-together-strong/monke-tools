@@ -98,6 +98,8 @@ export interface UpdateSkillsDependencies {
   ) => Promise<void>;
   /** Local publisher checkouts whose files may overlap project recovery snapshots. */
   publisherRepos?: string[];
+  /** Apply monke-tools' import declarations after the review baseline, returning changed guidance. */
+  reconcile?: () => SkillImportRecipeSkill[];
   repo?: boolean;
   repoRoot?: string;
   runtime?: Runtime;
@@ -344,6 +346,11 @@ async function updateSkills(
     runtime,
     store
   });
+
+  if (dependencies.reconcile) {
+    acceptedGuidance.push(...dependencies.reconcile());
+    store = readStore(repoRoot);
+  }
 
   const { recipes } = store;
 
