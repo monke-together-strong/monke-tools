@@ -59,16 +59,16 @@ skills:
     skills:
       - slug: pr
         kind: reference
-  - commit: 66c5ac65e3b9ced93ce1e7a781528f6cc1b11d90
+  - commit: df3a4abe7d0840d5f60324812c432e00b66a4e75
     source: https://github.com/pbakaus/impeccable
     skills:
       - impeccable
-  - commit: 96da9cc7f1aa10580a3741664e2a77c721206c00
+  - commit: b8d7baa15b1dca5716f13153e63795fc3d741f6b
     source: https://github.com/shadcn-ui/ui
     skills:
       - shadcn
   - acceptOpenClawRisks: true
-    commit: 25a7a266a4662c19e8e17fb223b78b96acde2f34
+    commit: 9ac98356158876ca9e84f60f2e53884cd3e684bd
     source: openclaw/agent-skills
     skills:
       - autoreview

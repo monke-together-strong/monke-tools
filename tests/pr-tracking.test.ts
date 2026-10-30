@@ -248,12 +248,17 @@ describe("mt prs", () => {
     await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
       `Started a thread for post-merge of ${prUrl(3)}\n`
     );
-    expect(t3Calls()[1]?.slice(0, 5)).toStrictEqual([
+    expect(t3Calls()[1]).toStrictEqual([
       "thread",
       "start",
       "--title",
       "Verify #3",
-      sandbox.source
+      "--provider",
+      "codex",
+      "--model",
+      "gpt-6.1-sol",
+      sandbox.source,
+      `This thread runs post-merge for ${prUrl(3)}. Follow ${sandbox.skill} for it. Its checkout was ${sandbox.worktree}.`
     ]);
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });

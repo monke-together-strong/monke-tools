@@ -133,9 +133,11 @@ While any PR is tracked, `mt prs poll` runs every
 five minutes through launchd on macOS or a systemd user timer on Linux; `mt prs
 list` shows tracked PRs.
 
-When a tracked PR merges outside its thread, `mt prs poll` asks that thread to
-run [post-merge](skills/internal/post-merge/SKILL.md), or starts a thread in the
-source checkout if the thread rejects the message.
+[Post-merge](skills/internal/post-merge/SKILL.md) runs in its own thread on GPT
+6.1 Sol. The thread that owns the PR starts it, then recaps its remaining work
+or settles. When a tracked PR merges outside its thread,
+`mt prs poll` asks that thread to hand off, or starts the post-merge thread
+itself if the thread rejects the message.
 
 ## Configure a repo
 

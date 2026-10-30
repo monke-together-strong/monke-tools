@@ -12,6 +12,9 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
+// The model post-merge's hand-off names; `t3 thread start` cannot set its reasoning effort.
+const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.1-sol"];
+
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
 
@@ -230,10 +233,19 @@ async function handOffPostMerge(
     return undefined;
   }
 
-  // The thread may be gone; start one in the source checkout, which T3 knows as the project.
+  // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
+  // as the project.
   const started = await runtime.execAsync(
     t3,
-    ["thread", "start", "--title", `Verify #${pr.number}`, pr.sourceCheckout, message],
+    [
+      "thread",
+      "start",
+      "--title",
+      `Verify #${pr.number}`,
+      ...POST_MERGE_MODEL,
+      pr.sourceCheckout,
+      `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
+    ],
     { allowFailure: true, timeoutSeconds: T3_TIMEOUT_SECONDS }
   );
 

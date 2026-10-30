@@ -26,3 +26,8 @@ By default, name branches with git flow prefixes: `feature/`, `bugfix/`, `hotfix
 ## Matt Pocock skills issue tracking
 
 While projects may use their own issue tracking, skills such as `/wayfinder`, `to-spec`, `to-tickets` should use Github issues, using personal fork of the repository when it exists.
+
+## UI changes
+
+When making UI changes take screenshots and show me so I can see the outcome. Also provide a link to view it. If the local app is login gated,
+use `agent:login` repo/project command. Set it up if needed per `~/.monke/skill-registry/skills/references/internal/AGENT_LOGIN.md`.

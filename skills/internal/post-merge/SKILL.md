@@ -13,6 +13,16 @@ resolves. Continue only when
 `gh pr view <number> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
 reports `MERGED`.
 
+## Hand off
+
+Post-merge runs in its own thread. When this thread was started to run
+post-merge, continue below. Otherwise hand off and stop:
+
+1. Start a new thread on GPT 6.1 Sol, high effort, that runs post-merge for the
+   PR with this skill and its PR checkout. Link it.
+2. Recap open questions and unfinished items in this thread beyond post-merge.
+   When none remain, settle this thread.
+
 ## Finish the merge
 
 1. Close relevant issues and sub-issues, such as the Spec issue and its
