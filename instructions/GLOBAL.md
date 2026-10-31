@@ -29,5 +29,5 @@ While projects may use their own issue tracking, skills such as `/wayfinder`, `t
 
 ## UI changes
 
-When making UI changes take screenshots and show me so I can see the outcome. Also provide a link to view it. If the local app is login gated,
+When making UI changes take screenshots and show me so I can see the outcome. Also link directly to each changed view or state, not the app or folder root. If the local app is login gated,
 use `agent:login` repo/project command. Set it up if needed per `~/.monke/skill-registry/skills/references/internal/AGENT_LOGIN.md`.

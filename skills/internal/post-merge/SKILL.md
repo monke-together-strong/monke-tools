@@ -1,7 +1,6 @@
 ---
 name: post-merge
-description: Finish a merged PR by closing its issues, cleaning up its checkouts, updating the base, and verifying its post-merge contracts.
-disable-model-invocation: true
+description: Finish a PR after it merges.
 ---
 
 # Post-Merge
@@ -15,8 +14,9 @@ reports `MERGED`.
 
 ## Hand off
 
-Post-merge runs in its own thread. When this thread was started to run
-post-merge, continue below. Otherwise hand off and stop:
+Post-merge ownership moves to an independent top-level thread. When this thread
+was started to run post-merge, continue below. If the runtime does not authorize
+creating a top-level thread, finish post-merge here. Otherwise:
 
 1. Start a new thread on GPT 6.1 Sol, high effort, that runs post-merge for the
    PR with this skill and its PR checkout. Link it.
@@ -58,9 +58,10 @@ sources:
   adds PR-specific checks. `Not required: <reason>` waives only this section.
 
 When no contract applies and the PR has no waiver, inspect the merged change and
-task requirements. Skip with a reason when pre-merge evidence is sufficient (for
-example, docs or a local CLI cleanup). If correctness depends on deployment,
-migration, or the target environment, ask for the missing contract.
+task requirements. When existing evidence establishes correctness, finish and
+report that evidence and its verification limits. Ask for a missing contract only
+when a specific deployment, migration, or target-environment check remains
+unverified by that evidence. Name the check and explain the gap.
 
 ## Wait for the gate
 
