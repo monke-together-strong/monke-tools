@@ -1,0 +1,3 @@
+interface:
+  display_name: "Ape It"
+  short_description: "Implement, open a PR, and shepherd it"
