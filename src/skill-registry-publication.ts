@@ -109,7 +109,7 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
 
 /** Bundled guidance a registry copies for one recipe, replacing its obsolete items. */
 interface BundledImport {
-  /** Convert the registry's retained skills to the copied references instead of copying bytes. */
+  /** Convert the registry's retained skill bytes instead of copying the publisher's bytes. */
   converted: boolean;
   copied: SkillImportRecipe["skills"];
   obsolete: SkillImportRecipe["skills"];
