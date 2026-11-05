@@ -293,6 +293,13 @@ export async function runResourcesExec(runtime: Runtime, command: string, args: 
   }
 }
 
+/** The aggregate legacy hook owns its original outputs; named modules release separately. */
+export function resourceCommandsForRelease(record: CheckoutResources) {
+  return record.resourceCommandOutputs
+    .toReversed()
+    .filter((command) => !record.legacyCleanupCommand || command.legacy === false);
+}
+
 /** Called with the global and checkout locks held; saved modules survive configuration changes. */
 export function releaseCheckoutResources(
   runtime: Runtime,
@@ -300,12 +307,7 @@ export function releaseCheckoutResources(
   record: CheckoutResources,
   cwd = record.owner.checkoutPath
 ) {
-  for (const command of record.resourceCommandOutputs.toReversed()) {
-    // The aggregate legacy hook owns its original outputs; named modules own their releases.
-    if (record.legacyCleanupCommand && command.legacy !== false) {
-      continue;
-    }
-
+  for (const command of resourceCommandsForRelease(record)) {
     releaseResourceCommand(runtime, record, command, cwd);
     record.resourceCommandOutputs = record.resourceCommandOutputs.filter(
       (entry) => entry.name !== command.name

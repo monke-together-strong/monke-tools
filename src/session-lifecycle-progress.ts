@@ -1,10 +1,11 @@
 import { containsPath, samePath } from "./path-identity.ts";
-import type { SessionRepoState, SessionState } from "./types.ts";
+import type { SessionRepoState } from "./types.ts";
 
 export interface SessionAction {
   archivePath?: string;
   command?: string;
   recoveryCommand?: string;
+  resources?: { name: string; run?: string }[];
   retainedRef?: string;
   sourceRoot: string;
   step:
@@ -13,6 +14,7 @@ export interface SessionAction {
     | "head-preservation"
     | "process-stop"
     | "worktree-removal"
+    | "resource-release"
     | "cleanup-command"
     | "state-removal";
   worktreePath?: string;
@@ -28,24 +30,6 @@ export interface SessionLifecycleObserver {
   beforeStep?: (action: SessionAction) => void;
   completed?: (action: SessionAction) => void;
   revalidateMember?: (repo: SessionRepoState) => void;
-}
-
-export function cleanupCommandActions(
-  state: SessionState,
-  recoveryCommand?: string
-): SessionAction[] {
-  return [...state.repos].toReversed().flatMap((repo) =>
-    repo.cleanupEligible && (recoveryCommand ?? repo.cleanupCommand)
-      ? [
-          {
-            command: recoveryCommand ?? repo.cleanupCommand,
-            sourceRoot: repo.sourceRoot,
-            step: "cleanup-command" as const,
-            worktreePath: repo.worktreePath
-          }
-        ]
-      : []
-  );
 }
 
 /** Keep the invoking member last, otherwise keep the Root member last. */

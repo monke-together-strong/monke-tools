@@ -14,16 +14,18 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as z from "zod";
 
+import { checkoutResourceFile } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { runCliAsync } from "../src/index.ts";
 import { saveSessionState, getSessionStateFilePath } from "../src/session-state-store.ts";
 import type { Runtime, SessionState } from "../src/types.ts";
-import { ageWorktree, createRepo, git, write } from "./helpers.ts";
+import { ageWorktree, createRepo, git, runMonke, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const ActionSchema = z.object({
   command: z.string().optional(),
   recoveryCommand: z.string().optional(),
+  resources: z.array(z.object({ name: z.string(), run: z.string().optional() })).optional(),
   retainedRef: z.string().optional(),
   sourceRoot: z.string(),
   step: z.string(),
@@ -41,7 +43,7 @@ const ReportSchema = z.object({
         message: z.string().optional(),
         outcome: z.string(),
         remainingActions: z.array(ActionSchema).optional(),
-        retryCleanupCommands: z.array(ActionSchema).optional(),
+        retryCleanupActions: z.array(ActionSchema).optional(),
         sourceRoot: z.string().optional(),
         step: z.string().optional()
       }),
@@ -255,6 +257,199 @@ describe("global Session cleanup", () => {
 
     return { addSession, cwd, home, root, run, runtime, sources };
   }
+
+  function resourceSession(modules: Record<string, string>) {
+    const f = fixture();
+    write(
+      f.root,
+      "monke.yml",
+      `apps: {}\nresources:\n  commands:\n${Object.keys(modules)
+        .map(
+          (name) =>
+            `    ${name}:\n      acquire: explicit\n      run: ${name}.ts\n      outputs: [${name.toUpperCase()}]\n`
+        )
+        .join("")}`
+    );
+
+    for (const [name, content] of Object.entries(modules)) {
+      write(f.root, `${name}.ts`, content);
+    }
+
+    git(f.root, ["add", "."]);
+    git(f.root, ["commit", "-m", "Configure explicit resources"]);
+    runMonke({ args: ["spawn", "feature/resources"], cwd: f.root, monkeHome: f.home });
+    const worktree = getExpectedWorktreePath(f.home, f.root, "feature/resources");
+    runMonke({ args: ["resources", "acquire"], cwd: worktree, monkeHome: f.home });
+    ageWorktree(worktree);
+
+    return { ...f, worktree };
+  }
+
+  function explicitResourceSession(legacy = false) {
+    return resourceSession({
+      slot:
+        `export ${legacy ? "default " : ""}function acquire() { return { SLOT: "allocated" }; }\n` +
+        'export async function release({owner}) { await Bun.write(owner.sourceRoot + "/released", "yes"); }\n'
+    });
+  }
+
+  it.each(["stale", "gone"])(
+    "reports explicitly acquired resources before and after their worktree becomes %s",
+    async (mode) => {
+      const f = explicitResourceSession();
+      const before = files(f.cwd);
+      const live = await f.run(true);
+      expect(live.error).toBeUndefined();
+      expect(live.report.sessions[0]).toMatchObject({
+        outcome: "would-clean",
+        plannedActions: [
+          { sourceRoot: f.root, step: "resource-release" },
+          { step: "worktree-removal" },
+          { step: "state-removal" }
+        ]
+      });
+      expect(files(f.cwd)).toStrictEqual(before);
+
+      if (mode === "stale") {
+        rmSync(f.worktree, { recursive: true });
+      } else {
+        git(f.root, ["worktree", "remove", "--force", f.worktree]);
+      }
+
+      const removed = files(f.cwd);
+      const preview = await f.run(true);
+      expect(preview.error).toBeUndefined();
+      expect(preview.report.sessions[0]).toMatchObject({
+        outcome: "skipped",
+        reasons: [{ code: "resource-recovery-required" }]
+      });
+      expect(files(f.cwd)).toStrictEqual(removed);
+      const execution = await f.run();
+      expect(execution.report.sessions[0]?.outcome).toBe("skipped");
+      expect(existsSync(path.join(f.root, "released"))).toBeFalsy();
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, "feature/resources"))).toBeTruthy();
+    },
+    30_000
+  );
+
+  it("recovers a resource-only Session from Source with saved outputs after a failed recovery", async () => {
+    const f = explicitResourceSession();
+    git(f.root, ["worktree", "remove", "--force", f.worktree]);
+
+    const command =
+      'test "$SLOT" = allocated && test "$PWD" = "$MONKE_SOURCE_ROOT" && test -f allow-recovery && printf "%s" "$MONKE_RESOURCE_OUTPUTS" > recovered';
+
+    const args = [f.worktree, "--recover-with", command];
+    const preview = await f.run(true, f.cwd, args);
+    expect(preview.report.sessions[0]).toMatchObject({
+      outcome: "would-clean",
+      plannedActions: [{ command, step: "cleanup-command" }, { step: "state-removal" }]
+    });
+
+    const failed = await f.run(false, f.cwd, args);
+    expect(failed.report.sessions[0]).toMatchObject({
+      execution: { completedActions: [], retryCleanupActions: [{ command }] },
+      outcome: "failed"
+    });
+    const retained = await f.run(true);
+    expect(retained.report.sessions[0]?.readiness).toBe("resource-recovery-required");
+    write(f.root, "allow-recovery", "yes");
+    const recovered = await f.run(false, f.cwd, args);
+    expect(recovered.error).toBeUndefined();
+    expect(recovered.report.sessions[0]?.outcome).toBe("cleaned");
+    expect(JSON.parse(readFileSync(path.join(f.root, "recovered"), "utf-8"))).toStrictEqual({
+      SLOT: "allocated"
+    });
+    expect(existsSync(path.join(f.root, "released"))).toBeFalsy();
+    expect(existsSync(checkoutResourceFile(f.home, f.root, f.worktree))).toBeFalsy();
+  }, 30_000);
+
+  it("reports only pending allocations after a partial release and resumes them in reverse order", async () => {
+    const f = resourceSession({
+      first: `import { appendFileSync } from "node:fs";
+export function acquire() { return { FIRST: "one" }; }
+export async function release({owner, outputs}) {
+  if (outputs.FIRST !== "one") throw new Error("Wrong allocation");
+  if (!await Bun.file(owner.sourceRoot + "/allow-release").exists()) throw new Error("Release unavailable");
+  appendFileSync(owner.sourceRoot + "/releases", "first\\n");
+}`,
+      second: `import { appendFileSync } from "node:fs";
+export function acquire() { return { SECOND: "two" }; }
+export function release({owner, outputs}) {
+  if (outputs.SECOND !== "two") throw new Error("Wrong allocation");
+  appendFileSync(owner.sourceRoot + "/releases", "second\\n");
+}`
+    });
+
+    const preview = await f.run(true);
+    expect(preview.report.sessions[0]?.plannedActions[0]).toMatchObject({
+      resources: [
+        { name: "second", run: "second.ts" },
+        { name: "first", run: "first.ts" }
+      ],
+      step: "resource-release"
+    });
+    const failure = await f.run();
+    expect(failure.report.sessions[0]).toMatchObject({
+      execution: {
+        completedActions: [],
+        remainingActions: [
+          { resources: [{ name: "first" }], step: "resource-release" },
+          { step: "worktree-removal" },
+          { step: "state-removal" }
+        ],
+        retryCleanupActions: [{ resources: [{ name: "first" }], step: "resource-release" }],
+        step: "resource-release"
+      },
+      outcome: "failed"
+    });
+    expect(existsSync(f.worktree)).toBeTruthy();
+    expect(readFileSync(path.join(f.root, "releases"), "utf-8")).toBe("second\n");
+    write(f.root, "allow-release", "yes");
+    const retry = await f.run();
+    expect(retry.error).toBeUndefined();
+    expect(retry.report.sessions[0]).toMatchObject({
+      execution: {
+        completedActions: [
+          { resources: [{ name: "first" }], step: "resource-release" },
+          { step: "worktree-removal" },
+          { step: "state-removal" }
+        ]
+      },
+      outcome: "cleaned"
+    });
+    expect(readFileSync(path.join(f.root, "releases"), "utf-8")).toBe("second\nfirst\n");
+  }, 30_000);
+
+  it("requires recovery for a saved legacy module without an aggregate hook", async () => {
+    const f = explicitResourceSession(true);
+    git(f.root, ["worktree", "remove", "--force", f.worktree]);
+    const preview = await f.run(true);
+    expect(preview.report.sessions[0]?.readiness).toBe("resource-recovery-required");
+    expect(() =>
+      runMonke({ args: ["chop", "feature/resources"], cwd: f.root, monkeHome: f.home })
+    ).toThrow("Session worktree is missing");
+    runMonke({
+      args: ["chop", "feature/resources", "--cleanup-from-source"],
+      cwd: f.root,
+      monkeHome: f.home
+    });
+    expect(readFileSync(path.join(f.root, "released"), "utf-8")).toBe("yes");
+  }, 30_000);
+
+  it("reports unreadable canonical resource records without changing them during inspection", async () => {
+    const f = explicitResourceSession();
+    const record = checkoutResourceFile(f.home, f.root, f.worktree);
+    write(f.home, path.relative(f.home, record), "invalid JSON");
+    const before = files(f.cwd);
+    const preview = await f.run(true);
+    expect(preview.report.sessions[0]).toMatchObject({
+      inspectionFailed: true,
+      outcome: "skipped",
+      reasons: [{ code: "resource-state-unverified" }]
+    });
+    expect(files(f.cwd)).toStrictEqual(before);
+  }, 30_000);
 
   it("discovers repositories without Sessions from repeatable Sources and canonicalizes checkout paths", async () => {
     const f = fixture();
@@ -1438,7 +1633,7 @@ describe("global Session cleanup", () => {
       execution: { sourceRoot: f.sources[0], step: "cleanup-command" },
       outcome: "failed"
     });
-    expect(failed?.execution.retryCleanupCommands).toHaveLength(2);
+    expect(failed?.execution.retryCleanupActions).toHaveLength(2);
 
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
