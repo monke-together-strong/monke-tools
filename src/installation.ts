@@ -47,7 +47,7 @@ import { validateReleaseBundleRoot } from "./release-contract.ts";
 import type { ExpectedReleaseIdentity } from "./release-contract.ts";
 import { getHomeDirectory, getMonkeHome, isProcessRunning } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
-import { preflightSkillRegistryInstall } from "./skill-registry.ts";
+import { preflightSkillRegistryInstall } from "./skill-registry-publication.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { unwrapBoundaryResult } from "./validation.ts";
