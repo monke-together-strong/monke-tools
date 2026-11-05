@@ -1599,6 +1599,126 @@ done
     expect(registry).not.toContain("importerVersion");
   });
 
+  it.each(["self-contained", "dependent", "missing"] as const)(
+    "publishes bundled recipes together with a %s replacement consumer",
+    async (replacement) => {
+      const fixture = registryFixture();
+      const reference = { kind: "reference" as const, selector: "base", slug: "base" };
+      const consumer = { kind: "skill" as const, selector: "consumer", slug: "consumer" };
+
+      const acceptedConsumer =
+        "---\nname: consumer\n---\nLoad ../../references/imported/base/MAIN.md.\n";
+
+      const baseRecipe = {
+        commit: "0".repeat(40),
+        disableModelInvocation: true,
+        skills: [reference],
+        source: "https://example.com/a-base"
+      };
+
+      const consumerRecipe = {
+        commit: "1".repeat(40),
+        skills: [consumer],
+        source: "https://example.com/z-consumer"
+      };
+
+      write(fixture.guidance, "skills/references/imported/base/MAIN.md", "Accepted base.\n");
+      write(fixture.guidance, "skills/imported/consumer/SKILL.md", acceptedConsumer);
+      writeImportRecipeStore(fixture.guidance, {
+        recipes: [baseRecipe, consumerRecipe],
+        version: 4
+      });
+      await runCliAsync(["skills", "list"], fixture.runtime);
+      const lock = read(fixture.registry, "skills.lock.json");
+      const marker = read(fixture.registry, "skills/.monke-restored.json");
+
+      const published =
+        "---\r\nname: base\r\ndescription: 'Published: skill' # keep formatting\r\ndisable-model-invocation: false\r\n---\r\nBundled instructions.\r\n";
+
+      const metadata = "policy:\n  allow_implicit_invocation: true # publisher policy\n";
+      write(fixture.guidance, "skills/imported/base/SKILL.md", published);
+      write(fixture.guidance, "skills/imported/base/agents/openai.yaml", metadata);
+
+      if (replacement !== "missing") {
+        write(
+          fixture.guidance,
+          "skills/references/imported/consumer/MAIN.md",
+          replacement === "self-contained"
+            ? "Self-contained guidance.\n"
+            : "Load ../base/MAIN.md.\n"
+        );
+      }
+
+      writeImportRecipeStore(fixture.guidance, {
+        recipes: [
+          {
+            ...baseRecipe,
+            disableModelInvocation: false,
+            skills: [{ ...reference, description: "Published: skill", kind: "skill" }]
+          },
+          { ...consumerRecipe, skills: [{ ...consumer, kind: "reference" }] }
+        ],
+        version: 4
+      });
+
+      const succeeds = replacement === "self-contained";
+
+      const expected = succeeds
+        ? /^accepted$/u
+        : replacement === "missing"
+          ? /Expected staged Skill directory/u
+          : /Cannot replace Imported reference base;.*consumer\/MAIN.md/u;
+
+      let preflight = "accepted";
+
+      try {
+        preflightSkillRegistryInstall(fixture.runtime, fixture.guidance);
+      } catch (cause) {
+        preflight = errorMessage(ThrownValueSchema.parse(cause));
+      }
+
+      expect(preflight).toMatch(expected);
+
+      const publishedResult = await runInstallSkillsLocked(fixture.runtime, fixture.guidance).then(
+        () => "accepted",
+        (cause: unknown) => errorMessage(ThrownValueSchema.parse(cause))
+      );
+
+      expect(publishedResult).toMatch(expected);
+      expect(
+        read(
+          fixture.registry,
+          succeeds ? "skills/imported/base/SKILL.md" : "skills/references/imported/base/MAIN.md"
+        )
+      ).toBe(succeeds ? published : "Accepted base.\n");
+      expect(
+        read(
+          fixture.registry,
+          succeeds
+            ? "skills/references/imported/consumer/MAIN.md"
+            : "skills/imported/consumer/SKILL.md"
+        )
+      ).toBe(succeeds ? "Self-contained guidance.\n" : acceptedConsumer);
+      const metadataPath = path.join(fixture.registry, "skills/imported/base/agents/openai.yaml");
+      expect(existsSync(metadataPath) ? readFileSync(metadataPath, "utf-8") : undefined).toBe(
+        succeeds ? metadata : undefined
+      );
+      expect(existsSync(path.join(fixture.registry, "skills/references/imported/base"))).toBe(
+        !succeeds
+      );
+      expect(existsSync(path.join(fixture.registry, "skills/imported/consumer"))).toBe(!succeeds);
+      expect(existsSync(path.join(fixture.registry, "skills/imported/base"))).toBe(succeeds);
+      expect(existsSync(path.join(fixture.registry, "skills/references/imported/consumer"))).toBe(
+        succeeds
+      );
+      expect(read(fixture.registry, "skills.lock.json") === lock).toBe(!succeeds);
+      expect(read(fixture.registry, "skills/.monke-restored.json") === marker).toBe(!succeeds);
+      expect(
+        readImportRecipeStore(fixture.registry).recipes[0]?.disableModelInvocation
+      ).toBeTruthy();
+    }
+  );
+
   it("preserves a migrated bundled source and its accepted guidance during installation", async () => {
     const fixture = registryFixture();
     const source = "https://github.com/owner/bundled/tree/main/course";

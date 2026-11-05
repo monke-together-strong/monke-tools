@@ -50,6 +50,8 @@ export function assertManagedGuidanceRoots(repoRoot: string) {
 export function copyStagedGuidanceToManagedRoots(
   options: {
     commitState?: () => void;
+    /** Explicit projected consumers, including source aliases outside the managed collection. */
+    consumerRoots?: readonly string[];
     defaultDisableModelInvocation?: boolean;
     guidance: readonly SkillImportRecipeSkill[];
     ignoredConsumerRoots?: readonly string[];
@@ -76,10 +78,8 @@ export function copyStagedGuidanceToManagedRoots(
     targetPath: importedGuidancePath(options.repoRoot, item)
   }));
 
-  const obsoleteReferences = new Set(
-    obsoleteGuidance
-      .filter((item) => item.kind === "reference")
-      .map((item) => importedGuidancePath(options.repoRoot, item))
+  const obsoletePaths = new Set(
+    obsoleteGuidance.map((item) => importedGuidancePath(options.repoRoot, item))
   );
 
   const stagedSkillsRoot = path.join(options.stagingDirectory, ".agents", "skills");
@@ -112,7 +112,7 @@ export function copyStagedGuidanceToManagedRoots(
     options.validatePrepared?.(preparedRoot);
 
     for (const { item, targetPath } of destinations.filter(
-      (destination) => !obsoleteReferences.has(destination.targetPath)
+      (destination) => !obsoletePaths.has(destination.targetPath)
     )) {
       moveToBackup(item, targetPath);
     }
@@ -139,16 +139,38 @@ export function copyStagedGuidanceToManagedRoots(
     }
 
     // Keep reference targets resolvable until retained consumers have been checked.
-    assertObsoleteReferencesAreUnconsumed(options.repoRoot, obsoleteGuidance, [
-      backupRoot,
-      ...(options.ignoredConsumerRoots ?? []),
-      ...(samePath(options.stagingDirectory, options.repoRoot) ? [] : [options.stagingDirectory]),
-      ...obsoleteGuidance.map((item) => importedGuidancePath(options.repoRoot, item))
-    ]);
+    assertObsoleteReferencesAreUnconsumed(
+      options.repoRoot,
+      obsoleteGuidance,
+      [
+        backupRoot,
+        ...(options.ignoredConsumerRoots ?? []),
+        ...(samePath(options.stagingDirectory, options.repoRoot) ? [] : [options.stagingDirectory]),
+        ...obsoleteGuidance.map((item) => importedGuidancePath(options.repoRoot, item))
+      ],
+      options.consumerRoots
+    );
 
-    for (const { item, targetPath } of destinations.filter((destination) =>
-      obsoleteReferences.has(destination.targetPath)
-    )) {
+    const published = guidance.map((item) =>
+      lstatSync(importedGuidancePath(options.repoRoot, item))
+    );
+
+    const retired = destinations.filter(({ targetPath }) => {
+      if (!obsoletePaths.has(targetPath)) {
+        return false;
+      }
+
+      const entry = lstatSync(targetPath, { throwIfNoEntry: false });
+
+      // A case-only rename can make the obsolete spelling resolve to a published destination.
+      return (
+        !entry ||
+        !published.some((current) => current.dev === entry.dev && current.ino === entry.ino)
+      );
+    });
+
+    // Retain conversion sources until their replacements exist, including after an interruption.
+    for (const { item, targetPath } of retired) {
       moveToBackup(item, targetPath);
     }
 
@@ -355,13 +377,19 @@ function removeLeadingYamlFrontmatter(markdown: string) {
   return markdown.slice(match[0].length);
 }
 
-/** Ignore consumers removed in the same batch while protecting every retained consumer. */
+/** Explicit consumer roots replace discovery and allow traversal within each resolved source. */
 export function assertObsoleteReferencesAreUnconsumed(
   repoRoot: string,
   obsoleteGuidance: readonly Pick<SkillImportRecipeSkill, "kind" | "slug">[],
-  ignoredConsumerRoots: readonly string[] = []
+  ignoredConsumerRoots: readonly string[] = [],
+  consumerRoots?: readonly string[]
 ) {
   const physicalRepoRoot = realpathSync.native(repoRoot);
+
+  const physicalPath = (root: string) =>
+    containsPath(repoRoot, root)
+      ? path.resolve(physicalRepoRoot, path.relative(repoRoot, root))
+      : path.resolve(root);
 
   for (const guidance of obsoleteGuidance) {
     if (guidance.kind !== "reference") {
@@ -374,27 +402,31 @@ export function assertObsoleteReferencesAreUnconsumed(
     const ignored = [
       path.join(physicalRepoRoot, "monke.yml"),
       path.join(physicalRepoRoot, "skills/.monke-restored.json"),
-      ...ignoredConsumerRoots.map((root) =>
-        path.resolve(physicalRepoRoot, path.relative(repoRoot, root))
-      )
+      ...ignoredConsumerRoots.map(physicalPath)
     ];
 
-    const roots = existsSync(path.join(physicalRepoRoot, "SKILL.md"))
-      ? ["."]
-      : SKILL_SOURCE_CANDIDATES;
+    const roots = consumerRoots
+      ? consumerRoots.map(physicalPath)
+      : (existsSync(path.join(physicalRepoRoot, "SKILL.md")) ? ["."] : SKILL_SOURCE_CANDIDATES).map(
+          (root) => path.join(physicalRepoRoot, root)
+        );
 
-    const consumers = roots
-      .flatMap((root) =>
-        listReferenceConsumers(
-          physicalRepoRoot,
-          path.join(physicalRepoRoot, root),
-          obsoleteReferenceRoot,
-          referencePathPrefix,
-          ignored
-        )
+    const consumers = [
+      ...new Set(
+        roots
+          .flatMap((root) =>
+            listReferenceConsumers(
+              physicalRepoRoot,
+              root,
+              obsoleteReferenceRoot,
+              referencePathPrefix,
+              ignored,
+              consumerRoots && existsSync(root) ? realpathSync.native(root) : undefined
+            )
+          )
+          .map((entryPath) => path.relative(physicalRepoRoot, entryPath))
       )
-      .map((entryPath) => path.relative(physicalRepoRoot, entryPath))
-      .toSorted();
+    ].toSorted();
 
     if (consumers.length > 0) {
       throw new MonkeError(
@@ -409,7 +441,8 @@ function listReferenceConsumers(
   root: string,
   obsoleteReferenceRoot: string,
   referencePathPrefix: string,
-  ignoredConsumerRoots: readonly string[]
+  ignoredConsumerRoots: readonly string[],
+  physicalConsumerRoot?: string
 ): string[] {
   const ancestors = new Set<string>();
 
@@ -451,7 +484,11 @@ function listReferenceConsumers(
 
     const physicalPath = realpathSync.native(consumerPath);
 
-    if (!containsPath(repoRoot, physicalPath) || isExcluded(physicalPath)) {
+    if (
+      (!containsPath(repoRoot, physicalPath) &&
+        !(physicalConsumerRoot && containsPath(physicalConsumerRoot, physicalPath))) ||
+      isExcluded(physicalPath)
+    ) {
       return [];
     }
 

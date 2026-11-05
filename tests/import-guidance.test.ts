@@ -28,6 +28,46 @@ function guidanceFixture() {
 }
 
 describe("guidance transaction recovery", () => {
+  it("preserves a published skill after a case-only slug rename", () => {
+    const repoRoot = makeTempDir("guidance-case-rename-");
+    const stagingDirectory = path.join(repoRoot, "staging");
+    write(repoRoot, "skills/imported/Foo/SKILL.md", "Accepted skill.");
+    write(stagingDirectory, ".agents/skills/foo/SKILL.md", "Updated skill.");
+    copyStagedGuidanceToManagedRoots({
+      guidance: [{ kind: "skill", selector: "foo", slug: "foo" }],
+      obsoleteGuidance: [{ kind: "skill", slug: "Foo" }],
+      repoRoot,
+      stagingDirectory
+    });
+    expect(read(repoRoot, "skills/imported/foo/SKILL.md")).toBe("Updated skill.");
+    expect(fs.readdirSync(path.join(repoRoot, "skills/imported"))).toStrictEqual(["foo"]);
+  });
+
+  it("keeps retained skill bytes available until their converted reference is published", () => {
+    const fixture = guidanceFixture();
+    const reference = path.join(fixture.repoRoot, "skills/references/imported/alpha/MAIN.md");
+    let convertedBytes: string | undefined;
+    copyStagedGuidanceToManagedRoots(
+      {
+        ...fixture,
+        guidance: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
+        obsoleteGuidance: [{ kind: "skill", slug: "alpha" }],
+        stagedGuidancePath: () => fixture.target("alpha")
+      },
+      (from, to) => {
+        if (from === fixture.target("alpha")) {
+          // An interruption after retiring the skill must leave its converted bytes available.
+          convertedBytes = fs.readFileSync(reference, "utf-8");
+        }
+
+        fs.renameSync(from, to);
+      }
+    );
+    expect(convertedBytes).toBe("original alpha");
+    expect(fs.readFileSync(reference, "utf-8")).toBe("original alpha");
+    expect(fs.existsSync(fixture.target("alpha"))).toBeFalsy();
+  });
+
   it("restores linked source bytes after a failed description publication without touching agent metadata", () => {
     const fixture = guidanceFixture();
     const source = path.join(fixture.repoRoot, "linked-alpha");
