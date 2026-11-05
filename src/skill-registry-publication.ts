@@ -114,7 +114,7 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
     ]
   });
 
-  return { imports, next };
+  return { imports, next, registryRoot: root };
 }
 
 /** Bundled guidance a registry copies for one recipe, replacing its obsolete items. */
@@ -178,7 +178,7 @@ function followBundledRecipe(
 function publishBundledImports(
   root: string,
   guidance: string,
-  { imports, next }: ReturnType<typeof planRegistryImports>,
+  { imports, next, registryRoot }: ReturnType<typeof planRegistryImports>,
   commitState?: () => void
 ) {
   if (imports.length === 0) {
@@ -197,12 +197,17 @@ function publishBundledImports(
 
   copyStagedGuidanceToManagedRoots({
     commitState,
-    consumerRoots: [
-      path.join(root, "skills/imported"),
-      path.join(root, "skills/references/imported"),
-      ...retained,
-      ...OWNED_GUIDANCE_FOLDERS.map((folder) => path.join(guidance, folder))
-    ],
+    consumerRoots: new Map([
+      ...[
+        path.join(root, "skills/imported"),
+        path.join(root, "skills/references/imported"),
+        ...retained
+      ].map((source): [string, string] => [source, source]),
+      ...OWNED_GUIDANCE_FOLDERS.map((folder): [string, string] => [
+        path.join(guidance, folder),
+        path.join(root, folder)
+      ])
+    ]),
     // Bundled bytes already carry metadata; following a kind must not reapply recipe policy.
     guidance: imports.flatMap(({ copied }) =>
       copied.map(({ kind, selector, slug }) => ({ kind, selector, slug }))
@@ -211,6 +216,7 @@ function publishBundledImports(
       .flatMap(({ obsolete }) => obsolete)
       .filter((item) => !retained.has(importedGuidancePath(root, item))),
     repoRoot: root,
+    retainedRoot: registryRoot,
     stagedGuidancePath(item) {
       if (!converted.has(importedGuidancePath(root, item))) {
         return importedGuidancePath(guidance, item);

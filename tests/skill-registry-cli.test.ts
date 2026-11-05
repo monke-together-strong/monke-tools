@@ -1599,6 +1599,76 @@ done
     expect(registry).not.toContain("importerVersion");
   });
 
+  it.each([
+    { linked: false, symlink: false },
+    { linked: false, symlink: true },
+    { linked: true, symlink: false },
+    { linked: true, symlink: true }
+  ])(
+    "protects relative reference consumers with linked=$linked, symlink=$symlink",
+    async ({ linked, symlink }) => {
+      const fixture = registryFixture();
+
+      const recipe = {
+        commit: "0".repeat(40),
+        skills: [{ kind: "reference" as const, selector: "base", slug: "base" }],
+        source: "https://example.com/bundled"
+      };
+
+      write(fixture.guidance, "skills/references/imported/base/MAIN.md", "Accepted base.\n");
+      writeImportRecipeStore(fixture.guidance, { recipes: [recipe], version: 4 });
+      await runCliAsync(["skills", "list"], fixture.runtime);
+      const external = path.join(fixture.sandbox, "linked-consumer");
+
+      const consumerRoot = linked
+        ? path.join(external, "retained")
+        : path.join(fixture.guidance, "skills/references/internal");
+
+      const destination = linked ? "../resource/MAIN.md" : "../imported/base/MAIN.md";
+      write(consumerRoot, "retained.md", `[base](${destination})\n`);
+
+      if (symlink) {
+        rmSync(path.join(consumerRoot, "retained.md"));
+        symlinkSync(destination, path.join(consumerRoot, "retained.md"));
+      }
+
+      if (linked) {
+        writeSkill(external, "retained", "Read retained.md.\n");
+        symlinkSync(
+          path.join(fixture.registry, "skills/references/imported/base"),
+          path.join(external, "resource"),
+          "dir"
+        );
+        await runCliAsync(
+          ["skills", "add", external, "--link", "--skill", "retained"],
+          fixture.runtime
+        );
+      }
+
+      const lock = read(fixture.registry, "skills.lock.json");
+      const marker = read(fixture.registry, "skills/.monke-restored.json");
+      writeSkill(path.join(fixture.guidance, "skills/imported"), "base", "New skill.\n");
+      writeImportRecipeStore(fixture.guidance, {
+        recipes: [{ ...recipe, skills: [{ kind: "skill", selector: "base", slug: "base" }] }],
+        version: 4
+      });
+
+      const expected = /Cannot replace Imported reference base;.*retained\.md/u;
+      expect(() => {
+        preflightSkillRegistryInstall(fixture.runtime, fixture.guidance);
+      }).toThrow(expected);
+      await expect(runInstallSkillsLocked(fixture.runtime, fixture.guidance)).rejects.toThrow(
+        expected
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(lock);
+      expect(read(fixture.registry, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(fixture.registry, "skills/references/imported/base/MAIN.md")).toBe(
+        "Accepted base.\n"
+      );
+      expect(existsSync(path.join(fixture.registry, "skills/imported/base"))).toBeFalsy();
+    }
+  );
+
   it.each(["self-contained", "dependent", "missing"] as const)(
     "publishes bundled recipes together with a %s replacement consumer",
     async (replacement) => {

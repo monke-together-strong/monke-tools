@@ -50,14 +50,16 @@ export function assertManagedGuidanceRoots(repoRoot: string) {
 export function copyStagedGuidanceToManagedRoots(
   options: {
     commitState?: () => void;
-    /** Explicit projected consumers, including source aliases outside the managed collection. */
-    consumerRoots?: readonly string[];
+    /** Source roots mapped to their locations in the proposed collection. */
+    consumerRoots?: ReadonlyMap<string, string>;
     defaultDisableModelInvocation?: boolean;
     guidance: readonly SkillImportRecipeSkill[];
     ignoredConsumerRoots?: readonly string[];
     linkedSkills?: ReadonlyMap<string, string>;
     obsoleteGuidance?: readonly Pick<SkillImportRecipeSkill, "kind" | "slug">[];
     repoRoot: string;
+    /** Original collection for aliases when validating a copied proposal. */
+    retainedRoot?: string;
     stagedGuidancePath?: (guidance: SkillImportRecipeSkill) => string;
     stagingDirectory: string;
     validatePrepared?: (preparedRoot: string) => void;
@@ -148,7 +150,8 @@ export function copyStagedGuidanceToManagedRoots(
         ...(samePath(options.stagingDirectory, options.repoRoot) ? [] : [options.stagingDirectory]),
         ...obsoleteGuidance.map((item) => importedGuidancePath(options.repoRoot, item))
       ],
-      options.consumerRoots
+      options.consumerRoots,
+      options.retainedRoot
     );
 
     const published = guidance.map((item) =>
@@ -382,7 +385,8 @@ export function assertObsoleteReferencesAreUnconsumed(
   repoRoot: string,
   obsoleteGuidance: readonly Pick<SkillImportRecipeSkill, "kind" | "slug">[],
   ignoredConsumerRoots: readonly string[] = [],
-  consumerRoots?: readonly string[]
+  consumerRoots?: ReadonlyMap<string, string>,
+  retainedRoot = repoRoot
 ) {
   const physicalRepoRoot = realpathSync.native(repoRoot);
 
@@ -396,7 +400,11 @@ export function assertObsoleteReferencesAreUnconsumed(
       continue;
     }
 
-    const obsoleteReferenceRoot = importedGuidancePath(physicalRepoRoot, guidance);
+    const obsoleteReferenceRoots = [
+      importedGuidancePath(physicalRepoRoot, guidance),
+      importedGuidancePath(realpathSync.native(retainedRoot), guidance)
+    ];
+
     const referencePathPrefix = `${path.posix.join("references", "imported", guidance.slug)}/`;
 
     const ignored = [
@@ -406,22 +414,25 @@ export function assertObsoleteReferencesAreUnconsumed(
     ];
 
     const roots = consumerRoots
-      ? consumerRoots.map(physicalPath)
+      ? [...consumerRoots].map(([source, projected]) => ({
+          projected: physicalPath(projected),
+          source: physicalPath(source)
+        }))
       : (existsSync(path.join(physicalRepoRoot, "SKILL.md")) ? ["."] : SKILL_SOURCE_CANDIDATES).map(
-          (root) => path.join(physicalRepoRoot, root)
+          (root) => ({ projected: undefined, source: path.join(physicalRepoRoot, root) })
         );
 
     const consumers = [
       ...new Set(
         roots
-          .flatMap((root) =>
+          .flatMap(({ projected, source }) =>
             listReferenceConsumers(
               physicalRepoRoot,
-              root,
-              obsoleteReferenceRoot,
+              source,
+              obsoleteReferenceRoots,
               referencePathPrefix,
               ignored,
-              consumerRoots && existsSync(root) ? realpathSync.native(root) : undefined
+              projected
             )
           )
           .map((entryPath) => path.relative(physicalRepoRoot, entryPath))
@@ -439,15 +450,18 @@ export function assertObsoleteReferencesAreUnconsumed(
 function listReferenceConsumers(
   repoRoot: string,
   root: string,
-  obsoleteReferenceRoot: string,
+  obsoleteReferenceRoots: readonly string[],
   referencePathPrefix: string,
   ignoredConsumerRoots: readonly string[],
-  physicalConsumerRoot?: string
+  projectedRoot?: string
 ): string[] {
   const ancestors = new Set<string>();
 
+  const physicalConsumerRoot =
+    projectedRoot && existsSync(root) ? realpathSync.native(root) : undefined;
+
   const isExcluded = (entryPath: string) =>
-    containsPath(obsoleteReferenceRoot, entryPath) ||
+    obsoleteReferenceRoots.some((reference) => containsPath(reference, entryPath)) ||
     ignoredConsumerRoots.some((ignored) => containsPath(ignored, entryPath));
 
   function visit(consumerPath: string): string[] {
@@ -461,18 +475,22 @@ function listReferenceConsumers(
       return [];
     }
 
+    const projectedPath =
+      projectedRoot && path.join(projectedRoot, path.relative(root, consumerPath));
+
     if (entry.isSymbolicLink()) {
       const linkTarget = readlinkSync(consumerPath);
 
-      const resolvedTarget = path.isAbsolute(linkTarget)
-        ? linkTarget
-        : `${realpathSync.native(path.dirname(consumerPath))}${path.sep}${linkTarget}`;
-
       if (
         linkTarget.includes(referencePathPrefix) ||
-        pathPointsIntoReference(resolvedTarget, obsoleteReferenceRoot)
+        consumerPathPointsIntoReference(
+          linkTarget,
+          consumerPath,
+          obsoleteReferenceRoots,
+          projectedPath
+        )
       ) {
-        return [consumerPath];
+        return [projectedPath ?? consumerPath];
       }
 
       entry = statSync(consumerPath, { throwIfNoEntry: false });
@@ -513,9 +531,14 @@ function listReferenceConsumers(
 
       const consumesReference =
         content.includes(referencePathPrefix) ||
-        contentContainsRelativePathInto(content, consumerPath, obsoleteReferenceRoot);
+        contentContainsRelativePathInto(
+          content,
+          consumerPath,
+          obsoleteReferenceRoots,
+          projectedPath
+        );
 
-      return consumesReference ? [consumerPath] : [];
+      return consumesReference ? [projectedPath ?? consumerPath] : [];
     }
 
     return [];
@@ -527,7 +550,8 @@ function listReferenceConsumers(
 function contentContainsRelativePathInto(
   content: string,
   consumerPath: string,
-  targetRoot: string
+  targetRoots: readonly string[],
+  projectedPath?: string
 ) {
   const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/gu;
 
@@ -538,27 +562,46 @@ function contentContainsRelativePathInto(
       : [])
   ];
 
-  const consumerDirectory = realpathSync.native(path.dirname(consumerPath));
-
   return destinations.some((destination) => {
     const filePath = destination.replace(/[?#].*$/u, "");
 
     return (
-      pathPointsIntoReference(`${consumerDirectory}${path.sep}${destination}`, targetRoot) ||
+      consumerPathPointsIntoReference(destination, consumerPath, targetRoots, projectedPath) ||
       (filePath !== destination &&
-        pathPointsIntoReference(`${consumerDirectory}${path.sep}${filePath}`, targetRoot))
+        consumerPathPointsIntoReference(filePath, consumerPath, targetRoots, projectedPath))
     );
   });
 }
 
-function pathPointsIntoReference(candidate: string, referenceRoot: string) {
-  if (containsPath(referenceRoot, path.resolve(candidate))) {
+function consumerPathPointsIntoReference(
+  destination: string,
+  consumerPath: string,
+  referenceRoots: readonly string[],
+  projectedPath?: string
+) {
+  // Resolve projected links lexically so stale owned aliases cannot affect a candidate's check.
+  if (
+    projectedPath &&
+    referenceRoots.some((root) =>
+      containsPath(root, path.resolve(path.dirname(projectedPath), destination))
+    )
+  ) {
+    return true;
+  }
+
+  const candidate = path.isAbsolute(destination)
+    ? destination
+    : `${realpathSync.native(path.dirname(consumerPath))}${path.sep}${destination}`;
+
+  if (referenceRoots.some((root) => containsPath(root, path.resolve(candidate)))) {
     return true;
   }
 
   return (
     existsSync(candidate) &&
-    [...resolveSkillPath(candidate).paths].some((entry) => containsPath(referenceRoot, entry))
+    [...resolveSkillPath(candidate).paths].some((entry) =>
+      referenceRoots.some((root) => containsPath(root, entry))
+    )
   );
 }
 
