@@ -24,7 +24,7 @@ import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-conf
 import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
 import { runCliAsync } from "../src/index.ts";
 import { shellQuote } from "../src/shell-quote.ts";
-import { preflightSkillRegistryInstall } from "../src/skill-registry.ts";
+import { preflightSkillRegistryInstall } from "../src/skill-registry-publication.ts";
 import {
   createRepo,
   git,

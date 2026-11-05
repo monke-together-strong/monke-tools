@@ -14,7 +14,7 @@ import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
 import { resolveManagedDirectory } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
-import { registryGuidanceRoot } from "./skill-registry.ts";
+import { registryGuidanceRoot } from "./skill-registry-publication.ts";
 import {
   explicitSkillInstallPreference,
   promptForSkillInstallPreference,
