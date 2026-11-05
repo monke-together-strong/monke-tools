@@ -77,20 +77,25 @@ function inspectRepoFinalization(
       ? repo.sourceRoot
       : repo.worktreePath;
 
-  const cleanupCommand = recoveryCommand
-    ? repo.cleanupEligible ||
-      record.resourceCommandOutputs.length > 0 ||
-      record.legacyCleanupCommand
-      ? recoveryCommand
-      : undefined
-    : repo.cleanupEligible &&
-        repo.cleanupCommand !== record.legacyCleanupCommand &&
-        repo.cleanupCommand !== record.releasedLegacyCleanup
-      ? repo.cleanupCommand
-      : undefined;
+  const hasRetainedResources =
+    record.resourceCommandOutputs.length > 0 || Boolean(record.legacyCleanupCommand);
+
+  const { cleanupCommand: savedCleanupCommand } = repo;
+
+  const cleanupOwnedByRelease =
+    savedCleanupCommand === record.legacyCleanupCommand ||
+    savedCleanupCommand === record.releasedLegacyCleanup;
+
+  let cleanupCommand: string | undefined;
+
+  if (recoveryCommand) {
+    cleanupCommand = repo.cleanupEligible || hasRetainedResources ? recoveryCommand : undefined;
+  } else if (repo.cleanupEligible && !cleanupOwnedByRelease) {
+    cleanupCommand = savedCleanupCommand;
+  }
 
   const releaseAction: SessionAction | undefined =
-    !recoveryCommand && (record.resourceCommandOutputs.length > 0 || record.legacyCleanupCommand)
+    !recoveryCommand && hasRetainedResources
       ? {
           command: record.legacyCleanupCommand,
           resources: releaseCommands.map(({ name, run }) => ({ name, run })),

@@ -1118,7 +1118,7 @@ external:
         cwd: fixture.root,
         monkeHome: fixture.home
       });
-    }).toThrow(/Cleanup command failed/u);
+    }).toThrow(/Resource release failed/u);
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
     expect(existsSync(fixture.depWorktree)).toBeTruthy();
     expect(existsSync(fixture.rootWorktree)).toBeTruthy();
@@ -1157,7 +1157,7 @@ external:
         cwd: fixture.depWorktree,
         monkeHome: fixture.home
       });
-    }).toThrow(/Cleanup command failed/u);
+    }).toThrow(/Resource release failed/u);
 
     expect(existsSync(fixture.depWorktree)).toBeTruthy();
     expect(existsSync(fixture.rootWorktree)).toBeTruthy();
