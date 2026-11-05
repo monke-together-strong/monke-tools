@@ -17,6 +17,7 @@ import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { OperationLock } from "./runtime.ts";
+import { inspectSessionFinalization } from "./session-finalization.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
   inspectSessionRepoRegistration
@@ -31,6 +32,7 @@ export type SessionCleanupBlocker =
   | "ownership-conflict"
   | "member-identity-unverified"
   | "resource-recovery-required"
+  | "resource-state-unverified"
   | "source-missing"
   | "held"
   | "operation-lock-present"
@@ -70,6 +72,7 @@ export interface SessionCleanupMember {
 export interface SessionCleanupEvidence {
   blockers: SessionCleanupBlocker[];
   filePath: string;
+  finalization?: ReturnType<typeof inspectSessionFinalization>;
   members: SessionCleanupMember[];
   problems?: SessionCleanupProblem[];
   rootSourceRoot: string | null;
@@ -327,15 +330,6 @@ export async function inspectSessionCleanup(
                   repo
                 );
 
-                if (
-                  registration.mode !== "live" &&
-                  repo.cleanupEligible &&
-                  repo.cleanupCommand &&
-                  !options.recoveryCommand
-                ) {
-                  snapshot.blockers.push("resource-recovery-required");
-                }
-
                 if (registration.mode === "stale") {
                   const stale = inspectStaleRegistration(
                     collectorReadOnly,
@@ -420,6 +414,20 @@ export async function inspectSessionCleanup(
           worktreePath: repo.worktreePath
         });
       }
+    }
+
+    try {
+      snapshot.finalization = inspectSessionFinalization(home, state, options);
+
+      if (snapshot.finalization.recoveryRequired.length > 0) {
+        snapshot.blockers.push("resource-recovery-required");
+      }
+    } catch (cause) {
+      snapshot.blockers.push("resource-state-unverified");
+      snapshot.problems?.push({
+        code: "resource-state-unverified",
+        message: errorMessage(ThrownValueSchema.parse(cause))
+      });
     }
   }
 

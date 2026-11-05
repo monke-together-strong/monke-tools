@@ -13,7 +13,7 @@ const STATE_POLL_ATTEMPTS = 200;
 const STATE_POLL_DELAY_MS = 10;
 
 describe("Cleanup authority", () => {
-  it("supersedes legacy snapshots with a migrated release that Chop does not repeat", () => {
+  it("does not revive released legacy cleanup after its worktree disappears", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-migration");
     runMonke({ args: ["spawn", "retained"], cwd: fixture.repoRoot, monkeHome: fixture.home });
     const store = new CheckoutResourceStore(fixture.home);
@@ -48,6 +48,19 @@ describe("Cleanup authority", () => {
       monkeHome: fixture.home
     });
     expect(store.get(owner).resourceCommandOutputs).toStrictEqual([]);
+
+    git(fixture.repoRoot, ["worktree", "remove", "--force", fixture.worktreeRoot]);
+
+    const preview = runMonke({
+      args: ["cleanup", "--dry-run", "--json"],
+      cwd: fixture.repoRoot,
+      monkeHome: fixture.home
+    });
+
+    expect(JSON.parse(preview.stdout)).toMatchObject({
+      sessions: [{ outcome: "would-clean", plannedActions: [{ step: "state-removal" }] }]
+    });
+
     runMonke({
       args: ["chop", "retained", "--force"],
       cwd: fixture.repoRoot,

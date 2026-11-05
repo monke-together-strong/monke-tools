@@ -64,6 +64,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "resource-recovery-required":
     "A required cleanup worktree is missing; restore it or select an audited --recover-with command.",
+  "resource-state-unverified": "Retained Checkout resource records could not be read.",
   "source-checkout": "Source checkouts cannot be removed.",
   "source-missing":
     "A member's recorded Source checkout no longer exists; Chop cannot run and the state is retained.",
@@ -95,7 +96,7 @@ export type SessionCleanupExecution = (
   attemptedAction?: SessionAction;
   completedActions?: SessionAction[];
   remainingActions?: SessionAction[];
-  retryCleanupCommands?: SessionAction[];
+  retryCleanupActions?: SessionAction[];
 };
 
 const NOT_ATTEMPTED: SessionCleanupExecution = { outcome: "not-attempted" };
@@ -350,15 +351,26 @@ function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
     lines.push("  The failed action may have produced effects; its completion is unverified.");
   }
 
-  if (report.outcome === "failed" && (report.execution.retryCleanupCommands?.length ?? 0) > 0) {
-    lines.push(
-      "  Retry runs recorded Cleanup commands from the beginning, including earlier successes."
-    );
+  if (report.outcome === "failed" && (report.execution.retryCleanupActions?.length ?? 0) > 0) {
+    const retryActions = report.execution.retryCleanupActions ?? [];
+
+    if (retryActions.some((action) => action.step === "resource-release")) {
+      lines.push("  Retry resumes pending resource releases.");
+    }
+
+    if (retryActions.some((action) => action.recoveryCommand)) {
+      lines.push("  Retry runs the supplied recovery command again.");
+    } else if (retryActions.some((action) => action.step === "cleanup-command")) {
+      lines.push("  Recorded Cleanup commands run again on retry, including earlier successes.");
+    }
   }
 
   return lines;
 }
 
 function formatAction(action: SessionAction) {
-  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.archivePath ? `; archive: ${action.archivePath}` : ""}${action.command ? `: ${action.command}` : ""}${action.retainedRef ? `; retained HEAD: ${action.retainedRef}` : ""}${action.recoveryCommand ? `; recover: ${action.recoveryCommand}` : ""}`;
+  const resources =
+    action.resources?.map(({ name, run }) => `${name}${run ? ` (${run})` : ""}`) ?? [];
+
+  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.archivePath ? `; archive: ${action.archivePath}` : ""}${action.command ? `: ${action.command}` : ""}${resources.length > 0 ? `; resources: ${resources.join(", ")}` : ""}${action.retainedRef ? `; retained HEAD: ${action.retainedRef}` : ""}${action.recoveryCommand ? `; recover: ${action.recoveryCommand}` : ""}`;
 }

@@ -22,7 +22,8 @@ import {
   formatSessionCleanupReport
 } from "./session-cleanup-report.ts";
 import type { SessionCleanupExecution } from "./session-cleanup-report.ts";
-import { cleanupCommandActions, sessionRemovalRank } from "./session-lifecycle-progress.ts";
+import { inspectSessionFinalization } from "./session-finalization.ts";
+import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
 import type { SessionAction } from "./session-lifecycle-progress.ts";
 import { inspectSessionRepoRegistration } from "./session-safety.ts";
 import { scanSessionStates } from "./session-state-store.ts";
@@ -74,15 +75,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
       validateInputs(inventory);
 
       for (const row of inventory.sessions) {
-        sessions.push(
-          reportSession(
-            row,
-            { outcome: "not-attempted" },
-            true,
-            runtime.cwd,
-            options.recoveryCommand
-          )
-        );
+        sessions.push(reportSession(row, { outcome: "not-attempted" }, true, runtime.cwd));
       }
 
       await ordinary(inventory);
@@ -310,15 +303,7 @@ async function executeInventory(
     }
 
     if (!row.decision.eligible) {
-      sessions.push(
-        reportSession(
-          row,
-          { outcome: "not-attempted" },
-          false,
-          runtime.cwd,
-          options.recoveryCommand
-        )
-      );
+      sessions.push(reportSession(row, { outcome: "not-attempted" }, false, runtime.cwd));
       continue;
     }
 
@@ -471,8 +456,7 @@ function reportSession(
   row: Inventory["sessions"][number],
   execution: SessionCleanupExecution,
   dryRun: boolean,
-  cwd: string,
-  recoveryCommand?: string
+  cwd: string
 ) {
   const { snapshot } = row;
   const state = row.decision.eligible ? row.state : null;
@@ -497,7 +481,7 @@ function reportSession(
             step: "file-archive" as const,
             worktreePath: member.worktreePath
           })),
-        ...cleanupCommandActions(state, recoveryCommand),
+        ...(snapshot.finalization?.actions ?? []),
         ...state.repos
           .filter((repo) =>
             snapshot.members.some(
@@ -538,13 +522,7 @@ function executeSession(
     throw new GlobalCleanupError("Eligible Session has no retained state");
   }
 
-  const planned = reportSession(
-    row,
-    { outcome: "not-attempted" },
-    false,
-    runtime.cwd,
-    options.recoveryCommand
-  );
+  const planned = reportSession(row, { outcome: "not-attempted" }, false, runtime.cwd);
 
   const completedActions: SessionAction[] = [];
   const archives = new Map<string, string>();
@@ -660,7 +638,11 @@ function executeSession(
         beforeEffect(action) {
           guard();
 
-          if (action.step === "cleanup-command" || action.step === "worktree-removal") {
+          if (
+            action.step === "resource-release" ||
+            action.step === "cleanup-command" ||
+            action.step === "worktree-removal"
+          ) {
             // Commands may activate any sibling; refresh before the next destructive effect.
             inspectProcesses(true);
           }
@@ -795,14 +777,29 @@ function executeSession(
       )
     };
   } catch (cause) {
-    const message = errorMessage(ThrownValueSchema.parse(cause));
+    let message = errorMessage(ThrownValueSchema.parse(cause));
+    let retryCleanupActions: SessionAction[] | undefined;
+    let remainingActions: SessionAction[] | undefined;
 
-    const remainingActions = planned.plannedActions.filter(
-      (action) =>
-        !completedActions.some(
+    try {
+      const pending = inspectSessionFinalization(home, state, options);
+      retryCleanupActions = pending.actions;
+      remainingActions = planned.plannedActions.flatMap((action) => {
+        if (action.step === "resource-release" || action.step === "cleanup-command") {
+          return pending.actions.filter(
+            (next) => next.step === action.step && next.sourceRoot === action.sourceRoot
+          );
+        }
+
+        return completedActions.some(
           (done) => done.step === action.step && done.sourceRoot === action.sourceRoot
         )
-    );
+          ? []
+          : [action];
+      });
+    } catch (inspectionCause) {
+      message += `\nRetry cleanup inspection failed: ${errorMessage(ThrownValueSchema.parse(inspectionCause))}`;
+    }
 
     const execution: SessionCleanupExecution = {
       attemptedAction,
@@ -810,7 +807,7 @@ function executeSession(
       message,
       outcome: started ? "failed" : "skipped",
       remainingActions,
-      retryCleanupCommands: cleanupCommandActions(state, options.recoveryCommand),
+      retryCleanupActions,
       sourceRoot: current.sourceRoot,
       step: current.step
     };
