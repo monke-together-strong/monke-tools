@@ -153,7 +153,7 @@ export function cleanupSessionResources(
   }
 
   for (const repo of state.repos.toReversed()) {
-    // Earlier cleanup can change a sibling's obligations. Read its current record under the locks.
+    // Read the canonical record under the locks before executing this repo.
     const pending = inspectRepoFinalization(store, state, repo, options);
     assertCleanupWorktree(pending);
     const { cleanupAction, cleanupCommand, cleanupCwd, record, releaseAction } = pending;
