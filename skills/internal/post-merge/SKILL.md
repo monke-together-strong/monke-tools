@@ -48,22 +48,26 @@ here only when no thread tool exists. Otherwise:
 
 1. Close relevant issues and sub-issues, such as the Spec issue and its
    breakdown issues.
-2. List worktrees and local branches, and
+2. List worktrees and local branches. Inspect each candidate checkout with
+   `git status --short --untracked-files=all --ignored`, then
    [clear reproducible generated changes](../../references/internal/CLEANUP_RECOVERY.md#generated-output).
+   Retain checkouts containing authored or unclassified files, including ignored files.
    For a direct landing, set `headRefName` only from the explicitly identified
    source branch, and set `headRefOid` to `landedCommit`. With no source identity,
    skip source cleanup. Always retain the base branch and its checkouts.
    A worktree is a cleanup candidate only when its branch equals `headRefName`,
-   `git status --short` is empty, and
+   that status output is empty after clearing verified generated output, and
    `HEAD` equals `headRefOid`. A local branch is a candidate only when no
    worktree uses it and its tip equals `headRefOid`.
 3. Clean up candidates. Use `mt chop <session>` from the source checkout for mt
    Sessions, only when every member is clean and its work has landed; retain
    failed teardowns for recovery. Use `git worktree remove <path>` for ordinary
    worktrees, then delete candidate branches. Never run global `mt cleanup` here.
-4. Run `git fetch origin`. In a clean checkout already on `baseRefName`, run
-   `git pull --ff-only origin <baseRefName>`. Switch the retained checkout used
-   for this landing to `baseRefName`, and leave other checkouts on their branches.
+4. Run `git fetch origin`. Use an existing retained checkout on `baseRefName`;
+   otherwise switch a clean retained checkout to it. Run
+   `git pull --ff-only origin <baseRefName>` only from a clean base checkout.
+   If none can be used without disturbing work, report the base update as pending.
+   Leave other checkouts on their branches.
 
 Never discard authored or unclassified changes, trust git ancestry alone for
 squash merges, or use `git reset --hard`, `git clean`, or forced worktree removal.
