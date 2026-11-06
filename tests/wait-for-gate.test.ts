@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { waitForGate } from "../skills/internal/post-merge/scripts/wait-for-gate.ts";
-import type {
-  Gate,
-  GateResult,
-  GhApi
-} from "../skills/internal/post-merge/scripts/wait-for-gate.ts";
+import { waitForGate } from "../src/deployment-gate.ts";
+import type { Gate, GateResult, GhApi } from "../src/deployment-gate.ts";
 
 type Endpoint = "jobs" | "runs" | "status";
 

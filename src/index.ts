@@ -5,6 +5,7 @@ import "zod/compile";
 import { runChop } from "./chop.ts";
 import { runCleanup } from "./cleanup.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
+import { createWaitForGateCommand } from "./deployment-gate.ts";
 import { runDiffConfigure, runDiffInteractive } from "./diff.ts";
 import { MonkeError, ThrownValueSchema } from "./errors.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
@@ -139,7 +140,9 @@ function createProgram(runtime: Runtime) {
 
   const prs = program
     .command("prs")
-    .description("Track PRs so post-merge runs after an external merge");
+    .description("Track PRs for post-merge and wait for deployment gates");
+
+  prs.addCommand(createWaitForGateCommand(runtime));
 
   prs
     .command("create")

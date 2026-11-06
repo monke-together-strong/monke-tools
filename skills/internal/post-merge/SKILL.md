@@ -89,12 +89,11 @@ In T3 Code, rename the thread with `t3_thread_update` to
 push, where the subject names the behavior under check
 and its environment, such as `Verify #123: web embeds on production`.
 
-Run [wait-for-gate](scripts/wait-for-gate.ts) from this skill's directory on the
-merge commit, and wait for it to exit:
+Run `mt prs wait-for-gate` on the merge commit, and wait for it to exit:
 
 ```sh
-bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
-bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --status <context>
+mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
+mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --status <context>
 ```
 
 - **Deployment**: the deploy job within its workflow, or the commit status a
@@ -104,7 +103,7 @@ bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit>
   publish the new version, follow [library release](references/library-release.md).
 
 On `skipped`, the gate did not deploy, so skip its deployment checks. On
-`timed_out`, ask before waiting longer. When the gate has no signal the script
+`timed_out`, ask before waiting longer. When the gate has no signal `mt prs wait-for-gate`
 can watch, ask before testing.
 
 ## Verify
