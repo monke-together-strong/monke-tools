@@ -1647,35 +1647,6 @@ export function release({owner, outputs}) {
     );
   }, 30_000);
 
-  it("runs cleanup in each Session worktree before removing any member", async () => {
-    const f = fixture();
-    const state = f.addSession("feature/cleanup-cwd");
-    const log = path.join(f.cwd, "cleanup-cwd.log");
-
-    const requireWorktrees = state.repos
-      .map((repo) => `test -d '${repo.worktreePath}'`)
-      .join(" && ");
-
-    saveSessionState(f.home, {
-      ...state,
-      repos: state.repos.map((repo) => ({
-        ...repo,
-        cleanupCommand: `${requireWorktrees} && printf '%s\\n' "$PWD" >> '${log}'`
-      }))
-    });
-    const result = await f.run();
-    expect(result.error).toBeUndefined();
-    expect(readFileSync(log, "utf-8").trim().split("\n")).toStrictEqual(
-      [...state.repos].toReversed().map((repo) => repo.worktreePath)
-    );
-
-    for (const repo of state.repos) {
-      expect(existsSync(repo.worktreePath)).toBeFalsy();
-    }
-
-    expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeFalsy();
-  }, 30_000);
-
   it("reruns Cleanup commands from the beginning after failure while independent Sessions continue", async () => {
     const f = fixture();
     const state = f.addSession("feature/retry");
@@ -1771,12 +1742,18 @@ export function release({owner, outputs}) {
         throw new Error("Missing dependency");
       }
 
+      const log = path.join(f.cwd, "cleanup-cwd.log");
+
+      const requireWorktrees = state.repos
+        .map((repo) => `test -d '${repo.worktreePath}'`)
+        .join(" && ");
+
       if (preserve) {
         for (const repo of state.repos) {
           git(repo.worktreePath, ["checkout", "--detach"]);
           ageWorktree(repo.worktreePath);
           write(repo.worktreePath, "notes.md", "retained research\n");
-          repo.cleanupCommand = "true";
+          repo.cleanupCommand = `${requireWorktrees} && printf '%s\\n' "$PWD" >> '${log}'`;
         }
 
         saveSessionState(f.home, state);
@@ -1789,6 +1766,20 @@ export function release({owner, outputs}) {
       expect(result.error).toBeUndefined();
       const [row] = result.report.sessions;
       expect(row?.outcome).toBe("cleaned");
+
+      const commandDirectories = existsSync(log)
+        ? readFileSync(log, "utf-8").trim().split("\n")
+        : [];
+
+      expect(commandDirectories).toStrictEqual(
+        preserve ? state.repos.toReversed().map((repo) => repo.worktreePath) : []
+      );
+
+      for (const repo of state.repos) {
+        expect(existsSync(repo.worktreePath)).toBeFalsy();
+      }
+
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeFalsy();
       expect(row?.execution.completedActions).toStrictEqual(row?.plannedActions);
       expect(row?.execution.completedActions).toStrictEqual(
         preview.report.sessions[0]?.plannedActions
