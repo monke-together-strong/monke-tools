@@ -1692,21 +1692,61 @@ export function release({owner, outputs}) {
     }
   }, 30_000);
 
-  it("keeps JSON valid when cleanup removes the invoking dependency, and executes in planned order", async () => {
-    const f = fixture();
-    const state = f.addSession("feature/current");
-    const [dependency] = state.repos;
+  it.each([false, true])(
+    "executes in planned order when removing the invoking dependency, combined preservation=%s",
+    async (preserve) => {
+      const f = fixture();
+      const state = f.addSession("feature/current");
+      const [dependency] = state.repos;
 
-    if (!dependency) {
-      throw new Error("Missing dependency");
-    }
+      if (!dependency) {
+        throw new Error("Missing dependency");
+      }
 
-    const result = await f.run(false, dependency.worktreePath);
-    expect(result.error).toBeUndefined();
-    const [row] = result.report.sessions;
-    expect(row?.execution.completedActions).toStrictEqual(row?.plannedActions);
-    expect(row?.plannedActions[0]?.sourceRoot).toBe(f.root);
-  }, 30_000);
+      if (preserve) {
+        for (const repo of state.repos) {
+          git(repo.worktreePath, ["checkout", "--detach"]);
+          ageWorktree(repo.worktreePath);
+          write(repo.worktreePath, "notes.md", "retained research\n");
+          repo.cleanupCommand = "true";
+        }
+
+        saveSessionState(f.home, state);
+      }
+
+      const flags = preserve ? ["--archive-untracked"] : [];
+      const preview = await f.run(true, dependency.worktreePath, flags);
+      expect(preview.error).toBeUndefined();
+      const result = await f.run(false, dependency.worktreePath, flags);
+      expect(result.error).toBeUndefined();
+      const [row] = result.report.sessions;
+      expect(row?.outcome).toBe("cleaned");
+      expect(row?.execution.completedActions).toStrictEqual(row?.plannedActions);
+      expect(row?.execution.completedActions).toStrictEqual(
+        preview.report.sessions[0]?.plannedActions
+      );
+      expect(
+        row?.plannedActions.find((action) => action.step === "worktree-removal")?.sourceRoot
+      ).toBe(f.root);
+
+      expect(row?.execution.completedActions?.map((action) => action.step)).toStrictEqual(
+        preserve
+          ? [
+              "file-archive",
+              "file-archive",
+              "head-preservation",
+              "head-preservation",
+              "cleanup-command",
+              "cleanup-command",
+              "worktree-removal",
+              "worktree-removal",
+              "state-removal"
+            ]
+          : ["worktree-removal", "worktree-removal", "state-removal"]
+      );
+    },
+    30_000
+  );
 
   it("treats a missing Source as a settled skip, not an inspection error", async () => {
     const f = fixture();

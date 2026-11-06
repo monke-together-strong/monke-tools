@@ -115,6 +115,8 @@ export interface CleanupEvidence {
   localBlock: CleanupDecision | null;
   pendingWork?: PendingWorkProof;
   repository: CleanupRepositoryEvidence | null;
+  /** Sanitized provider failure; never contains command output or credentials. */
+  repositoryFailure?: GitHubFailure & { repository: string };
   /** Milliseconds since the worktree was created; null when unknown. Absent in older saved evidence. */
   worktreeAgeMs?: number | null;
 }
@@ -138,6 +140,16 @@ export const CleanupRepositoryEvidenceSchema = z.object({
 
 export type CleanupRepositoryEvidence = z.output<typeof CleanupRepositoryEvidenceSchema>;
 
+interface GitHubFailure {
+  httpStatus?: number;
+  kind: "authentication" | "http" | "timeout" | "unavailable";
+}
+
+interface RepositoryInspection {
+  failure?: GitHubFailure;
+  repository: CleanupRepositoryEvidence | null;
+}
+
 /**
  * Ancestry and cross-branch PR proof wait so a just-spawned Session is not removed before work
  * starts.
@@ -148,7 +160,7 @@ export const RECENT_WORKTREE_MS = 24 * 60 * 60 * 1000;
 export function createCleanupEvidenceCache() {
   return {
     commitPullRequests: new Map<string, Promise<CommitPullRequestEvidence[] | null>>(),
-    repositories: new Map<string, Promise<CleanupRepositoryEvidence | null>>()
+    repositories: new Map<string, Promise<RepositoryInspection>>()
   };
 }
 
@@ -171,7 +183,11 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   }
 
   if (!repository) {
-    return decision("unknown", "repository-unavailable");
+    return decision(
+      "unknown",
+      "repository-unavailable",
+      repositoryFailureDetails(snapshot.repositoryFailure)
+    );
   }
 
   if (branch === repository.defaultBranch) {
@@ -537,7 +553,12 @@ export async function collectCleanupEvidence(
     cache.repositories.set(cacheKey, repository);
   }
 
-  snapshot.repository = await repository;
+  const inspection = await repository;
+  snapshot.repository = inspection.repository;
+
+  if (inspection.failure) {
+    snapshot.repositoryFailure = { ...inspection.failure, repository: repositoryName };
+  }
 
   if (snapshot.repository && snapshot.head) {
     acceptPendingProof(readOnly, snapshot, pending, snapshot.head, snapshot.repository.defaultHead);
@@ -880,9 +901,61 @@ export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {
   };
 }
 
-class GitHubNotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
+function repositoryFailureDetails(failure: CleanupEvidence["repositoryFailure"]) {
+  if (!failure) {
+    return [];
+  }
+
+  if (failure.kind === "authentication") {
+    return [
+      "GitHub authentication failed or is unavailable; run gh auth status --hostname github.com in the same environment."
+    ];
+  }
+
+  const message =
+    failure.kind === "timeout"
+      ? "GitHub request timed out"
+      : failure.kind === "http"
+        ? `GitHub returned HTTP ${failure.httpStatus}`
+        : "GitHub evidence unavailable";
+
+  return [`${message}; diagnose with gh api --hostname github.com repos/${failure.repository}.`];
+}
+
+function githubFailure(result: ExecResult): GitHubFailure {
+  const status = /\bHTTP (?<status>[45]\d{2})\b/u.exec(result.stderr)?.groups?.status;
+  const httpStatus = status ? Number(status) : undefined;
+
+  if (result.timedOut === true || /\b(?:timed out|timeout)\b/iu.test(result.stderr)) {
+    return { kind: "timeout" };
+  }
+
+  if (
+    result.exitCode === 4 ||
+    httpStatus === 401 ||
+    /\b(?:gh auth login|authentication (?:required|failed)|not logged in|bad credentials|keyring)\b/iu.test(
+      result.stderr
+    )
+  ) {
+    return { kind: "authentication", ...(httpStatus !== undefined ? { httpStatus } : {}) };
+  }
+
+  return httpStatus !== undefined ? { httpStatus, kind: "http" } : { kind: "unavailable" };
+}
+
+class GitHubEvidenceError extends Error {
+  readonly failure: GitHubFailure;
+
+  constructor(result: ExecResult) {
+    super("GitHub evidence unavailable");
+    this.name = "GitHubEvidenceError";
+    this.failure = githubFailure(result);
+  }
+}
+
+class GitHubNotFoundError extends GitHubEvidenceError {
+  constructor(result: ExecResult) {
+    super(result);
     this.name = "GitHubNotFoundError";
   }
 }
@@ -898,15 +971,16 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
     const commit = /\/commits\/(?<sha>[\da-f]{40})\/pulls(?:\?|$)/u.exec(endpoint)?.groups?.sha;
 
     if (
-      /\bHTTP 404\b/u.test(result.stderr) ||
-      (commit !== undefined &&
-        /\bHTTP 422\b/u.test(result.stderr) &&
-        result.stderr.includes(`No commit found for SHA: ${commit}`))
+      result.timedOut !== true &&
+      (/\bHTTP 404\b/u.test(result.stderr) ||
+        (commit !== undefined &&
+          /\bHTTP 422\b/u.test(result.stderr) &&
+          result.stderr.includes(`No commit found for SHA: ${commit}`)))
     ) {
-      throw new GitHubNotFoundError("GitHub resource not found");
+      throw new GitHubNotFoundError(result);
     }
 
-    throw new Error("GitHub evidence unavailable");
+    throw new GitHubEvidenceError(result);
   }
 
   const parsed: unknown = JSON.parse(result.stdout);
@@ -932,12 +1006,16 @@ function readRepositoryName(runtime: Runtime, sourceRoot: string) {
   }
 }
 
-async function inspectRepository(runtime: Runtime, sourceRoot: string, name: string) {
+async function inspectRepository(
+  runtime: Runtime,
+  sourceRoot: string,
+  name: string
+): Promise<RepositoryInspection> {
   try {
     const metadata = RepositorySchema.parse(await github(runtime, sourceRoot, `repos/${name}`));
 
     if (metadata.full_name.toLowerCase() !== name.toLowerCase()) {
-      return null;
+      return { repository: null };
     }
 
     const [ref, pages] = await Promise.all([
@@ -950,13 +1028,18 @@ async function inspectRepository(runtime: Runtime, sourceRoot: string, name: str
     ]);
 
     return {
-      defaultBranch: metadata.default_branch,
-      defaultHead: RefSchema.parse(ref).object.sha,
-      name: metadata.full_name,
-      pullRequests: z.array(z.array(PullRequestSchema)).parse(pages).flat()
+      repository: {
+        defaultBranch: metadata.default_branch,
+        defaultHead: RefSchema.parse(ref).object.sha,
+        name: metadata.full_name,
+        pullRequests: z.array(z.array(PullRequestSchema)).parse(pages).flat()
+      }
     };
-  } catch {
-    return null;
+  } catch (cause) {
+    return {
+      failure: cause instanceof GitHubEvidenceError ? cause.failure : { kind: "unavailable" },
+      repository: null
+    };
   }
 }
 
