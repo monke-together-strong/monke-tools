@@ -456,6 +456,29 @@ export function retireAdoptedSkillLinks(root: string, previous: SkillImportRecip
   }
 }
 
+/** Include destinations that project publication can introduce after snapshots are captured. */
+export function projectSkillProjectionRecoveryPaths(scope: SkillPublicationScope) {
+  return resolveSkillInstallTargets({ ...scope, project: true }).flatMap((target) => {
+    const paths = [target.agentSkillRoot];
+
+    if (existsSync(target.agentSkillRoot)) {
+      paths.push(realpathSync.native(target.agentSkillRoot));
+    }
+
+    if (skillTargetPolicy(target).layout === "flat") {
+      const references = flatSupportingLinkPath(target);
+      const entry = lstatSync(references, { throwIfNoEntry: false });
+
+      // Publication replaces this entry, never its referent or an unrelated real directory.
+      if (!entry || entry.isSymbolicLink()) {
+        paths.push(references);
+      }
+    }
+
+    return paths;
+  });
+}
+
 /** Paths target reconciliation can mutate; adoption retains them until publication completes. */
 export function skillPublicationPaths(
   runtime: Runtime,
@@ -823,6 +846,10 @@ function discoverFlatSkillLinks(skillSourceTree: string) {
   return [...links.values()].toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
+function flatSupportingLinkPath(target: ResolvedSkillInstallTarget) {
+  return path.resolve(target.agentSkillRoot, "..", "references");
+}
+
 function discoverFlatSupportingLinks(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
   const referenceSourceTree = path.join(skillSourceTree, "references");
 
@@ -833,7 +860,7 @@ function discoverFlatSupportingLinks(target: ResolvedSkillInstallTarget, skillSo
   return [
     {
       sourcePath: referenceSourceTree,
-      targetPath: path.resolve(target.agentSkillRoot, "..", "references")
+      targetPath: flatSupportingLinkPath(target)
     }
   ];
 }
@@ -953,7 +980,7 @@ function readFlatManifest(target: ResolvedSkillInstallTarget) {
     FlatSkillManifestSchema.refine(
       (manifest) =>
         (manifest.supportingLinks ?? []).every(
-          (link) => link.targetPath === path.resolve(target.agentSkillRoot, "..", "references")
+          (link) => link.targetPath === flatSupportingLinkPath(target)
         ),
       "Supporting links must target the Agent skill root's sibling references directory"
     ).safeParse(rawManifest),

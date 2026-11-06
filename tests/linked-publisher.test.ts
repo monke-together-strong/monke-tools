@@ -1,4 +1,13 @@
-import { existsSync, lstatSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  symlinkSync
+} from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
@@ -86,6 +95,99 @@ done
 }
 
 describe("linked publisher collections", () => {
+  it.each([false, true])(
+    "removes the first reference projection after failed publication with an internal alias=%s",
+    async (alias) => {
+      const { consumer, publisher, runtime } = fixture();
+      const skillRoot = path.join(consumer, ".claude/skills");
+      const physical = alias ? path.join(consumer, "local-skills") : skillRoot;
+      mkdirSync(physical, { recursive: true });
+
+      if (alias) {
+        mkdirSync(path.dirname(skillRoot), { recursive: true });
+        symlinkSync(physical, skillRoot, "dir");
+      }
+
+      write(physical, "personal/SKILL.md", "Personal instructions.\n");
+      const references = path.join(consumer, ".claude/references");
+      const exclude = path.join(consumer, ".git/info/exclude");
+      const originalExclude = read(consumer, ".git/info/exclude");
+      let projected = false;
+
+      runtime.writeStderr = (message) => {
+        if (message.startsWith("Linked monke-tools skills") && existsSync(references)) {
+          projected = true;
+          chmodSync(exclude, 0o444);
+        }
+      };
+
+      try {
+        await expect(
+          runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime)
+        ).rejects.toThrow(/Project skill exclusions are not writable/u);
+        expect(projected).toBeTruthy();
+        expect(lstatSync(references, { throwIfNoEntry: false })).toBeUndefined();
+        expect(lstatSync(path.join(skillRoot, "own"), { throwIfNoEntry: false })).toBeUndefined();
+        expect(realpathSync(skillRoot)).toBe(physical);
+        expect(read(physical, "personal/SKILL.md")).toBe("Personal instructions.\n");
+        expect(read(consumer, ".git/info/exclude")).toBe(originalExclude);
+        expect(read(consumer, ".git/monke-tools/skill-registry/skills.lock.json")).toContain(
+          '"recipes": []'
+        );
+      } finally {
+        chmodSync(exclude, 0o644);
+      }
+    }
+  );
+
+  it.each([false, true])(
+    "restores an existing reference projection after failed setup with dangling=%s",
+    async (dangling) => {
+      const { consumer, publisher, runtime } = fixture();
+      await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
+      const references = path.join(consumer, ".claude/references");
+      const originalTarget = readlinkSync(references);
+      const originalManifest = read(consumer, ".claude/skills/.monke-tools-flat-skills.json");
+      const originalRegistry = read(consumer, ".git/monke-tools/skill-registry/skills.lock.json");
+      const exclude = path.join(consumer, ".git/info/exclude");
+      const originalExclude = read(consumer, ".git/info/exclude");
+
+      if (dangling) {
+        rmSync(originalTarget, { recursive: true });
+      }
+
+      runtime.writeStderr = (message) => {
+        if (message.startsWith("Linked monke-tools skills")) {
+          chmodSync(exclude, 0o444);
+        }
+      };
+
+      try {
+        await expect(runCliAsync(["setup"], runtime)).rejects.toThrow(
+          /Project skill exclusions are not writable/u
+        );
+        expect(readlinkSync(references)).toBe(originalTarget);
+        expect(existsSync(references)).toBe(!dangling);
+        expect(read(consumer, ".claude/skills/.monke-tools-flat-skills.json")).toBe(
+          originalManifest
+        );
+        expect(read(consumer, ".git/monke-tools/skill-registry/skills.lock.json")).toBe(
+          originalRegistry
+        );
+        expect(read(consumer, ".git/info/exclude")).toBe(originalExclude);
+        expect(read(consumer, ".claude/skills/own/SKILL.md")).toContain("Own instructions.");
+
+        const contents = existsSync(references)
+          ? read(references, "imported/base/MAIN.md")
+          : undefined;
+
+        expect(contents).toBe(dangling ? undefined : "Base instructions.\n");
+      } finally {
+        chmodSync(exclude, 0o644);
+      }
+    }
+  );
+
   it.each([false, true])("prefers publisher YAML to stale JSON with linked=%s", async (linked) => {
     const { installed, publisher, runtime, upstream } = fixture();
     write(
