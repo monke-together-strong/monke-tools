@@ -18,6 +18,12 @@ const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.1-sol"];
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
 
+const PR_CREATE_LONG_VALUE_OPTION =
+  /^(?<flag>--(?:assignee|attach|base|body|body-file|head|label|milestone|project|recover|repo|reviewer|template|title))(?<inline>=.*)?$/u;
+
+const PR_CREATE_SHORT_VALUE_OPTION = /^(?<flag>-[defw]*[aBbFHlmpRrTt])(?<inline>.*)$/u;
+const LEADING_EQUALS = /^=/u;
+
 const TrackedPrSchema = z.strictObject({
   checkout: z.string().refine(path.isAbsolute),
   number: z.number().int().positive(),
@@ -81,12 +87,8 @@ function resolvePrFileArgs(cwd: string, args: string[]) {
     }
 
     // Consume other string options too: a title or body can itself look like a file flag.
-    const long =
-      /^(?<flag>--(?:assignee|attach|base|body|body-file|head|label|milestone|project|recover|repo|reviewer|template|title))(?<inline>=.*)?$/u.exec(
-        arg
-      )?.groups;
-
-    const short = /^(?<flag>-[defw]*[aBbFHlmpRrTt])(?<inline>.*)$/u.exec(arg)?.groups;
+    const long = PR_CREATE_LONG_VALUE_OPTION.exec(arg)?.groups;
+    const short = PR_CREATE_SHORT_VALUE_OPTION.exec(arg)?.groups;
     const option = long ?? short;
 
     if (option === undefined) {
@@ -101,7 +103,7 @@ function resolvePrFileArgs(cwd: string, args: string[]) {
       index += 1;
     }
 
-    const value = inline ? inline.replace(/^=/u, "") : args[valueIndex];
+    const value = inline ? inline.replace(LEADING_EQUALS, "") : args[valueIndex];
 
     if (value === undefined) {
       continue;
