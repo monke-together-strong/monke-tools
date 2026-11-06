@@ -48,7 +48,13 @@ export async function runPrsCreate(
     "--show-toplevel"
   ]);
 
-  const created = await runtime.execAsync("gh", ["pr", "create", ...args], { cwd: checkout });
+  const files = resolvePrFileArgs(runtime.cwd, args);
+
+  const created = await runtime.execAsync("gh", ["pr", "create", ...files.args], {
+    cwd: checkout,
+    stdin: files.stdin ? await Bun.stdin.text() : undefined
+  });
+
   const { url } = parsePullRequestUrl(created.stdout.trim());
 
   try {
@@ -60,6 +66,73 @@ export async function runPrsCreate(
       { cause }
     );
   }
+}
+
+/** Keep caller-owned files anchored to the invocation directory when gh changes checkout. */
+function resolvePrFileArgs(cwd: string, args: string[]) {
+  const resolved = [...args];
+  let stdin = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === undefined || arg === "--") {
+      break;
+    }
+
+    // Consume other string options too: a title or body can itself look like a file flag.
+    const long =
+      /^(?<flag>--(?:assignee|attach|base|body|body-file|head|label|milestone|project|recover|repo|reviewer|template|title))(?<inline>=.*)?$/u.exec(
+        arg
+      )?.groups;
+
+    const short = /^(?<flag>-[defw]*[aBbFHlmpRrTt])(?<inline>.*)$/u.exec(arg)?.groups;
+    const option = long ?? short;
+
+    if (option === undefined) {
+      continue;
+    }
+
+    const inline = option.inline ?? "";
+    const rawFlag = option.flag ?? "";
+    const valueIndex = inline ? index : index + 1;
+
+    if (!inline) {
+      index += 1;
+    }
+
+    const value = inline ? inline.replace(/^=/u, "") : args[valueIndex];
+
+    if (value === undefined) {
+      continue;
+    }
+
+    const flag = long === undefined ? rawFlag.slice(-1) : rawFlag;
+
+    if (flag === "--body-file" || flag === "F") {
+      stdin = value === "-";
+    }
+
+    if (!["--body-file", "F", "--attach", "--template", "T", "--recover"].includes(flag)) {
+      continue;
+    }
+
+    const absolute = invocationFile(cwd, value);
+    resolved[valueIndex] = inline
+      ? rawFlag + (inline.startsWith("=") ? "=" : "") + absolute
+      : absolute;
+  }
+
+  return { args: resolved, stdin };
+}
+
+function invocationFile(cwd: string, value: string) {
+  if (value === "" || value === "-" || path.isAbsolute(value)) {
+    return value;
+  }
+
+  // Prefix without cleaning: gh interprets #alt text, and filenames may themselves contain #.
+  return `${path.resolve(cwd)}${path.sep}${value}`;
 }
 
 /** Track an open PR so `mt prs poll` can hand its post-merge work back to its thread. */
