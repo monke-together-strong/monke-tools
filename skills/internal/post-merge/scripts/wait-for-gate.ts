@@ -306,10 +306,10 @@ function createProgram() {
   return new Command()
     .name("wait-for-gate")
     .description(
-      "Wait for a merge commit's GitHub deployment gate, then print `<status>: <detail>`."
+      "Wait for a landed commit's GitHub deployment gate, then print `<status>: <detail>`."
     )
     .requiredOption("--repo <owner/name>", "GitHub repository")
-    .requiredOption("--sha <sha>", "merge commit SHA")
+    .requiredOption("--sha <sha>", "landed commit SHA")
     .addOption(new Option("--workflow <name>", "workflow name or file").conflicts("status"))
     .option("--job <name>", "job within --workflow that is the gate")
     .addOption(new Option("--status <context>", "commit status context").conflicts("workflow"))
