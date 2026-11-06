@@ -580,11 +580,13 @@ export function release({owner, outputs}) {
 
   it("archives untracked files before removal and keeps tracked edits blocked", async () => {
     const f = fixture();
-    const state = f.addSession("feature/notes");
+    const [source] = f.sources;
+    ok(source);
+    const state = f.addSession("feature/notes", source);
     const [member] = state.repos;
     ok(member);
     write(member.worktreePath, "notes/research.md", "unique research\n");
-    const blocked = f.addSession("feature/unfinished");
+    const blocked = f.addSession("feature/unfinished", source);
     const [blockedMember] = blocked.repos;
     ok(blockedMember);
     write(blockedMember.worktreePath, "tracked.txt", "unfinished tracked edit\n");
@@ -870,7 +872,9 @@ export function release({owner, outputs}) {
     "preserves recovery metadata for a %s stale registration during Session cleanup",
     async (kind) => {
       const f = fixture();
-      const state = f.addSession("feature/stale-recovery", f.root);
+      const [source] = f.sources;
+      ok(source);
+      const state = f.addSession("feature/stale-recovery", source);
       const [repo] = state.repos;
       ok(repo);
       const admin = git(repo.worktreePath, ["rev-parse", "--absolute-git-dir"]);
@@ -888,7 +892,9 @@ export function release({owner, outputs}) {
       const result = await f.run();
       const retained = kind !== "clean";
       expect(existsSync(admin)).toBe(retained);
-      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBe(retained);
+      expect(existsSync(getSessionStateFilePath(f.home, state.rootSourceRoot, state.session))).toBe(
+        retained
+      );
       expect(result.report.sessions[0]?.outcome).toBe(retained ? "skipped" : "cleaned");
     }
   );
@@ -1031,6 +1037,68 @@ export function release({owner, outputs}) {
         status: "blocked"
       });
       expect(existsSync(root.worktreePath)).toBeTruthy();
+    }
+  );
+
+  it.each(
+    [
+      { expected: "authentication", stderr: "gh auth login" },
+      { expected: "HTTP 403", stderr: "gh: Forbidden (HTTP 403)" },
+      { expected: "timed out", stderr: "net/http: TLS handshake timeout" },
+      { expected: "GitHub evidence unavailable", stderr: "unexpected failure" }
+    ].flatMap((failure) => [false, true].map((dirty) => ({ ...failure, dirty })))
+  )(
+    "retains sanitized $expected diagnostics for ordinary worktrees, dirty=$dirty",
+    async (failure) => {
+      const f = fixture();
+      const selected = path.join(f.cwd, "ordinary");
+      git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+      ageWorktree(selected);
+      const secret = "synthetic-credential-must-not-appear";
+      f.runtime.execAsync = async () => {
+        if (failure.dirty) {
+          write(selected, "notes.md", "arrived during lookup\n");
+        }
+
+        return {
+          exitCode: 1,
+          stderr: `${failure.stderr}\nAuthorization: Bearer ${secret}`,
+          stdout: secret
+        };
+      };
+
+      const args = [selected, "--include-unowned"];
+      const result = await f.run(false, f.cwd, args);
+      expect(result.report.unownedWorktrees).toContainEqual(
+        expect.objectContaining({
+          eligible: false,
+          outcome: "skipped",
+          reason: failure.dirty ? "dirty-worktree" : "repository-unavailable"
+        })
+      );
+
+      const notes = path.join(selected, "notes.md");
+      expect(existsSync(notes) ? readFileSync(notes, "utf-8") : null).toBe(
+        failure.dirty ? "arrived during lookup\n" : null
+      );
+      rmSync(notes, { force: true });
+
+      let text = "";
+      await runCliAsync(["cleanup", "--dry-run", ...args], {
+        ...f.runtime,
+        writeStdout: (chunk) => {
+          text += chunk;
+        }
+      });
+
+      for (const output of [JSON.stringify(result.report), text]) {
+        expect(output).toContain(failure.expected);
+        expect(output).toContain("gh ");
+        expect(output).not.toContain(secret);
+        expect(output).not.toContain("Authorization:");
+      }
+
+      expect(existsSync(selected)).toBeTruthy();
     }
   );
 
@@ -1692,21 +1760,61 @@ export function release({owner, outputs}) {
     }
   }, 30_000);
 
-  it("keeps JSON valid when cleanup removes the invoking dependency, and executes in planned order", async () => {
-    const f = fixture();
-    const state = f.addSession("feature/current");
-    const [dependency] = state.repos;
+  it.each([false, true])(
+    "executes in planned order when removing the invoking dependency, combined preservation=%s",
+    async (preserve) => {
+      const f = fixture();
+      const state = f.addSession("feature/current");
+      const [dependency] = state.repos;
 
-    if (!dependency) {
-      throw new Error("Missing dependency");
-    }
+      if (!dependency) {
+        throw new Error("Missing dependency");
+      }
 
-    const result = await f.run(false, dependency.worktreePath);
-    expect(result.error).toBeUndefined();
-    const [row] = result.report.sessions;
-    expect(row?.execution.completedActions).toStrictEqual(row?.plannedActions);
-    expect(row?.plannedActions[0]?.sourceRoot).toBe(f.root);
-  }, 30_000);
+      if (preserve) {
+        for (const repo of state.repos) {
+          git(repo.worktreePath, ["checkout", "--detach"]);
+          ageWorktree(repo.worktreePath);
+          write(repo.worktreePath, "notes.md", "retained research\n");
+          repo.cleanupCommand = "true";
+        }
+
+        saveSessionState(f.home, state);
+      }
+
+      const flags = preserve ? ["--archive-untracked"] : [];
+      const preview = await f.run(true, dependency.worktreePath, flags);
+      expect(preview.error).toBeUndefined();
+      const result = await f.run(false, dependency.worktreePath, flags);
+      expect(result.error).toBeUndefined();
+      const [row] = result.report.sessions;
+      expect(row?.outcome).toBe("cleaned");
+      expect(row?.execution.completedActions).toStrictEqual(row?.plannedActions);
+      expect(row?.execution.completedActions).toStrictEqual(
+        preview.report.sessions[0]?.plannedActions
+      );
+      expect(
+        row?.plannedActions.find((action) => action.step === "worktree-removal")?.sourceRoot
+      ).toBe(f.root);
+
+      expect(row?.execution.completedActions?.map((action) => action.step)).toStrictEqual(
+        preserve
+          ? [
+              "file-archive",
+              "file-archive",
+              "head-preservation",
+              "head-preservation",
+              "cleanup-command",
+              "cleanup-command",
+              "worktree-removal",
+              "worktree-removal",
+              "state-removal"
+            ]
+          : ["worktree-removal", "worktree-removal", "state-removal"]
+      );
+    },
+    30_000
+  );
 
   it("treats a missing Source as a settled skip, not an inspection error", async () => {
     const f = fixture();

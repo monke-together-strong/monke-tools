@@ -381,6 +381,10 @@ function writeCleanupReport(
       runtime.writeStdout(
         `Unowned (${worktree.outcome ?? "untouched"}): ${worktree.sourceRoot} — ${worktree.worktreePath}${worktree.reason ? `: ${worktree.reason}` : ""}\n`
       );
+
+      for (const detail of worktree.details ?? []) {
+        runtime.writeStdout(`  ${detail}\n`);
+      }
     }
 
     if (globalFailure) {
@@ -464,6 +468,13 @@ function reportSession(
   const plannedActions: SessionAction[] = state
     ? [
         ...snapshot.members
+          .filter((member) => member.evidence?.pendingWork?.kind === "untracked-archive")
+          .map((member) => ({
+            sourceRoot: member.sourceRoot,
+            step: "file-archive" as const,
+            worktreePath: member.worktreePath
+          })),
+        ...snapshot.members
           .toSorted(
             (left, right) =>
               sessionRemovalRank(left, cwd, state.rootSourceRoot) -
@@ -474,13 +485,6 @@ function reportSession(
 
             return head ? [retainedHeadAction(member.sourceRoot, member.worktreePath, head)] : [];
           }),
-        ...snapshot.members
-          .filter((member) => member.evidence?.pendingWork?.kind === "untracked-archive")
-          .map((member) => ({
-            sourceRoot: member.sourceRoot,
-            step: "file-archive" as const,
-            worktreePath: member.worktreePath
-          })),
         ...(snapshot.finalization?.actions ?? []),
         ...state.repos
           .filter((repo) =>

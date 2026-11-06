@@ -70,6 +70,7 @@ export async function cleanupOrdinaryWorktrees(
       if (!decision.eligible || !options.recoveryCommand) {
         result.push({
           ...worktree,
+          details: decision.evidence,
           eligible: false,
           outcome: "skipped",
           reason: decision.eligible ? "resource-recovery-required" : decision.code

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { localWorkDescription } from "./cleanup-eligibility.ts";
+import { localWorkDescription, repositoryFailureDetails } from "./cleanup-eligibility.ts";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
 import {
   decideSessionCleanupEligibility,
@@ -199,6 +199,13 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
       code: null,
       message: "Not checked; no member evidence was collected.",
       status: "not-checked"
+    };
+  }
+
+  if (member.evidence?.repositoryFailure && !member.evidence.repository) {
+    committedWork = {
+      ...check("unknown", "repository-unavailable"),
+      details: repositoryFailureDetails(member.evidence.repositoryFailure)
     };
   }
 

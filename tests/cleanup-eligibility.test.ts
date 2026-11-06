@@ -11,6 +11,10 @@ import {
   RECENT_WORKTREE_MS
 } from "../src/cleanup-eligibility.ts";
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
+import {
+  createSessionCleanupReport,
+  formatSessionCleanupReport
+} from "../src/session-cleanup-report.ts";
 import type { Runtime } from "../src/types.ts";
 import { preflightWorktreeRemoval } from "../src/worktree-safety.ts";
 import { ageWorktree, createRepo, git, write } from "./helpers.ts";
@@ -951,6 +955,164 @@ describe("cleanup evidence from real Git worktrees", () => {
       decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
     ).toMatchObject({ code: "repository-unavailable", eligible: false, status: "unknown" });
   });
+
+  it.each(
+    [
+      {
+        command: "gh auth status --hostname github.com",
+        exitCode: 4,
+        expected: "authentication",
+        label: "login required",
+        stderr: "To get started with GitHub CLI, please run: gh auth login"
+      },
+      {
+        command: "gh auth status --hostname github.com",
+        exitCode: 1,
+        expected: "authentication",
+        label: "invalid credentials",
+        stderr: "gh: Bad credentials (HTTP 401)"
+      },
+      {
+        command: "gh auth status --hostname github.com",
+        exitCode: 1,
+        expected: "authentication",
+        label: "locked keyring",
+        stderr: "error reading authentication token: keyring is locked"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "HTTP 403",
+        label: "HTTP forbidden",
+        stderr: "gh: Resource not accessible by integration (HTTP 403)"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "HTTP 404",
+        label: "HTTP not found",
+        stderr: "gh: Not Found (HTTP 404)"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "HTTP 503",
+        label: "HTTP server error",
+        stderr: "gh: Server Error (HTTP 503)"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: -1,
+        expected: "timed out",
+        label: "process timeout",
+        stderr: "",
+        timedOut: true
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "timed out",
+        label: "network timeout",
+        stderr: "net/http: TLS handshake timeout"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "GitHub evidence unavailable",
+        label: "unknown failure",
+        stderr: "unexpected provider failure"
+      }
+    ].flatMap((failure) => ["none", "before", "during"].map((dirty) => ({ ...failure, dirty })))
+  )(
+    "retains a sanitized $label diagnostic in cleanup reports and cached evidence, dirty=$dirty",
+    async (failure) => {
+      const fixture = createFixture();
+      const candidate = { ...fixture.candidate, sessionBranch: BRANCH };
+
+      if (failure.dirty === "before") {
+        write(fixture.candidate.worktreePath, "notes.md", "untracked notes\n");
+      }
+
+      const secret = "synthetic-credential-must-not-appear";
+      let calls = 0;
+      fixture.runtime.execAsync = async () => {
+        calls += 1;
+
+        if (failure.dirty === "during") {
+          write(candidate.worktreePath, "notes.md", "arrived during lookup\n");
+        }
+
+        return {
+          ...failure,
+          stderr: `${failure.stderr}\nAuthorization: Bearer ${secret}`,
+          stdout: secret
+        };
+      };
+
+      const cache = createCleanupEvidenceCache();
+      const snapshot = await collectCleanupEvidence(fixture.runtime, candidate, cache);
+      const cached = await collectCleanupEvidence(fixture.runtime, candidate, cache);
+      expect(calls).toBe(1);
+      const decision = decideCleanupEligibility(snapshot);
+      expect(decision).toMatchObject({
+        code: failure.dirty === "none" ? "repository-unavailable" : "dirty-worktree",
+        eligible: false,
+        status: failure.dirty === "none" ? "unknown" : "ineligible"
+      });
+      expect(decideCleanupEligibility(cached)).toStrictEqual(decision);
+
+      for (const invalidated of [false, true]) {
+        const report = createSessionCleanupReport({
+          blockers: invalidated ? ["member-changed-during-inspection"] : [],
+          filePath: "/fixture/session.yml",
+          members: [{ ...candidate, evidence: snapshot, mode: "live" }],
+          problems: invalidated
+            ? [
+                {
+                  code: "member-changed-during-inspection",
+                  message: "Member changed while a sibling was inspected",
+                  worktreePath: candidate.worktreePath
+                }
+              ]
+            : [],
+          rootSourceRoot: candidate.sourceRoot,
+          session: BRANCH
+        });
+
+        expect(report.eligibility.eligible).toBeFalsy();
+        expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
+
+        for (const output of [JSON.stringify(report), formatSessionCleanupReport(report)]) {
+          expect(output).toContain(failure.expected);
+          expect(output).toContain(failure.command);
+          expect(output).not.toContain(secret);
+          expect(output).not.toContain("Authorization:");
+        }
+      }
+
+      expect(JSON.stringify(snapshot)).not.toContain(secret);
+    }
+  );
+
+  it.each(["/git/ref/heads/", "/pulls?"])(
+    "retains authentication failures after repository metadata succeeds: %s",
+    async (failedEndpoint) => {
+      const fixture = createFixture();
+      const original = fixture.runtime.execAsync;
+      fixture.runtime.execAsync = async (command, args, options) =>
+        args?.[1]?.includes(failedEndpoint)
+          ? { exitCode: 4, stderr: "gh auth login", stdout: "" }
+          : await original(command, args, options);
+      const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+      expect(snapshot.repositoryFailure).toMatchObject({ kind: "authentication" });
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({
+        code: "repository-unavailable",
+        eligible: false,
+        evidence: [expect.stringContaining("gh auth status --hostname github.com")],
+        status: "unknown"
+      });
+    }
+  );
 
   it("fails closed on malformed provider evidence", async () => {
     const fixture = createFixture();
