@@ -44,6 +44,15 @@ const OWNED_GUIDANCE_FOLDERS = [
   "instructions"
 ];
 
+/** Initialization retains an owned folder when the candidate does not supply it. */
+function ownedGuidanceSources(root: string, guidance: string) {
+  return OWNED_GUIDANCE_FOLDERS.map((folder) => {
+    const source = path.join(guidance, folder);
+
+    return { folder, source: existsSync(source) ? source : path.join(root, folder) };
+  });
+}
+
 export function activeGuidanceRoot(runtime: Runtime) {
   const active = loadActiveToolInstall(getMonkeHome(runtime));
 
@@ -203,10 +212,9 @@ function publishBundledImports(
         path.join(root, "skills/references/imported"),
         ...retained
       ].map((source): [string, string] => [source, source]),
-      ...OWNED_GUIDANCE_FOLDERS.map((folder): [string, string] => [
-        path.join(guidance, folder),
-        path.join(root, folder)
-      ])
+      ...ownedGuidanceSources(registryRoot, guidance).map(
+        ({ folder, source }): [string, string] => [source, path.join(root, folder)]
+      )
     ]),
     // Bundled bytes already carry metadata; following a kind must not reapply recipe policy.
     guidance: imports.flatMap(({ copied }) =>
@@ -357,19 +365,18 @@ export function preflightSkillRegistryInstall(
   try {
     const plan = planRegistryImports(registry, guidance, true);
 
-    for (const folder of [
-      ...OWNED_GUIDANCE_FOLDERS,
-      "skills/imported",
-      "skills/references/imported"
+    for (const { folder, source } of [
+      ...ownedGuidanceSources(registry, guidance),
+      ...["skills/imported", "skills/references/imported"].map((imported) => ({
+        folder: imported,
+        source: path.join(registry, imported)
+      }))
     ]) {
-      const owner = folder.endsWith("/imported") ? registry : guidance;
-      const source = path.join(owner, folder);
-
       if (existsSync(source)) {
         const target = path.join(proposal, folder);
         mkdirSync(path.dirname(target), { recursive: true });
 
-        if (owner === registry) {
+        if (folder.endsWith("/imported")) {
           cpSync(source, target, { recursive: true, verbatimSymlinks: true });
         } else {
           symlinkSync(source, target, "dir");

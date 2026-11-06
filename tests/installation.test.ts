@@ -1242,7 +1242,7 @@ skillInstallPreference:
     }
   );
 
-  it.each(["managed", "linked", "owned", "rewritten"] as const)(
+  it.each(["managed", "linked", "owned", "retained-owned", "rewritten"] as const)(
     "checks the proposed %s consumer during bundled reference replacement",
     async (consumer) => {
       const sandbox = makeTempDir("bundled-reference-consumer");
@@ -1253,10 +1253,11 @@ skillInstallPreference:
       const source = "https://example.com/bundled";
       const reference = { kind: "reference" as const, selector: "base", slug: "base" };
       const dependent = "---\nname: retained\n---\nLoad ../../references/imported/base/MAIN.md.\n";
+      const ownedFolder = consumer === "retained-owned" ? "skills/codex" : "skills/internal";
       prepareSource(sourceCheckout);
 
-      if (consumer === "owned" || consumer === "rewritten") {
-        write(sourceCheckout, "skills/internal/retained/SKILL.md", dependent);
+      if (consumer === "owned" || consumer === "retained-owned" || consumer === "rewritten") {
+        write(sourceCheckout, `${ownedFolder}/retained/SKILL.md`, dependent);
       }
 
       write(sourceCheckout, "skills/references/imported/base/MAIN.md", "Accepted base.\n");
@@ -1388,7 +1389,7 @@ skillInstallPreference:
           ? path.join(linked, "retained/SKILL.md")
           : consumer === "managed"
             ? path.join(registry, "skills/imported/retained/SKILL.md")
-            : path.join(sourceCheckout, "skills/internal/retained/SKILL.md");
+            : path.join(sourceCheckout, ownedFolder, "retained/SKILL.md");
 
       expect(readFileSync(retainedSource, "utf-8")).toBe(dependent);
     }
