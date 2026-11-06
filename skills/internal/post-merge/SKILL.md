@@ -63,11 +63,18 @@ here only when no thread tool exists. Otherwise:
    Sessions, only when every member is clean and its work has landed; retain
    failed teardowns for recovery. Use `git worktree remove <path>` for ordinary
    worktrees, then delete candidate branches. Never run global `mt cleanup` here.
-4. Run `git fetch origin`. Use an existing retained checkout on `baseRefName`;
-   otherwise switch a clean retained checkout to it. Run
-   `git pull --ff-only origin <baseRefName>` only from a clean base checkout.
-   If none can be used without disturbing work, report the base update as pending.
-   Leave other checkouts on their branches.
+4. Use an existing retained checkout on `baseRefName`; otherwise run
+   `git switch --no-overwrite-ignore <baseRefName>` from a clean retained checkout.
+   From the chosen clean base checkout, run:
+
+   ```sh
+   git fetch origin refs/heads/<baseRefName> &&
+     git merge --ff-only --no-overwrite-ignore FETCH_HEAD
+   ```
+
+   These operations refuse to overwrite ignored files. If no checkout can be
+   used safely or an operation refuses the update, retain the files and report
+   the base update as pending. Leave other checkouts on their branches.
 
 Never discard authored or unclassified changes, trust git ancestry alone for
 squash merges, or use `git reset --hard`, `git clean`, or forced worktree removal.

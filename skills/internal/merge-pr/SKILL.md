@@ -34,15 +34,29 @@ when returning here and retain the full head SHA that passed its readiness check
    gh pr merge <number> --repo <owner/name> --squash --match-head-commit <head>
    ```
 
-   Completion requires the merge command to succeed and
-   `gh pr view <number> --repo <owner/name> --json state` to report `MERGED`.
-   If the merge fails or the state is not `MERGED`, restore any tracking record
-   removed by `untrack`, using its printed thread and checkout. If it reported
-   `Not tracked`, leave tracking unchanged and continue handling the failure.
-   If the head changed, repeat the
-   CI report for an immediate merge. For a conditional merge, return to
-   shepherding for the new head before retrying.
-4. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
+4. Read `gh pr view <number> --repo <owner/name> --json state` after the merge
+   command, including when it fails. A confirmed `MERGED` state means the merge
+   completed; continue to post-merge regardless of the command's exit code.
+
+   Otherwise, restore any tracking record removed by `untrack`, using its printed
+   thread and checkout. `Not tracked` means there is no prior record to restore.
+   Resolve read errors before deciding whether to retry the merge.
+
+   A queued or auto-merge request that remains open is pending. Retain ownership
+   until it merges or is rejected. In T3, ensure tracking succeeds, using the
+   actual current thread and checkout when no prior record exists:
+
+   ```sh
+   mt prs track <url> --thread <owning-thread-id> --checkout <PR-checkout>
+   ```
+
+   Use the host's PR watch while waiting. Outside T3, keep waiting or confirm a
+   monitoring handoff that owns post-merge before ending the turn.
+
+   If the merge was rejected because the head changed, repeat the CI report for
+   an immediate merge. For a conditional merge, shepherd the new head before
+   retrying. Continue below only after GitHub confirms `MERGED`.
+5. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
 
 Report the PR URL, merge method, checked head, CI result, and merge timing with
 post-merge's hand-off or report.
