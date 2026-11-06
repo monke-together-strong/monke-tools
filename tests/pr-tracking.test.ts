@@ -492,6 +492,35 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(6));
   });
 
+  it.each(["send", "start"])("keeps a merged PR tracked when T3 %s cannot spawn", async (stage) => {
+    const sandbox = createSandbox();
+    installFakeGh(sandbox, { 6: "MERGED" });
+
+    if (stage === "send") {
+      writeExecutable(path.join(sandbox.bin, "t3"), "#!/nonexistent-monke-test-interpreter\n");
+    } else {
+      installRecordingCommand(
+        sandbox,
+        "t3",
+        `printf '#!/nonexistent-monke-test-interpreter\\n' > "$0"\nexit 1`
+      );
+    }
+
+    await track(sandbox, 6);
+
+    await expect(mt(sandbox, ["prs", "poll"])).rejects.toThrow(`Could not hand off ${prUrl(6)}`);
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toBe(
+      `${prUrl(6)}\tthread thread-6\tcheckout ${sandbox.worktree}\n`
+    );
+
+    installRecordingCommand(sandbox, "t3");
+
+    await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
+      `Sent post-merge for ${prUrl(6)} to thread thread-6\n`
+    );
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
+  });
+
   it("keeps a PR tracked when GitHub cannot be read", async () => {
     const sandbox = createSandbox();
     installFakeGh(sandbox, {});
