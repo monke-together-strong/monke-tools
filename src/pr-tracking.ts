@@ -113,7 +113,8 @@ function resolvePrFileArgs(cwd: string, args: string[]) {
       stdin = value === "-";
     }
 
-    if (!["--body-file", "F", "--attach", "--template", "T", "--recover"].includes(flag)) {
+    // gh's --template selects a repository template by name, rather than opening a file.
+    if (!["--body-file", "F", "--attach", "--recover"].includes(flag)) {
       continue;
     }
 

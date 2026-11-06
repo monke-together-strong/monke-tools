@@ -180,8 +180,6 @@ describe("mt prs", () => {
     ["-dF", "attached", false],
     ["--attach", "separate", true],
     ["--attach", "=", false],
-    ["--template", "separate", false],
-    ["-T", "attached", true],
     ["--recover", "=", false]
   ] as const)(
     "reads %s (%s, absolute=%s) from the invocation directory",
@@ -233,6 +231,26 @@ printf '${prUrl(661)}\\n'`
             : [flag + (style === "=" ? "=" : "") + expected])
         ]
       ]);
+    }
+  );
+
+  it.each([["--template", "feature.md"], ["--template=feature.md"], ["-Tfeature.md"]])(
+    "preserves template selectors with %s",
+    async (...args) => {
+      const sandbox = createSandbox();
+      const ghCalls = installRecordingCommand(sandbox, "gh", `printf '${prUrl(661)}\\n'`);
+
+      await mt(sandbox, [
+        "prs",
+        "create",
+        "--thread",
+        "thread-661",
+        "--checkout",
+        sandbox.worktree,
+        "--",
+        ...args
+      ]);
+      expect(ghCalls()).toStrictEqual([["pr", "create", ...args]]);
     }
   );
 
