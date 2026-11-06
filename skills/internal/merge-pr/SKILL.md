@@ -50,13 +50,21 @@ when returning here and retain the full head SHA that passed its readiness check
    mt prs track <url> --thread <owning-thread-id> --checkout <PR-checkout>
    ```
 
-   Use the host's PR watch while waiting. Outside T3, keep waiting or confirm a
-   monitoring handoff that owns post-merge before ending the turn.
+   Once tracking succeeds, the poller owns the post-merge handoff to the recorded
+   thread, including when that is another thread. Use the host's PR watch to
+   monitor the queue. On a `MERGED` watch notification, report the handoff owner
+   and end this merge flow. Run post-merge only when the poller delivers its
+   explicit handoff. A missing tracking record may mean the poller already
+   claimed it, so it does not transfer ownership back to the waiting thread.
+
+   Outside T3, either keep waiting and run step 5 after `MERGED`, or confirm a
+   monitoring handoff and leave post-merge to that owner.
 
    If the merge was rejected because the head changed, repeat the CI report for
    an immediate merge. For a conditional merge, shepherd the new head before
-   retrying. Continue below only after GitHub confirms `MERGED`.
-5. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
+   retrying.
+5. When this thread still owns post-merge and GitHub confirms `MERGED`, run
+   [post-merge](../post-merge/SKILL.md) for the merged PR.
 
 Report the PR URL, merge method, checked head, CI result, and merge timing with
 post-merge's hand-off or report.

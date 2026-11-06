@@ -9,15 +9,22 @@ description: Finish a merged PR or an explicitly authorized direct-to-base landi
 
 For a PR, use the explicit number or URL; otherwise use `gh pr view`. Ask if no
 single PR resolves. Continue only when
-`gh pr view <number> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
+`gh pr view <PR-url> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
 reports `MERGED`. Use `mergeCommit.oid` as `landedCommit`.
 
+Resolve the base repository with
+`gh api repos/<owner/name>/pulls/<number> --jq '.base.repo | {full_name, clone_url, ssh_url}'`,
+using the repository from the PR URL. Use that repository for gates and set
+`landingRemote` to its `clone_url`, or `ssh_url` for SSH authentication.
+
 For an explicitly authorized direct landing, use the supplied commit and base
-branch instead. Record the user's authorization from the task or handoff. In
-the repository whose `origin` is the landing destination, run:
+branch instead. Record the user's authorized destination repository from the
+task or handoff. Verify the destination against the fetch URL from
+`git remote get-url <remote>` and use that URL as `landingRemote`.
+Use `origin` only when its URL matches the authorized destination. Run:
 
 ```sh
-git fetch origin refs/heads/<baseRefName>
+git fetch <landingRemote> refs/heads/<baseRefName>
 git rev-parse --verify '<commit>^{commit}'
 git merge-base --is-ancestor <full-commit-sha> FETCH_HEAD
 ```
@@ -36,7 +43,8 @@ request for that thread; in T3 Code, start it with `t3_thread_launch`. Finish
 here only when no thread tool exists. Otherwise:
 
 1. Start a new thread on GPT 6.1 Sol, high effort, that runs post-merge for the
-   landing with this skill, its checkout, `landedCommit`, and `baseRefName`.
+   landing with this skill, its checkout, `landedCommit`, `baseRefName`, and
+   the verified destination repository and `landingRemote`.
    Include the PR URL or the direct-landing authorization. Link it.
 2. Finish this thread in the same turn. The deploy gate, contract checks,
    demo repairs and cleanup now belong to the new thread. Recap only what
@@ -68,13 +76,15 @@ here only when no thread tool exists. Otherwise:
    From the chosen clean base checkout, run:
 
    ```sh
-   git fetch origin refs/heads/<baseRefName> &&
+   git fetch <landingRemote> refs/heads/<baseRefName> &&
+     git merge-base --is-ancestor <landedCommit> FETCH_HEAD &&
      git merge --ff-only --no-overwrite-ignore FETCH_HEAD
    ```
 
    These operations refuse to overwrite ignored files. If no checkout can be
-   used safely or an operation refuses the update, retain the files and report
-   the base update as pending. Leave other checkouts on their branches.
+   used safely, the fetched branch lacks `landedCommit`, or an operation refuses
+   the update, retain the files and report the base update as pending. Leave
+   other checkouts on their branches.
 
 Never discard authored or unclassified changes, trust git ancestry alone for
 squash merges, or use `git reset --hard`, `git clean`, or forced worktree removal.
