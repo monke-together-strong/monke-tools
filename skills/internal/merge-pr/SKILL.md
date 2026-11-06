@@ -11,7 +11,7 @@ separate waiver.
 
 For "merge when ready" or an equivalent condition, complete
 [shepherd-pr](../shepherd-pr/SKILL.md) first. Preserve that condition when
-returning here and use `--require-passing` below.
+returning here and retain the full head SHA that passed its readiness checks.
 
 ## Checklist
 
@@ -24,7 +24,8 @@ returning here and use `--require-passing` below.
 
    The default reports the current head and CI without blocking on pending,
    failed, missing, or skipped-only checks. For conditional merging, add
-   `--require-passing`; exit 1 means keep tracking and return to shepherding.
+   `--require-passing <ready-head-sha>`; exit 1 means keep tracking and return
+   to shepherding. A different current head also requires shepherding again.
    Continue only on exit 0. A usage or read error exits 64; resolve it before
    proceeding.
 3. Run `mt prs untrack <url>` so the external-merge poller leaves this PR to you.
@@ -38,7 +39,8 @@ returning here and use `--require-passing` below.
    `gh pr view <number> --repo <owner/name> --json state` to report `MERGED`.
    If the merge fails or the state is not `MERGED`, track it again with the
    thread and checkout that `untrack` printed. If the head changed, repeat the
-   CI check for the new head before retrying.
+   CI report for an immediate merge. For a conditional merge, return to
+   shepherding for the new head before retrying.
 4. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
 
 Report the PR URL, merge method, checked head, CI result, and merge timing with

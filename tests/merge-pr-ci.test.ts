@@ -104,7 +104,7 @@ process.stdout.write(await Bun.file(${JSON.stringify(path.join(directory, "respo
 
 describe.each([
   { args: [], name: "immediate merge", requirePassing: false },
-  { args: ["--require-passing"], name: "conditional merge", requirePassing: true }
+  { args: ["--require-passing", head], name: "conditional merge", requirePassing: true }
 ])("check-ci command for $name", ({ args, requirePassing }) => {
   it.each([
     { checks: [], status: "no_checks" },
@@ -149,6 +149,27 @@ describe.each([
   ])("rejects $name", ({ response }) => {
     const result = runCli(response, args);
     expect(result.exitCode).toBe(64);
+    expect(result.stdout).toBe("");
+  });
+});
+
+describe("head changes", () => {
+  const changedHead = "b".repeat(40);
+
+  it("returns the new head for an immediate merge", () => {
+    const result = runCli(snapshot([checkRun("SUCCESS")], changedHead));
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ allowed: true, head: changedHead });
+  });
+
+  it("rejects a conditional merge until the new head is shepherded", () => {
+    const result = runCli(snapshot([checkRun("SUCCESS")], changedHead), [
+      "--require-passing",
+      head
+    ]);
+
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toContain(`Head changed to ${changedHead}; return to shepherding`);
     expect(result.stdout).toBe("");
   });
 });

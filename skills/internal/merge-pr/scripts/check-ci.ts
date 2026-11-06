@@ -108,7 +108,10 @@ function createProgram() {
     .description("Read current PR head CI. Print JSON; never merge or change PR tracking.")
     .requiredOption("--repo <owner/name>", "GitHub repository")
     .requiredOption("--pr <number>", "pull request number")
-    .option("--require-passing", "block unless CI passes, for a conditional merge request", false)
+    .option(
+      "--require-passing <head>",
+      "require passing CI for this full head SHA after shepherding"
+    )
     .addHelpText(
       "after",
       "\nReports CI without blocking by default. Exit codes: 0 allowed, 1 CI blocked, 64 usage or read error."
@@ -135,10 +138,13 @@ function createProgram() {
 
       const result = inspectCi(read.stdout.toString());
 
-      const allowed = !options.requirePassing || result.status === "passed";
-      process.stdout.write(
-        `${JSON.stringify({ ...result, allowed, requirePassing: options.requirePassing })}\n`
-      );
+      if (options.requirePassing !== undefined && options.requirePassing !== result.head) {
+        throw new Error(`Head changed to ${result.head}; return to shepherding before retrying.`);
+      }
+
+      const requirePassing = options.requirePassing !== undefined;
+      const allowed = !requirePassing || result.status === "passed";
+      process.stdout.write(`${JSON.stringify({ ...result, allowed, requirePassing })}\n`);
       process.exitCode = allowed ? 0 : 1;
     });
 }
