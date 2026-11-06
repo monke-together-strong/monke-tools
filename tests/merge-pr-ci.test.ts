@@ -31,6 +31,7 @@ describe("PR head CI", () => {
     { checks: [checkRun(null, "IN_PROGRESS")], expected: "pending", name: "running acceptance" },
     { checks: [checkRun(null, "QUEUED")], expected: "pending", name: "queued CI" },
     { checks: [context("PENDING")], expected: "pending", name: "pending external status" },
+    { checks: [context("EXPECTED")], expected: "pending", name: "expected external status" },
     { checks: [checkRun("FAILURE")], expected: "failed", name: "failed CI" },
     { checks: [checkRun("CANCELLED")], expected: "failed", name: "cancelled acceptance" },
     { checks: [context("ERROR")], expected: "failed", name: "external status error" },

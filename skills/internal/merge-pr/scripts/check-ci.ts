@@ -45,7 +45,7 @@ function checkOutcome(check: Check): Outcome {
       return "passed";
     }
 
-    return check.state === "PENDING" ? "pending" : "failed";
+    return ["EXPECTED", "PENDING"].includes(check.state) ? "pending" : "failed";
   }
 
   if (["IN_PROGRESS", "PENDING", "QUEUED", "REQUESTED", "WAITING"].includes(check.status)) {
