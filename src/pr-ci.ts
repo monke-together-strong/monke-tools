@@ -1,7 +1,8 @@
-#!/usr/bin/env bun
-
 import { Command } from "@commander-js/extra-typings";
 import * as z from "zod";
+
+import { configureCliParser } from "./cli-errors.ts";
+import type { Runtime } from "./types.ts";
 
 const PullRequestSchema = z.object({
   headRefOid: z.string().regex(/^[\da-f]{40}$/u),
@@ -102,8 +103,8 @@ export function inspectCi(json: string): CiResult {
   return { checks, head: pr.headRefOid, status };
 }
 
-function createProgram() {
-  return new Command()
+export function createCheckCiCommand(runtime: Runtime) {
+  return configureCliParser(new Command())
     .name("check-ci")
     .description("Read current PR head CI. Print JSON; never merge or change PR tracking.")
     .requiredOption("--repo <owner/name>", "GitHub repository")
@@ -114,46 +115,41 @@ function createProgram() {
     )
     .addHelpText(
       "after",
-      "\nReports CI without blocking by default. Exit codes: 0 allowed, 1 CI blocked, 64 usage or read error."
+      "\nReports CI without blocking by default. Exit codes: 0 allowed, 1 CI blocked or usage error, 64 read or head error."
     )
-    .exitOverride((error) => process.exit(error.exitCode === 0 ? 0 : 64))
     .action((options) => {
-      const read = Bun.spawnSync(
-        [
+      try {
+        const read = runtime.exec(
           "gh",
-          "pr",
-          "view",
-          options.pr,
-          "--repo",
-          options.repo,
-          "--json",
-          "state,headRefOid,statusCheckRollup"
-        ],
-        { stderr: "pipe", stdout: "pipe" }
-      );
+          [
+            "pr",
+            "view",
+            options.pr,
+            "--repo",
+            options.repo,
+            "--json",
+            "state,headRefOid,statusCheckRollup"
+          ],
+          { allowFailure: true }
+        );
 
-      if (read.exitCode !== 0) {
-        throw new Error(`Cannot read PR head CI: ${read.stderr.toString().trim()}`);
+        if (read.exitCode !== 0) {
+          throw new Error(`Cannot read PR head CI: ${read.stderr.trim()}`);
+        }
+
+        const result = inspectCi(read.stdout);
+
+        if (options.requirePassing !== undefined && options.requirePassing !== result.head) {
+          throw new Error(`Head changed to ${result.head}; return to shepherding before retrying.`);
+        }
+
+        const requirePassing = options.requirePassing !== undefined;
+        const allowed = !requirePassing || result.status === "passed";
+        runtime.writeStdout(`${JSON.stringify({ ...result, allowed, requirePassing })}\n`);
+        process.exitCode = allowed ? 0 : 1;
+      } catch (cause) {
+        runtime.writeStderr(`${cause instanceof Error ? cause.message : String(cause)}\n`);
+        process.exitCode = 64;
       }
-
-      const result = inspectCi(read.stdout.toString());
-
-      if (options.requirePassing !== undefined && options.requirePassing !== result.head) {
-        throw new Error(`Head changed to ${result.head}; return to shepherding before retrying.`);
-      }
-
-      const requirePassing = options.requirePassing !== undefined;
-      const allowed = !requirePassing || result.status === "passed";
-      process.stdout.write(`${JSON.stringify({ ...result, allowed, requirePassing })}\n`);
-      process.exitCode = allowed ? 0 : 1;
     });
-}
-
-if (import.meta.main) {
-  try {
-    createProgram().parse(process.argv);
-  } catch (cause) {
-    process.stderr.write(`${cause instanceof Error ? cause.message : String(cause)}\n`);
-    process.exitCode = 64;
-  }
 }

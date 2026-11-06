@@ -406,6 +406,71 @@ describe("Release bundle verifier", () => {
       expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
       expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
       expect(Date.parse(manifest.createdAt)).not.toBeNaN();
+
+      const installed = makeTempDir("release-landing-commands");
+      const extracted = spawnSync("tar", ["-xzf", archivePath, "-C", installed]);
+      expect(extracted.status).toBe(0);
+      const bin = path.join(installed, "fixture-bin");
+      mkdirSync(bin);
+      const gh = path.join(bin, "gh");
+
+      const pendingPr = JSON.stringify({
+        headRefOid: SOURCE_COMMIT,
+        state: "OPEN",
+        statusCheckRollup: [{ __typename: "StatusContext", context: "CI", state: "PENDING" }]
+      });
+
+      writeFileSync(
+        gh,
+        `#!/bin/sh
+case "$1" in
+  pr) printf '%s\\n' '${pendingPr}' ;;
+  api) printf '%s\\n' '{"statuses":[{"context":"Deploy","description":"Ready","state":"success"}]}' ;;
+  *) exit 7 ;;
+esac
+`
+      );
+      chmodSync(gh, 0o755);
+
+      const runInstalled = (args: string[]) =>
+        spawnSync(path.join(installed, "mt"), args, {
+          cwd: installed,
+          encoding: "utf-8",
+          env: {
+            BUN_INSTALL_AUTO: "disable",
+            BUN_INSTALL_CACHE_DIR: path.join(installed, "empty-package-cache"),
+            PATH: bin
+          }
+        });
+
+      // Only the compiled executable and a fake gh are available, without Bun or npm packages.
+      const ciArgs = ["prs", "check-ci", "--repo", "fixture/repo", "--pr", "45"];
+      const immediate = runInstalled(ciArgs);
+      expect(immediate.stderr).toBe("");
+      expect(immediate.status).toBe(0);
+      expect(JSON.parse(immediate.stdout)).toMatchObject({
+        allowed: true,
+        head: SOURCE_COMMIT,
+        status: "pending"
+      });
+      const conditional = runInstalled([...ciArgs, "--require-passing", SOURCE_COMMIT]);
+      expect(conditional.status).toBe(1);
+      expect(JSON.parse(conditional.stdout)).toMatchObject({ allowed: false, status: "pending" });
+
+      const gate = runInstalled([
+        "prs",
+        "wait-for-gate",
+        "--repo",
+        "fixture/repo",
+        "--sha",
+        SOURCE_COMMIT,
+        "--status",
+        "Deploy"
+      ]);
+
+      expect(gate.stderr).toBe("");
+      expect(gate.status).toBe(0);
+      expect(gate.stdout).toBe("passed: Deploy: Ready\n");
       // This test compiles the CLI into a native executable. The default 5s budget leaves almost
       // no headroom over the local compile time, so a slower CI runner times out.
     },

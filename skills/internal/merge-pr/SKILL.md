@@ -16,18 +16,17 @@ returning here and retain the full head SHA that passed its readiness checks.
 ## Checklist
 
 1. Resolve the PR: explicit number or URL wins; otherwise use `gh pr view`. Ask if no single PR resolves.
-2. Run [check-ci](scripts/check-ci.ts) immediately before untracking:
+2. Run `mt prs check-ci` immediately before untracking:
 
    ```sh
-   bun <skill-dir>/scripts/check-ci.ts --repo <owner/name> --pr <number>
+   mt prs check-ci --repo <owner/name> --pr <number>
    ```
 
    The default reports the current head and CI without blocking on pending,
    failed, missing, or skipped-only checks. For conditional merging, add
-   `--require-passing <ready-head-sha>`; exit 1 means keep tracking and return
+   `--require-passing <ready-head-sha>`. If CI blocks, keep tracking and return
    to shepherding. A different current head also requires shepherding again.
-   Continue only on exit 0. A usage or read error exits 64; resolve it before
-   proceeding.
+   Continue only on exit 0. Resolve usage or read errors before proceeding.
 3. Run `mt prs untrack <url>` so the external-merge poller leaves this PR to you.
    Squash-merge with the head returned by check-ci:
 

@@ -1,9 +1,10 @@
-#!/usr/bin/env bun
-
 import path from "node:path";
 
 import { Command, InvalidArgumentError, Option } from "@commander-js/extra-typings";
 import * as z from "zod";
+
+import { configureCliParser } from "./cli-errors.ts";
+import type { Runtime } from "./types.ts";
 
 export type GateStatus = "passed" | "failed" | "skipped" | "timed_out";
 
@@ -251,22 +252,6 @@ async function pollStatus(gate: Extract<Gate, { kind: "status" }>, gh: GhApi): P
   }
 }
 
-const ghApi: GhApi = async (endpoint, schema) => {
-  const child = Bun.spawn(["gh", "api", endpoint], { stderr: "pipe", stdout: "pipe" });
-
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited
-  ]);
-
-  if (exitCode !== 0) {
-    throw new GhError(`gh api ${endpoint} failed: ${stderr.trim()}`);
-  }
-
-  return schema.parse(JSON.parse(stdout));
-};
-
 function parseDuration(value: string): number {
   const match = /^(?<amount>\d+)(?<unit>[hms])$/u.exec(value);
   const unitMs = DURATION_UNIT_MS.get(match?.groups?.unit ?? "");
@@ -302,8 +287,8 @@ function resolveGate(options: {
   return { context: status, kind: "status", repo, sha };
 }
 
-function createProgram() {
-  return new Command()
+export function createWaitForGateCommand(runtime: Runtime) {
+  return configureCliParser(new Command())
     .name("wait-for-gate")
     .description(
       "Wait for a landed commit's GitHub deployment gate, then print `<status>: <detail>`."
@@ -325,26 +310,29 @@ function createProgram() {
     )
     .addHelpText(
       "after",
-      "\nExit codes: 0 passed, 1 failed, 2 skipped, 3 timed_out, 64 usage or GitHub read error."
+      "\nExit codes: 0 passed, 1 failed or usage error, 2 skipped, 3 timed_out, 64 gate or GitHub read error."
     )
-    .exitOverride((error) => process.exit(error.exitCode === 0 ? 0 : USAGE_EXIT_CODE))
     .action(async (options) => {
-      const result = await waitForGate(resolveGate(options), {
-        gh: ghApi,
-        intervalMs: options.interval,
-        timeoutMs: options.timeout
-      });
+      try {
+        const result = await waitForGate(resolveGate(options), {
+          gh: async (endpoint, schema) => {
+            const read = await runtime.execAsync("gh", ["api", endpoint], { allowFailure: true });
 
-      process.stdout.write(`${result.status}: ${result.detail}\n`);
-      process.exitCode = EXIT_CODES[result.status];
+            if (read.exitCode !== 0) {
+              throw new GhError(`gh api ${endpoint} failed: ${read.stderr.trim()}`);
+            }
+
+            return schema.parse(JSON.parse(read.stdout));
+          },
+          intervalMs: options.interval,
+          timeoutMs: options.timeout
+        });
+
+        runtime.writeStdout(`${result.status}: ${result.detail}\n`);
+        process.exitCode = EXIT_CODES[result.status];
+      } catch (cause) {
+        runtime.writeStderr(`${cause instanceof Error ? cause.message : String(cause)}\n`);
+        process.exitCode = USAGE_EXIT_CODE;
+      }
     });
-}
-
-if (import.meta.main) {
-  try {
-    await createProgram().parseAsync(process.argv);
-  } catch (cause) {
-    process.stderr.write(`${cause instanceof Error ? cause.message : String(cause)}\n`);
-    process.exit(USAGE_EXIT_CODE);
-  }
 }

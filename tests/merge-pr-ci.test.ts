@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { inspectCi } from "../skills/internal/merge-pr/scripts/check-ci.ts";
+import { inspectCi } from "../src/pr-ci.ts";
 
 const head = "a".repeat(40);
 
@@ -82,7 +82,9 @@ process.stdout.write(await Bun.file(${JSON.stringify(path.join(directory, "respo
     const result = Bun.spawnSync(
       [
         process.execPath,
-        path.resolve(import.meta.dirname, "../skills/internal/merge-pr/scripts/check-ci.ts"),
+        path.resolve(import.meta.dirname, "../src/index.ts"),
+        "prs",
+        "check-ci",
         "--repo",
         "fixture/repo",
         "--pr",

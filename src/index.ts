@@ -5,6 +5,7 @@ import "zod/compile";
 import { runChop } from "./chop.ts";
 import { runCleanup } from "./cleanup.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
+import { createWaitForGateCommand } from "./deployment-gate.ts";
 import { runDiffConfigure, runDiffInteractive } from "./diff.ts";
 import { MonkeError, ThrownValueSchema } from "./errors.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
@@ -15,6 +16,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import { createCheckCiCommand } from "./pr-ci.ts";
 import { runPrsCreate, runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
@@ -139,7 +141,10 @@ function createProgram(runtime: Runtime) {
 
   const prs = program
     .command("prs")
-    .description("Track PRs so post-merge runs after an external merge");
+    .description("Inspect PR checks, wait for deployments, and track post-merge work");
+
+  prs.addCommand(createCheckCiCommand(runtime));
+  prs.addCommand(createWaitForGateCommand(runtime));
 
   prs
     .command("create")
