@@ -39,7 +39,8 @@ skills:
       - improve-codebase-architecture
       - prototype
       - research
-      - retro
+      - slug: retro
+        kind: reference
       - setup-matt-pocock-skills
       - tdd
       - teach

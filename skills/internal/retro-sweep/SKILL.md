@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Retro sweep
 
-Apply the [retro](../../imported/retro/SKILL.md) rubric to the threads the user started recently, and report fixes to the agent **environment**: repo guidance, checks, docs, skills, global instructions, and tools. The sweep is report-only; the human decides what to change. Product bugs met along the way go to the report's Out of scope list as one-liners.
+Apply the [retro](../retro/SKILL.md) rubric to the threads the user started recently, and report fixes to the agent **environment**: repo guidance, checks, docs, skills, global instructions, and tools. The sweep is report-only; the human decides what to change. Product bugs met along the way go to the report's Out of scope list as one-liners.
 
 State lives in `~/.monke/agent-retrospectives/`:
 
@@ -47,15 +47,15 @@ Combine once, after every worker returns, because promotion needs every repo's f
 1. **Dedupe all dispositions**: split independently repaired mechanisms within bundled claims, then merge the same cause and fix surface across workers, including Already fixed and exclusions, keeping their evidence; reconcile conflicting states against the current effective surface before counting or reporting them.
 2. **Promote to Global** a finding whose fix surface is global (a skill, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, T3, `mt`, harness config), or whose cause shows up in two or more repos. One global fix replaces the repo copies.
 3. **Recurrence**: drop findings an `accepted.md` entry covers. Compare the rest with the newest three reports; mark each `new`, `recurring` (raised before, still unfixed), or `regression` (fixed since, back again).
-4. **Verify Global findings yourself**: reopen each cited item with `t3_thread_read` and check the current effective fix surface using the worker's current-state criteria. Apply those criteria to every suppression: reopen incomplete or conflicting proof; put unresolved claims in coverage gaps.
+4. **Verify Global findings yourself**: reopen each cited item with `t3_thread_read` and apply [the current-state check](../../references/internal/RETRO_CURRENT_STATE.md), including subsequent repairs and user clarifications. Apply that check to every suppression: reopen incomplete or conflicting proof; put unresolved claims in coverage gaps.
 
-Save the worker returns and a disposition ledger to the companion evidence file: one row per distinct cause with an ID, cause and fix surface, state, current-state proof, and report ID or exclusion reason. Count `fixed` rows for Coverage; keep superseded, accepted, and unverified causes separate. Only confirmed active causes become findings. An open fix PR or a repair absent from the effective installation stays active with that qualification; a resolved incident alone does not establish a fixed cause.
+Save the worker returns and a disposition ledger to the companion evidence file: one row per distinct cause with an ID, cause and fix surface, incident outcome, subsequent repairs or decisions, state, current-state proof, and report ID or exclusion reason. Count `fixed` rows for Coverage; keep superseded, accepted, and unverified causes separate. An open fix PR or a repair absent from the effective installation stays active with that qualification; propose the remaining adoption work instead of reimplementing the repair.
 
 **Done when** every candidate maps to one ledger row, every retained finding and fixed suppression has current-state proof, and every Global finding is independently verified.
 
 ## 5. Write the report
 
-Write `reports/<end as YYYY-MM-DDTHH-MM-SSZ>-retro-sweep.md`. The template below is the whole report, written for a human deciding in five minutes. Order findings by severity; keep at most 5 Global and 3 per repo in full, and list the rest as one-liners under each section's **Minor** heading. Keep each field to one sentence and each quote under 15 words, with at most three quotes per finding.
+Write `reports/<end as YYYY-MM-DDTHH-MM-SSZ>-retro-sweep.md`. The template below is the whole report, written for a human deciding in five minutes. Order findings by severity; keep at most 5 Global and 3 per repo in full. Summarize the rest under each section's **Minor** heading with the remaining gap, subsequent-repair qualification, and a link to its ledger proof. Keep each field to one sentence and each quote under 15 words, with at most three quotes per finding.
 
 ```markdown
 # Retro sweep: <end date>
@@ -68,10 +68,12 @@ Evidence: <companion file link containing worker returns and the disposition led
 
 ## Global
 
-### G1. <cause, as one sentence> (<severity>, <new|recurring|regression>)
+### G1. <remaining cause, as one sentence> (<severity>, <new|recurring|regression>)
 
-Evidence: <thread link> @<position>: "<short quote>"; at most three.
-Fix: <surface>: <smallest change that covers the class>.
+Evidence: <thread link> @<position>: "<short quote establishing the incident and intended behavior>"; at most three.
+Since then: <incident outcome, later repairs or decisions, and their evidence>.
+Remaining: <missing|unwired|partial>: <uncovered case, effective source/version, check time, and verification limit>.
+Fix: <surface>: <smallest change that covers the remaining case>.
 
 ## <repo>
 
@@ -86,7 +88,7 @@ Fix: <surface>: <smallest change that covers the class>.
 - <thread link> (<status>)
 ```
 
-**Done when** the report fits in about 150 lines, every finding carries evidence, a fix surface, and a status, and its counts match the companion ledger.
+**Done when** the report fits in about 150 lines, every finding retains the subsequent-repair evidence and current remaining gap, and its counts match the companion ledger. If a summary drops those facts or proposes an existing repair again, revise it before handback.
 
 ## 6. Hand back
 
