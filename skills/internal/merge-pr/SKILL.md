@@ -36,8 +36,10 @@ returning here and retain the full head SHA that passed its readiness checks.
 
    Completion requires the merge command to succeed and
    `gh pr view <number> --repo <owner/name> --json state` to report `MERGED`.
-   If the merge fails or the state is not `MERGED`, track it again with the
-   thread and checkout that `untrack` printed. If the head changed, repeat the
+   If the merge fails or the state is not `MERGED`, restore any tracking record
+   removed by `untrack`, using its printed thread and checkout. If it reported
+   `Not tracked`, leave tracking unchanged and continue handling the failure.
+   If the head changed, repeat the
    CI report for an immediate merge. For a conditional merge, return to
    shepherding for the new head before retrying.
 4. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
