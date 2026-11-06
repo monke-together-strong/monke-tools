@@ -1034,6 +1034,49 @@ export function release({owner, outputs}) {
     }
   );
 
+  it.each([
+    { expected: "authentication", stderr: "gh auth login" },
+    { expected: "HTTP 403", stderr: "gh: Forbidden (HTTP 403)" },
+    { expected: "timed out", stderr: "net/http: TLS handshake timeout" },
+    { expected: "GitHub evidence unavailable", stderr: "unexpected failure" }
+  ])("retains sanitized $expected diagnostics for ordinary worktrees", async (failure) => {
+    const f = fixture();
+    const selected = path.join(f.cwd, "ordinary");
+    git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+    ageWorktree(selected);
+    const secret = "synthetic-credential-must-not-appear";
+    f.runtime.execAsync = async () => ({
+      exitCode: 1,
+      stderr: `${failure.stderr}\nAuthorization: Bearer ${secret}`,
+      stdout: secret
+    });
+    const args = [selected, "--include-unowned"];
+    const result = await f.run(false, f.cwd, args);
+    expect(result.report.unownedWorktrees).toContainEqual(
+      expect.objectContaining({
+        eligible: false,
+        outcome: "skipped",
+        reason: "repository-unavailable"
+      })
+    );
+    let text = "";
+    await runCliAsync(["cleanup", "--dry-run", ...args], {
+      ...f.runtime,
+      writeStdout: (chunk) => {
+        text += chunk;
+      }
+    });
+
+    for (const output of [JSON.stringify(result.report), text]) {
+      expect(output).toContain(failure.expected);
+      expect(output).toContain("gh ");
+      expect(output).not.toContain(secret);
+      expect(output).not.toContain("Authorization:");
+    }
+
+    expect(existsSync(selected)).toBeTruthy();
+  });
+
   it("treats dirty ordinary worktrees as settled skips", async () => {
     const f = fixture();
     const selected = path.join(f.cwd, "dirty-ordinary");

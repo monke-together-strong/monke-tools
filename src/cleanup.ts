@@ -381,6 +381,10 @@ function writeCleanupReport(
       runtime.writeStdout(
         `Unowned (${worktree.outcome ?? "untouched"}): ${worktree.sourceRoot} — ${worktree.worktreePath}${worktree.reason ? `: ${worktree.reason}` : ""}\n`
       );
+
+      for (const detail of worktree.details ?? []) {
+        runtime.writeStdout(`  ${detail}\n`);
+      }
     }
 
     if (globalFailure) {

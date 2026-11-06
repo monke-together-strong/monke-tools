@@ -81,6 +81,7 @@ export interface SessionCleanupEvidence {
 
 export interface UnownedWorktree {
   branch: string | null;
+  details?: string[];
   eligible: boolean;
   inspectionFailed?: boolean;
   outcome?: "skipped" | "would-clean" | "cleaned" | "failed";

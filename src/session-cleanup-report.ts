@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { localWorkDescription } from "./cleanup-eligibility.ts";
+import { localWorkDescription, repositoryFailureDetails } from "./cleanup-eligibility.ts";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
 import {
   decideSessionCleanupEligibility,
@@ -109,6 +109,13 @@ function committedWorkCheck(
   evidence: CleanupEvidence,
   decision: ReturnType<typeof decideSessionCleanupMember>
 ): CleanupCheckReport {
+  if (!evidence.repository && evidence.repositoryFailure) {
+    return {
+      ...check("unknown", "repository-unavailable"),
+      details: repositoryFailureDetails(evidence.repositoryFailure)
+    };
+  }
+
   if (!evidence.archiveReadiness && evidence.committedWorkAttempted === false) {
     return {
       code: null,

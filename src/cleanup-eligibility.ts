@@ -901,7 +901,7 @@ export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {
   };
 }
 
-function repositoryFailureDetails(failure: CleanupEvidence["repositoryFailure"]) {
+export function repositoryFailureDetails(failure: CleanupEvidence["repositoryFailure"]) {
   if (!failure) {
     return [];
   }
@@ -912,12 +912,13 @@ function repositoryFailureDetails(failure: CleanupEvidence["repositoryFailure"])
     ];
   }
 
-  const message =
-    failure.kind === "timeout"
-      ? "GitHub request timed out"
-      : failure.kind === "http"
-        ? `GitHub returned HTTP ${failure.httpStatus}`
-        : "GitHub evidence unavailable";
+  let message = "GitHub evidence unavailable";
+
+  if (failure.kind === "timeout") {
+    message = "GitHub request timed out";
+  } else if (failure.kind === "http") {
+    message = `GitHub returned HTTP ${failure.httpStatus}`;
+  }
 
   return [`${message}; diagnose with gh api --hostname github.com repos/${failure.repository}.`];
 }

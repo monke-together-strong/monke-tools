@@ -956,79 +956,91 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toMatchObject({ code: "repository-unavailable", eligible: false, status: "unknown" });
   });
 
-  it.each([
-    {
-      command: "gh auth status --hostname github.com",
-      exitCode: 4,
-      expected: "authentication",
-      label: "login required",
-      stderr: "To get started with GitHub CLI, please run: gh auth login"
-    },
-    {
-      command: "gh auth status --hostname github.com",
-      exitCode: 1,
-      expected: "authentication",
-      label: "invalid credentials",
-      stderr: "gh: Bad credentials (HTTP 401)"
-    },
-    {
-      command: "gh auth status --hostname github.com",
-      exitCode: 1,
-      expected: "authentication",
-      label: "locked keyring",
-      stderr: "error reading authentication token: keyring is locked"
-    },
-    {
-      command: "gh api --hostname github.com repos/owner/repo",
-      exitCode: 1,
-      expected: "HTTP 403",
-      label: "HTTP forbidden",
-      stderr: "gh: Resource not accessible by integration (HTTP 403)"
-    },
-    {
-      command: "gh api --hostname github.com repos/owner/repo",
-      exitCode: 1,
-      expected: "HTTP 404",
-      label: "HTTP not found",
-      stderr: "gh: Not Found (HTTP 404)"
-    },
-    {
-      command: "gh api --hostname github.com repos/owner/repo",
-      exitCode: 1,
-      expected: "HTTP 503",
-      label: "HTTP server error",
-      stderr: "gh: Server Error (HTTP 503)"
-    },
-    {
-      command: "gh api --hostname github.com repos/owner/repo",
-      exitCode: -1,
-      expected: "timed out",
-      label: "process timeout",
-      stderr: "",
-      timedOut: true
-    },
-    {
-      command: "gh api --hostname github.com repos/owner/repo",
-      exitCode: 1,
-      expected: "timed out",
-      label: "network timeout",
-      stderr: "net/http: TLS handshake timeout"
-    },
-    {
-      command: "gh api --hostname github.com repos/owner/repo",
-      exitCode: 1,
-      expected: "GitHub evidence unavailable",
-      label: "unknown failure",
-      stderr: "unexpected provider failure"
-    }
-  ])(
-    "retains a sanitized $label diagnostic in cleanup reports and cached evidence",
+  it.each(
+    [
+      {
+        command: "gh auth status --hostname github.com",
+        exitCode: 4,
+        expected: "authentication",
+        label: "login required",
+        stderr: "To get started with GitHub CLI, please run: gh auth login"
+      },
+      {
+        command: "gh auth status --hostname github.com",
+        exitCode: 1,
+        expected: "authentication",
+        label: "invalid credentials",
+        stderr: "gh: Bad credentials (HTTP 401)"
+      },
+      {
+        command: "gh auth status --hostname github.com",
+        exitCode: 1,
+        expected: "authentication",
+        label: "locked keyring",
+        stderr: "error reading authentication token: keyring is locked"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "HTTP 403",
+        label: "HTTP forbidden",
+        stderr: "gh: Resource not accessible by integration (HTTP 403)"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "HTTP 404",
+        label: "HTTP not found",
+        stderr: "gh: Not Found (HTTP 404)"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "HTTP 503",
+        label: "HTTP server error",
+        stderr: "gh: Server Error (HTTP 503)"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: -1,
+        expected: "timed out",
+        label: "process timeout",
+        stderr: "",
+        timedOut: true
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "timed out",
+        label: "network timeout",
+        stderr: "net/http: TLS handshake timeout"
+      },
+      {
+        command: "gh api --hostname github.com repos/owner/repo",
+        exitCode: 1,
+        expected: "GitHub evidence unavailable",
+        label: "unknown failure",
+        stderr: "unexpected provider failure"
+      }
+    ].flatMap((failure) => ["none", "before", "during"].map((dirty) => ({ ...failure, dirty })))
+  )(
+    "retains a sanitized $label diagnostic in cleanup reports and cached evidence, dirty=$dirty",
     async (failure) => {
       const fixture = createFixture();
+      const candidate = { ...fixture.candidate, sessionBranch: BRANCH };
+
+      if (failure.dirty === "before") {
+        write(fixture.candidate.worktreePath, "notes.md", "untracked notes\n");
+      }
+
       const secret = "synthetic-credential-must-not-appear";
       let calls = 0;
       fixture.runtime.execAsync = async () => {
         calls += 1;
+
+        if (failure.dirty === "during") {
+          write(candidate.worktreePath, "notes.md", "arrived during lookup\n");
+        }
 
         return {
           ...failure,
@@ -1038,14 +1050,14 @@ describe("cleanup evidence from real Git worktrees", () => {
       };
 
       const cache = createCleanupEvidenceCache();
-      const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
-      const cached = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
+      const snapshot = await collectCleanupEvidence(fixture.runtime, candidate, cache);
+      const cached = await collectCleanupEvidence(fixture.runtime, candidate, cache);
       expect(calls).toBe(1);
       const decision = decideCleanupEligibility(snapshot);
       expect(decision).toMatchObject({
-        code: "repository-unavailable",
+        code: failure.dirty === "none" ? "repository-unavailable" : "dirty-worktree",
         eligible: false,
-        status: "unknown"
+        status: failure.dirty === "none" ? "unknown" : "ineligible"
       });
       expect(decideCleanupEligibility(cached)).toStrictEqual(decision);
 
