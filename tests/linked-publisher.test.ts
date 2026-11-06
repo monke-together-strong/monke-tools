@@ -309,9 +309,9 @@ describe("linked publisher collections", () => {
     }
   );
 
-  it.each(["guide", "Base Skill"])(
+  it.for(["guide", "Base Skill"])(
     "excludes the %s alias from exact own slug selection",
-    async (other) => {
+    async (other, { skip }) => {
       const { declare, installed, publisher, runtime, upstream } = fixture();
       const slug = other === "guide" ? "Guide" : "Base Skill";
       write(
@@ -321,6 +321,10 @@ describe("linked publisher collections", () => {
       );
 
       if (other === "guide") {
+        if (existsSync(path.join(publisher, "skills/guide"))) {
+          skip("This fixture needs a filesystem that distinguishes Guide/ from guide/.");
+        }
+
         write(
           publisher,
           "skills/guide/SKILL.md",

@@ -18,6 +18,12 @@ const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.1-sol"];
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
 
+const PR_CREATE_LONG_VALUE_OPTION =
+  /^(?<flag>--(?:assignee|attach|base|body|body-file|head|label|milestone|project|recover|repo|reviewer|template|title))(?<inline>=.*)?$/u;
+
+const PR_CREATE_SHORT_VALUE_OPTION = /^(?<flag>-[defw]*[aBbFHlmpRrTt])(?<inline>.*)$/u;
+const LEADING_EQUALS = /^=/u;
+
 const TrackedPrSchema = z.strictObject({
   checkout: z.string().refine(path.isAbsolute),
   number: z.number().int().positive(),
@@ -48,7 +54,13 @@ export async function runPrsCreate(
     "--show-toplevel"
   ]);
 
-  const created = await runtime.execAsync("gh", ["pr", "create", ...args], { cwd: checkout });
+  const files = resolvePrFileArgs(runtime.cwd, args);
+
+  const created = await runtime.execAsync("gh", ["pr", "create", ...files.args], {
+    cwd: checkout,
+    stdin: files.stdin ? await Bun.stdin.text() : undefined
+  });
+
   const { url } = parsePullRequestUrl(created.stdout.trim());
 
   try {
@@ -60,6 +72,70 @@ export async function runPrsCreate(
       { cause }
     );
   }
+}
+
+/** Keep caller-owned files anchored to the invocation directory when gh changes checkout. */
+function resolvePrFileArgs(cwd: string, args: string[]) {
+  const resolved = [...args];
+  let stdin = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === undefined || arg === "--") {
+      break;
+    }
+
+    // Consume other string options too: a title or body can itself look like a file flag.
+    const long = PR_CREATE_LONG_VALUE_OPTION.exec(arg)?.groups;
+    const short = PR_CREATE_SHORT_VALUE_OPTION.exec(arg)?.groups;
+    const option = long ?? short;
+
+    if (option === undefined) {
+      continue;
+    }
+
+    const inline = option.inline ?? "";
+    const rawFlag = option.flag ?? "";
+    const valueIndex = inline ? index : index + 1;
+
+    if (!inline) {
+      index += 1;
+    }
+
+    const value = inline ? inline.replace(LEADING_EQUALS, "") : args[valueIndex];
+
+    if (value === undefined) {
+      continue;
+    }
+
+    const flag = long === undefined ? rawFlag.slice(-1) : rawFlag;
+
+    if (flag === "--body-file" || flag === "F") {
+      stdin = value === "-";
+    }
+
+    // gh's --template selects a repository template by name, rather than opening a file.
+    if (!["--body-file", "F", "--attach", "--recover"].includes(flag)) {
+      continue;
+    }
+
+    const absolute = invocationFile(cwd, value);
+    resolved[valueIndex] = inline
+      ? rawFlag + (inline.startsWith("=") ? "=" : "") + absolute
+      : absolute;
+  }
+
+  return { args: resolved, stdin };
+}
+
+function invocationFile(cwd: string, value: string) {
+  if (value === "" || value === "-" || path.isAbsolute(value)) {
+    return value;
+  }
+
+  // Prefix without cleaning: gh interprets #alt text, and filenames may themselves contain #.
+  return `${path.resolve(cwd)}${path.sep}${value}`;
 }
 
 /** Track an open PR so `mt prs poll` can hand its post-merge work back to its thread. */

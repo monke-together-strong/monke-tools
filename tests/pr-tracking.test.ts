@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import { runCliAsync } from "../src/index.ts";
-import { createRepo, git, makeTempDir, writeExecutable } from "./helpers.ts";
+import { createRepo, git, makeTempDir, write, writeExecutable } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const prUrl = (number: number) => `https://github.com/o/r/pull/${number}`;
@@ -82,13 +82,13 @@ function installRecordingCommand(sandbox: Sandbox, name: string, body = "exit 0"
   const log = path.join(sandbox.bin, `${name}.log`);
   writeExecutable(
     path.join(sandbox.bin, name),
-    `#!/bin/sh\nfor arg in "$@"; do printf '%s\\n' "$arg" >> '${log}'; done\nprintf '%s\\n' '--' >> '${log}'\n${body}\n`
+    `#!/bin/sh\nfor arg in "$@"; do printf '%s\\n' "$arg" >> '${log}'; done\nprintf '%s\\n' '__MT_CALL_END__' >> '${log}'\n${body}\n`
   );
 
   return () =>
     existsSync(log)
       ? readFileSync(log, "utf-8")
-          .split("--\n")
+          .split("__MT_CALL_END__\n")
           .filter(Boolean)
           .map((call) => call.trimEnd().split("\n"))
       : [];
@@ -118,13 +118,25 @@ describe("mt prs", () => {
   it("creates in the PR checkout and registers tracking and scheduling before success", async () => {
     const sandbox = createSandbox();
 
+    write(sandbox.source, "body.md", "Body from invocation directory.\n");
+    write(sandbox.source, "screen shot.png", "Attachment from invocation directory.\n");
+
     const ghCalls = installRecordingCommand(
       sandbox,
       "gh",
-      `test "$PWD" = '${sandbox.worktree}' || exit 1\nprintf '${prUrl(661)}\\n'`
+      `set -eu\ncat "$8" > '${sandbox.bin}/body-read'\ncat "\${10}" > '${sandbox.bin}/attachment-read'\ntest "$PWD" = '${sandbox.worktree}' || exit 1\nprintf '${prUrl(661)}\\n'`
     );
 
-    const args = ["--base", "main", "--title", "One rule", "--body-file", "body.md"];
+    const args = [
+      "--base",
+      "main",
+      "--title",
+      "One rule",
+      "--body-file",
+      "body.md",
+      "--attach",
+      "screen shot.png"
+    ];
 
     await expect(
       mt(sandbox, [
@@ -138,12 +150,193 @@ describe("mt prs", () => {
         ...args
       ])
     ).resolves.toBe(`Tracking ${prUrl(661)}\n`);
-    expect(ghCalls()).toStrictEqual([["pr", "create", ...args]]);
+    expect(readFileSync(path.join(sandbox.bin, "body-read"), "utf-8")).toBe(
+      "Body from invocation directory.\n"
+    );
+    expect(readFileSync(path.join(sandbox.bin, "attachment-read"), "utf-8")).toBe(
+      "Attachment from invocation directory.\n"
+    );
+    expect(ghCalls()).toStrictEqual([
+      [
+        "pr",
+        "create",
+        ...args.slice(0, 5),
+        path.join(sandbox.source, "body.md"),
+        "--attach",
+        path.join(sandbox.source, "screen shot.png")
+      ]
+    ]);
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe(
       `${prUrl(661)}\tthread thread-661\tcheckout ${sandbox.worktree}\n`
     );
     expect([...sandbox.launchctl(), ...sandbox.systemctl()].length).toBeGreaterThan(0);
   });
+
+  it.each([
+    ["--body-file", "=", false],
+    ["-F", "separate", true],
+    ["-F", "attached", false],
+    ["-F", "=", false],
+    ["-dF", "attached", false],
+    ["--attach", "separate", true],
+    ["--attach", "=", false],
+    ["--recover", "=", false]
+  ] as const)(
+    "reads %s (%s, absolute=%s) from the invocation directory",
+    async (flag, style, absolute) => {
+      const sandbox = createSandbox();
+      const relative = "input files/body or media.png";
+      write(sandbox.source, relative, "From the invocation directory.\n");
+      write(sandbox.worktree, relative, "Wrong checkout.\n");
+      const suffix = flag === "--attach" ? "#Before/after ../ fix #1" : "";
+      const input = (absolute ? path.join(sandbox.source, relative) : `./${relative}`) + suffix;
+      const expected = absolute ? input : `${sandbox.source}${path.sep}${input}`;
+
+      const args =
+        style === "separate" ? [flag, input] : [flag + (style === "=" ? "=" : "") + input];
+
+      const ghCalls = installRecordingCommand(
+        sandbox,
+        "gh",
+        `set -eu
+value="$3"
+if [ "$#" -eq 4 ]; then value="$4"; else value="\${value#${flag}}"; fi
+value="\${value#=}"
+file="\${value%%#*}"
+cat "$file" > '${sandbox.bin}/file-read'
+test "$PWD" = '${sandbox.worktree}'
+printf '${prUrl(661)}\\n'`
+      );
+
+      await mt(sandbox, [
+        "prs",
+        "create",
+        "--thread",
+        "thread-661",
+        "--checkout",
+        sandbox.worktree,
+        "--",
+        ...args
+      ]);
+
+      expect(readFileSync(path.join(sandbox.bin, "file-read"), "utf-8")).toBe(
+        "From the invocation directory.\n"
+      );
+      expect(ghCalls()).toStrictEqual([
+        [
+          "pr",
+          "create",
+          ...(style === "separate"
+            ? [flag, expected]
+            : [flag + (style === "=" ? "=" : "") + expected])
+        ]
+      ]);
+    }
+  );
+
+  it.each([["--template", "feature.md"], ["--template=feature.md"], ["-Tfeature.md"]])(
+    "preserves template selectors with %s",
+    async (...args) => {
+      const sandbox = createSandbox();
+      const ghCalls = installRecordingCommand(sandbox, "gh", `printf '${prUrl(661)}\\n'`);
+
+      await mt(sandbox, [
+        "prs",
+        "create",
+        "--thread",
+        "thread-661",
+        "--checkout",
+        sandbox.worktree,
+        "--",
+        ...args
+      ]);
+      expect(ghCalls()).toStrictEqual([["pr", "create", ...args]]);
+    }
+  );
+
+  it("preserves flag-shaped text and arguments after gh's option terminator", async () => {
+    const sandbox = createSandbox();
+    const ghCalls = installRecordingCommand(sandbox, "gh", `printf '${prUrl(661)}\\n'`);
+
+    const args = [
+      "--title",
+      "--body-file",
+      "--body",
+      "--attach=literal.png",
+      "--",
+      "--body-file",
+      "literal.md"
+    ];
+
+    await mt(sandbox, [
+      "prs",
+      "create",
+      "--thread",
+      "thread-661",
+      "--checkout",
+      sandbox.worktree,
+      "--",
+      ...args
+    ]);
+    expect(ghCalls()).toStrictEqual([["pr", "create", ...args]]);
+  });
+
+  it.each(["--body-file", "-F", "--body-file=", "-F-"])(
+    "pipes stdin through %s without treating - as a path",
+    async (flag) => {
+      const sandbox = createSandbox();
+
+      const ghCalls = installRecordingCommand(
+        sandbox,
+        "gh",
+        `set -eu\ncat > '${sandbox.bin}/stdin-read'\nprintf '${prUrl(661)}\\n'`
+      );
+
+      const args = flag === "-F-" ? [flag] : flag.endsWith("=") ? [`${flag}-`] : [flag, "-"];
+
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          path.resolve(import.meta.dirname, "../src/index.ts"),
+          "prs",
+          "create",
+          "--thread",
+          "thread-661",
+          "--checkout",
+          sandbox.worktree,
+          "--",
+          ...args
+        ],
+        {
+          cwd: sandbox.source,
+          env: {
+            ...process.env,
+            HOME: sandbox.home,
+            MONKE_HOME: sandbox.monkeHome,
+            PATH: `${sandbox.bin}${path.delimiter}${process.env.PATH ?? ""}`,
+            XDG_CONFIG_HOME: path.join(sandbox.home, ".config")
+          },
+          stderr: "pipe",
+          stdin: new TextEncoder().encode("Body from stdin.\nSecond line.\n"),
+          stdout: "pipe"
+        }
+      );
+
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text()
+      ]);
+
+      expect(stderr).toBe("");
+      expect(exitCode).toBe(0);
+      expect(stdout).toBe(`Tracking ${prUrl(661)}\n`);
+      expect(readFileSync(path.join(sandbox.bin, "stdin-read"), "utf-8")).toBe(
+        "Body from stdin.\nSecond line.\n"
+      );
+      expect(ghCalls()).toStrictEqual([["pr", "create", ...args]]);
+    }
+  );
 
   it("rejects publishing when GitHub created the PR but poll scheduling fails", async () => {
     const sandbox = createSandbox();
