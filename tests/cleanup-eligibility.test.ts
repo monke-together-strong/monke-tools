@@ -1061,22 +1061,33 @@ describe("cleanup evidence from real Git worktrees", () => {
       });
       expect(decideCleanupEligibility(cached)).toStrictEqual(decision);
 
-      const report = createSessionCleanupReport({
-        blockers: [],
-        filePath: "/fixture/session.yml",
-        members: [{ ...fixture.candidate, evidence: snapshot, mode: "live" }],
-        rootSourceRoot: fixture.candidate.sourceRoot,
-        session: BRANCH
-      });
+      for (const invalidated of [false, true]) {
+        const report = createSessionCleanupReport({
+          blockers: invalidated ? ["member-changed-during-inspection"] : [],
+          filePath: "/fixture/session.yml",
+          members: [{ ...candidate, evidence: snapshot, mode: "live" }],
+          problems: invalidated
+            ? [
+                {
+                  code: "member-changed-during-inspection",
+                  message: "Member changed while a sibling was inspected",
+                  worktreePath: candidate.worktreePath
+                }
+              ]
+            : [],
+          rootSourceRoot: candidate.sourceRoot,
+          session: BRANCH
+        });
 
-      expect(report.eligibility.eligible).toBeFalsy();
-      expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
+        expect(report.eligibility.eligible).toBeFalsy();
+        expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
 
-      for (const output of [JSON.stringify(report), formatSessionCleanupReport(report)]) {
-        expect(output).toContain(failure.expected);
-        expect(output).toContain(failure.command);
-        expect(output).not.toContain(secret);
-        expect(output).not.toContain("Authorization:");
+        for (const output of [JSON.stringify(report), formatSessionCleanupReport(report)]) {
+          expect(output).toContain(failure.expected);
+          expect(output).toContain(failure.command);
+          expect(output).not.toContain(secret);
+          expect(output).not.toContain("Authorization:");
+        }
       }
 
       expect(JSON.stringify(snapshot)).not.toContain(secret);

@@ -580,11 +580,13 @@ export function release({owner, outputs}) {
 
   it("archives untracked files before removal and keeps tracked edits blocked", async () => {
     const f = fixture();
-    const state = f.addSession("feature/notes");
+    const [source] = f.sources;
+    ok(source);
+    const state = f.addSession("feature/notes", source);
     const [member] = state.repos;
     ok(member);
     write(member.worktreePath, "notes/research.md", "unique research\n");
-    const blocked = f.addSession("feature/unfinished");
+    const blocked = f.addSession("feature/unfinished", source);
     const [blockedMember] = blocked.repos;
     ok(blockedMember);
     write(blockedMember.worktreePath, "tracked.txt", "unfinished tracked edit\n");
@@ -870,7 +872,9 @@ export function release({owner, outputs}) {
     "preserves recovery metadata for a %s stale registration during Session cleanup",
     async (kind) => {
       const f = fixture();
-      const state = f.addSession("feature/stale-recovery", f.root);
+      const [source] = f.sources;
+      ok(source);
+      const state = f.addSession("feature/stale-recovery", source);
       const [repo] = state.repos;
       ok(repo);
       const admin = git(repo.worktreePath, ["rev-parse", "--absolute-git-dir"]);
@@ -888,7 +892,9 @@ export function release({owner, outputs}) {
       const result = await f.run();
       const retained = kind !== "clean";
       expect(existsSync(admin)).toBe(retained);
-      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBe(retained);
+      expect(existsSync(getSessionStateFilePath(f.home, state.rootSourceRoot, state.session))).toBe(
+        retained
+      );
       expect(result.report.sessions[0]?.outcome).toBe(retained ? "skipped" : "cleaned");
     }
   );
@@ -1034,48 +1040,67 @@ export function release({owner, outputs}) {
     }
   );
 
-  it.each([
-    { expected: "authentication", stderr: "gh auth login" },
-    { expected: "HTTP 403", stderr: "gh: Forbidden (HTTP 403)" },
-    { expected: "timed out", stderr: "net/http: TLS handshake timeout" },
-    { expected: "GitHub evidence unavailable", stderr: "unexpected failure" }
-  ])("retains sanitized $expected diagnostics for ordinary worktrees", async (failure) => {
-    const f = fixture();
-    const selected = path.join(f.cwd, "ordinary");
-    git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
-    ageWorktree(selected);
-    const secret = "synthetic-credential-must-not-appear";
-    f.runtime.execAsync = async () => ({
-      exitCode: 1,
-      stderr: `${failure.stderr}\nAuthorization: Bearer ${secret}`,
-      stdout: secret
-    });
-    const args = [selected, "--include-unowned"];
-    const result = await f.run(false, f.cwd, args);
-    expect(result.report.unownedWorktrees).toContainEqual(
-      expect.objectContaining({
-        eligible: false,
-        outcome: "skipped",
-        reason: "repository-unavailable"
-      })
-    );
-    let text = "";
-    await runCliAsync(["cleanup", "--dry-run", ...args], {
-      ...f.runtime,
-      writeStdout: (chunk) => {
-        text += chunk;
+  it.each(
+    [
+      { expected: "authentication", stderr: "gh auth login" },
+      { expected: "HTTP 403", stderr: "gh: Forbidden (HTTP 403)" },
+      { expected: "timed out", stderr: "net/http: TLS handshake timeout" },
+      { expected: "GitHub evidence unavailable", stderr: "unexpected failure" }
+    ].flatMap((failure) => [false, true].map((dirty) => ({ ...failure, dirty })))
+  )(
+    "retains sanitized $expected diagnostics for ordinary worktrees, dirty=$dirty",
+    async (failure) => {
+      const f = fixture();
+      const selected = path.join(f.cwd, "ordinary");
+      git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+      ageWorktree(selected);
+      const secret = "synthetic-credential-must-not-appear";
+      f.runtime.execAsync = async () => {
+        if (failure.dirty) {
+          write(selected, "notes.md", "arrived during lookup\n");
+        }
+
+        return {
+          exitCode: 1,
+          stderr: `${failure.stderr}\nAuthorization: Bearer ${secret}`,
+          stdout: secret
+        };
+      };
+
+      const args = [selected, "--include-unowned"];
+      const result = await f.run(false, f.cwd, args);
+      expect(result.report.unownedWorktrees).toContainEqual(
+        expect.objectContaining({
+          eligible: false,
+          outcome: "skipped",
+          reason: failure.dirty ? "dirty-worktree" : "repository-unavailable"
+        })
+      );
+
+      const notes = path.join(selected, "notes.md");
+      expect(existsSync(notes) ? readFileSync(notes, "utf-8") : null).toBe(
+        failure.dirty ? "arrived during lookup\n" : null
+      );
+      rmSync(notes, { force: true });
+
+      let text = "";
+      await runCliAsync(["cleanup", "--dry-run", ...args], {
+        ...f.runtime,
+        writeStdout: (chunk) => {
+          text += chunk;
+        }
+      });
+
+      for (const output of [JSON.stringify(result.report), text]) {
+        expect(output).toContain(failure.expected);
+        expect(output).toContain("gh ");
+        expect(output).not.toContain(secret);
+        expect(output).not.toContain("Authorization:");
       }
-    });
 
-    for (const output of [JSON.stringify(result.report), text]) {
-      expect(output).toContain(failure.expected);
-      expect(output).toContain("gh ");
-      expect(output).not.toContain(secret);
-      expect(output).not.toContain("Authorization:");
+      expect(existsSync(selected)).toBeTruthy();
     }
-
-    expect(existsSync(selected)).toBeTruthy();
-  });
+  );
 
   it("treats dirty ordinary worktrees as settled skips", async () => {
     const f = fixture();

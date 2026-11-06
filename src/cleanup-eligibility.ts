@@ -173,7 +173,13 @@ function allowsDetached(candidate: CleanupCandidate) {
 /** Missing proof remains unknown; both unknown and ineligible map to false. */
 export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDecision {
   if (snapshot.localBlock) {
-    return snapshot.localBlock;
+    return {
+      ...snapshot.localBlock,
+      evidence: [
+        ...snapshot.localBlock.evidence,
+        ...repositoryFailureDetails(snapshot.repositoryFailure)
+      ]
+    };
   }
 
   const { branch, head, repository } = snapshot;

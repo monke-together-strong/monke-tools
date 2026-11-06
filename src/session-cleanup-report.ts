@@ -109,13 +109,6 @@ function committedWorkCheck(
   evidence: CleanupEvidence,
   decision: ReturnType<typeof decideSessionCleanupMember>
 ): CleanupCheckReport {
-  if (!evidence.repository && evidence.repositoryFailure) {
-    return {
-      ...check("unknown", "repository-unavailable"),
-      details: repositoryFailureDetails(evidence.repositoryFailure)
-    };
-  }
-
   if (!evidence.archiveReadiness && evidence.committedWorkAttempted === false) {
     return {
       code: null,
@@ -206,6 +199,13 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
       code: null,
       message: "Not checked; no member evidence was collected.",
       status: "not-checked"
+    };
+  }
+
+  if (member.evidence?.repositoryFailure && !member.evidence.repository) {
+    committedWork = {
+      ...check("unknown", "repository-unavailable"),
+      details: repositoryFailureDetails(member.evidence.repositoryFailure)
     };
   }
 
