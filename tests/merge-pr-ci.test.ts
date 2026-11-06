@@ -7,7 +7,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { inspectCi } from "../skills/internal/merge-pr/scripts/check-ci.ts";
 
 const head = "a".repeat(40);
-const changedHead = "b".repeat(40);
 
 const checkRun = (conclusion: string | null, status = "COMPLETED") => ({
   __typename: "CheckRun",
@@ -103,48 +102,39 @@ process.stdout.write(await Bun.file(${JSON.stringify(path.join(directory, "respo
   }
 }
 
-describe("check-ci command", () => {
+describe.each([
+  { args: [], name: "immediate merge", requirePassing: false },
+  { args: ["--require-passing"], name: "conditional merge", requirePassing: true }
+])("check-ci command for $name", ({ args, requirePassing }) => {
   it.each([
     { checks: [], status: "no_checks" },
     { checks: [checkRun(null, "IN_PROGRESS")], status: "pending" },
-    { checks: [checkRun("FAILURE")], status: "failed" }
-  ])("blocks $status with exit 1", ({ checks, status }) => {
-    const result = runCli(snapshot(checks));
-    expect(result.exitCode).toBe(1);
-    expect(JSON.parse(result.stdout)).toMatchObject({ allowed: false, head, status });
+    { checks: [checkRun("FAILURE")], status: "failed" },
+    { checks: [checkRun("SKIPPED")], status: "no_success" }
+  ])("reports $status and enforces the selected timing", ({ checks, status }) => {
+    const result = runCli(snapshot(checks), args);
+    expect(result.exitCode).toBe(requirePassing ? 1 : 0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      allowed: !requirePassing,
+      head,
+      requirePassing,
+      status
+    });
   });
 
   it("returns the checked head on success", () => {
-    const result = runCli(snapshot([checkRun("SUCCESS")]));
+    const result = runCli(snapshot([checkRun("SUCCESS")]), args);
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ allowed: true, head, status: "passed" });
-  });
-
-  it.each([
-    { checks: [], name: "no checks" },
-    { checks: [checkRun(null, "IN_PROGRESS")], name: "pending" },
-    { checks: [checkRun("FAILURE")], name: "failed" }
-  ])("accepts an explicit waiver for the current head: $name", ({ checks }) => {
-    const waiver = "User approved this CI state at task message 12";
-    const result = runCli(snapshot(checks), ["--waive-head", head, "--waiver", waiver]);
-    expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ allowed: true, head, waiver });
-  });
-
-  it("rejects a waiver after the head changes", () => {
-    const result = runCli(snapshot([checkRun("SUCCESS")], changedHead), [
-      "--waive-head",
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      allowed: true,
       head,
-      "--waiver",
-      "Approved at task message 12"
-    ]);
-
-    expect(result.exitCode).toBe(64);
-    expect(result.stderr).toContain(`Head changed to ${changedHead}`);
+      requirePassing,
+      status: "passed"
+    });
   });
 
-  it("does not waive an API read error", () => {
-    const result = runCli("{}", ["--waive-head", head, "--waiver", "Approved at message 12"], true);
+  it("rejects an API read error", () => {
+    const result = runCli("{}", args, true);
     expect(result.exitCode).toBe(64);
     expect(result.stderr).toContain("fixture API failure");
   });
@@ -156,18 +146,8 @@ describe("check-ci command", () => {
       name: "already merged PR",
       response: JSON.stringify({ headRefOid: head, state: "MERGED", statusCheckRollup: [] })
     }
-  ])("does not waive $name", ({ response }) => {
-    const result = runCli(response, ["--waive-head", head, "--waiver", "Approved at message 12"]);
-    expect(result.exitCode).toBe(64);
-    expect(result.stdout).toBe("");
-  });
-
-  it.each([
-    ["--waive-head", head],
-    ["--waiver", "Approved"],
-    ["--waive-head", head, "--waiver", " "]
-  ])("rejects incomplete waiver arguments: %j", (...args) => {
-    const result = runCli(snapshot([]), args);
+  ])("rejects $name", ({ response }) => {
+    const result = runCli(response, args);
     expect(result.exitCode).toBe(64);
     expect(result.stdout).toBe("");
   });

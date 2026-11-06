@@ -5,7 +5,13 @@ description: Merge a GitHub PR after an explicit "merge" request.
 
 # Merge PR
 
-A direct "merge this PR" / "merge PR #123" is approval.
+A direct "merge this PR" or "get this merged" authorizes merging now. Report
+CI and review status, then merge without waiting for them or asking for a
+separate waiver.
+
+For "merge when ready" or an equivalent condition, complete
+[shepherd-pr](../shepherd-pr/SKILL.md) first. Preserve that condition when
+returning here and use `--require-passing` below.
 
 ## Checklist
 
@@ -16,16 +22,11 @@ A direct "merge this PR" / "merge PR #123" is approval.
    bun <skill-dir>/scripts/check-ci.ts --repo <owner/name> --pr <number>
    ```
 
-   Continue only on exit 0. It reports the current head and all reported checks,
-   including optional checks on repositories without branch protection.
-   For `pending`, keep tracking and wait for CI. For `failed`, investigate the
-   failed checks. `no_checks` or `no_success` needs an explicit user waiver.
-   A read error leaves CI unverified; resolve the error before proceeding.
-
-   To waive CI, the user must explicitly approve the reported check state for
-   that head. A merge request alone is not a waiver. Rerun with
-   `--waive-head <full-head-sha> --waiver '<user approval and reference>'`.
-   A waiver applies only to that head and never bypasses a read error.
+   The default reports the current head and CI without blocking on pending,
+   failed, missing, or skipped-only checks. For conditional merging, add
+   `--require-passing`; exit 1 means keep tracking and return to shepherding.
+   Continue only on exit 0. A usage or read error exits 64; resolve it before
+   proceeding.
 3. Run `mt prs untrack <url>` so the external-merge poller leaves this PR to you.
    Squash-merge with the head returned by check-ci:
 
@@ -40,5 +41,5 @@ A direct "merge this PR" / "merge PR #123" is approval.
    CI check for the new head before retrying.
 4. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
 
-Report the PR URL, merge method, checked head, CI result, and any waiver with
+Report the PR URL, merge method, checked head, CI result, and merge timing with
 post-merge's hand-off or report.

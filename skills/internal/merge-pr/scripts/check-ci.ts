@@ -108,19 +108,13 @@ function createProgram() {
     .description("Read current PR head CI. Print JSON; never merge or change PR tracking.")
     .requiredOption("--repo <owner/name>", "GitHub repository")
     .requiredOption("--pr <number>", "pull request number")
-    .option("--waive-head <sha>", "full head SHA covered by explicit user approval")
-    .option("--waiver <approval>", "user's CI waiver and its task or message reference")
-    .addHelpText("after", "\nExit codes: 0 passed or waived, 1 CI blocked, 64 usage or read error.")
+    .option("--require-passing", "block unless CI passes, for a conditional merge request", false)
+    .addHelpText(
+      "after",
+      "\nReports CI without blocking by default. Exit codes: 0 allowed, 1 CI blocked, 64 usage or read error."
+    )
     .exitOverride((error) => process.exit(error.exitCode === 0 ? 0 : 64))
     .action((options) => {
-      if ((options.waiveHead === undefined) !== (options.waiver === undefined)) {
-        throw new Error("Supply both --waive-head and --waiver.");
-      }
-
-      if (options.waiver !== undefined && options.waiver.trim() === "") {
-        throw new Error("--waiver must record the user's explicit approval.");
-      }
-
       const read = Bun.spawnSync(
         [
           "gh",
@@ -141,12 +135,10 @@ function createProgram() {
 
       const result = inspectCi(read.stdout.toString());
 
-      if (options.waiveHead !== undefined && options.waiveHead !== result.head) {
-        throw new Error(`Head changed to ${result.head}; the waiver covers ${options.waiveHead}.`);
-      }
-
-      const allowed = result.status === "passed" || options.waiver !== undefined;
-      process.stdout.write(`${JSON.stringify({ ...result, allowed, waiver: options.waiver })}\n`);
+      const allowed = !options.requirePassing || result.status === "passed";
+      process.stdout.write(
+        `${JSON.stringify({ ...result, allowed, requirePassing: options.requirePassing })}\n`
+      );
       process.exitCode = allowed ? 0 : 1;
     });
 }
