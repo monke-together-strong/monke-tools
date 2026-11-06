@@ -22,14 +22,9 @@ Per unit, trace up to five friction points, costliest first, and group the rest 
 
 ## 3. Check the current state
 
-Follow each cause through the unit's later corrections, fix references, and changed requirements. Then read its current fix surface at the editable source. Check the remote default-branch tip before using `git show`; record the revision and check time. For installed guidance or tools, resolve the active link/version and inspect that effective copy, including local edits. Record a difference from the default branch explicitly. For an imported skill, name its upstream and whether a local wrapper is the fix.
-
-Classify the cause from the mechanism currently in effect:
-
-- `missing`, `unwired` (a repair exists but the active workflow or installation does not use it), or `partial` (only part of the case is covered): the cause remains; state the uncovered case.
-- `fixed`: the current mechanism covers the observed case; cite the retained repair and explain what changed after the failure. A pre-existing rule, commit title, or successful retry alone proves neither adoption nor coverage. Record a workaround as mitigation of a `partial` cause unless it is now the supported path and covers the case.
-- `superseded`: a later user decision or removal makes the old requirement inapplicable; cite that decision.
-- `unverified`: the necessary source, runtime, or intent cannot be established. For example, HEAD contains a rule but the installed file deletes it without a known reason; neither `fixed` nor `regression` is established.
+Apply [the current-state check](../../references/internal/RETRO_CURRENT_STATE.md)
+to each cause. Keep the incident outcome, subsequent repairs, and remaining gap
+separate in your return so the orchestrator can preserve them in the report.
 
 When existing guidance already covers the case, report it only if it failed in two or more units; the fix then targets why the guidance did not fire (its pointer wording, its placement, or a missing check), not another copy of the rule.
 
@@ -40,20 +35,21 @@ When existing guidance already covers the case, report it only if it failed in t
 Write each finding as the class of cases it covers, merging friction points with one cause. Retain only `missing`, `unwired`, and `partial` causes that pass the scope and existing-guidance rules. Severity is `high` when a wrong result was merged or shipped, or the cause recurred in two or more units; `medium` when it cost a user correction or significant agent time; `low` otherwise. Keep each field to one sentence and each quote under 15 words.
 
 ```markdown
-### <cause, as one sentence>
+### <remaining cause, as one sentence>
 
 Category: <retro category>
 Severity: <high|medium|low>
 Fix surface: <editable source path, skill, or tool> (<repo|global>)
-Evidence: <thread link> @<position>: "<short quote>"; at most three.
-Current state: <missing|unwired|partial>: <uncovered case; source/version, check time, and verification limit>
-Proposed change: <smallest change that covers the class>
+Evidence: <thread link> @<position>: "<short quote establishing the incident and intended behavior>"; at most three.
+Since then: <incident outcome, later repairs or decisions, and their evidence>.
+Remaining: <missing|unwired|partial>: <uncovered case, effective source/version, check time, and verification limit>
+Proposed change: <smallest change that covers the remaining case>
 ```
 
 After the findings, add:
 
 - **Already fixed**: one line per distinct `fixed` cause, with its repair, effective source/version, check time, and why it covers the case.
-- **Other exclusions**: one line per cause, with the reason (`superseded`, accepted condition, or existing guidance below the recurrence threshold) and evidence; these are not fixed causes.
+- **Other exclusions**: one line per cause, with the reason (`superseded`, behavior matched the request, accepted condition, or existing guidance below the recurrence threshold) and evidence; these are not fixed causes.
 - **Unverified**: one line per cause with the missing proof and what would settle it.
 - **Out of scope**: product bugs, one line each with a thread link.
 - **Coverage**: each unit as `deep` (at least one friction point traced), `skimmed` (messages only, no friction found), or `skipped (<reason>)`.
