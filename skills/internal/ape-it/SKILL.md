@@ -7,5 +7,5 @@ description: Use when the user says "ape it".
    approach and the questions it names, then carry the agreed approach forward.
 2. Run `$implement` on the request.
 3. Create the PR with `$pr`.
-4. For a merge request, follow [merge-pr](../merge-pr/SKILL.md), which selects
-   immediate or conditional merging. Otherwise shepherd it with `$shepherd-pr`.
+4. Shepherd it with [shepherd-pr](../shepherd-pr/SKILL.md). A merge request
+   within this workflow means "merge when ready", after shepherding completes.

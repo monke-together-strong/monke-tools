@@ -5,8 +5,9 @@ description: 'Use when the user says things like "shepherd this PR", "babysit th
 
 # Shepherd PR
 
-For an unconditional merge request, run [merge-pr](../merge-pr/SKILL.md)
-immediately. For "merge when ready", complete this workflow before merging.
+For a standalone unconditional merge request, run [merge-pr](../merge-pr/SKILL.md)
+immediately. For "merge when ready" or a readiness condition from the calling
+workflow, complete this workflow before merging.
 
 Create or pick up the PR and mark it ready for review. Track CI and review
 coverage against its current head commit.

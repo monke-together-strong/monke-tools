@@ -5,13 +5,13 @@ description: Merge a GitHub PR after an explicit "merge" request.
 
 # Merge PR
 
-A direct "merge this PR" or "get this merged" authorizes merging now. Report
+A standalone "merge this PR" or "get this merged" authorizes merging now. Report
 CI and review status, then merge without waiting for them or asking for a
 separate waiver.
 
-For "merge when ready" or an equivalent condition, complete
-[shepherd-pr](../shepherd-pr/SKILL.md) first. Preserve that condition when
-returning here and retain the full head SHA that passed its readiness checks.
+For "merge when ready" or a readiness condition from the calling workflow,
+complete [shepherd-pr](../shepherd-pr/SKILL.md) first. Preserve that condition
+when returning here and retain the full head SHA that passed its readiness checks.
 
 ## Checklist
 
