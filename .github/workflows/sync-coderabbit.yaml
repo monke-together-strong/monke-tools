@@ -68,10 +68,10 @@ jobs:
         run: |
           install -d "$RUNNER_TEMP/coderabbit-cli"
           curl --fail --silent --show-error --location \
-            https://cli.coderabbit.ai/releases/0.7.2/coderabbit-linux-x64.zip \
+            https://cli.coderabbit.ai/releases/0.9.2/coderabbit-linux-x64.zip \
             --output "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip"
           printf '%s  %s\n' \
-            '32dd3a5a1238fa68eb7cfa95cc19cf6ad4980882589c616c0e300b920f1bb865' \
+            'b29bef55fd5a41a2872938516acde46f4c0ccf8fd81c0d86829c435a75a5fd9a' \
             "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" \
             -d "$RUNNER_TEMP/coderabbit-cli"

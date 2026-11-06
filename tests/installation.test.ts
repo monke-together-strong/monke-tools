@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -25,9 +26,11 @@ import {
 import { rememberRestoredRecipe } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
+import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadToolInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
 import { writeCollisionRecovery } from "../src/install-recovery.ts";
+import { followBundledImports } from "../src/skill-registry-publication.ts";
 import { createRepo, git, makeTempDir, write } from "./helpers.ts";
 import {
   activateLocal,
@@ -1236,6 +1239,159 @@ skillInstallPreference:
               : ""
         );
       }
+    }
+  );
+
+  it.each(["managed", "linked", "owned", "retained-owned", "rewritten"] as const)(
+    "checks the proposed %s consumer during bundled reference replacement",
+    async (consumer) => {
+      const sandbox = makeTempDir("bundled-reference-consumer");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const sourceCheckout = path.join(sandbox, "source");
+      const candidate = path.join(sandbox, "candidate");
+      const source = "https://example.com/bundled";
+      const reference = { kind: "reference" as const, selector: "base", slug: "base" };
+      const dependent = "---\nname: retained\n---\nLoad ../../references/imported/base/MAIN.md.\n";
+      const ownedFolder = consumer === "retained-owned" ? "skills/codex" : "skills/internal";
+      prepareSource(sourceCheckout);
+
+      if (consumer === "owned" || consumer === "retained-owned" || consumer === "rewritten") {
+        write(sourceCheckout, `${ownedFolder}/retained/SKILL.md`, dependent);
+      }
+
+      write(sourceCheckout, "skills/references/imported/base/MAIN.md", "Accepted base.\n");
+      write(sourceCheckout, "skills/references/imported/base/guide.txt", "Supporting guidance.\n");
+      writeRepoImportRecipeStore(sourceCheckout, {
+        recipes: [{ commit: "0".repeat(40), skills: [reference], source }],
+        version: 4
+      });
+
+      for (const recipe of readImportRecipeStore(sourceCheckout).recipes) {
+        rememberRestoredRecipe(sourceCheckout, recipe);
+      }
+
+      await activateLocal({ home, installId: "local-first", monkeHome, sourceCheckout });
+
+      const runtime = createTestRuntime({
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout() {}
+      });
+
+      await runCliAsync(["skills", "list"], runtime);
+      const registry = path.join(monkeHome, "skill-registry");
+
+      const privateRecipe = {
+        commit: "1".repeat(40),
+        skills: [{ kind: "skill" as const, selector: "retained", slug: "retained" }],
+        source: "https://example.com/private"
+      };
+
+      const linked = path.join(sandbox, "private");
+
+      if (consumer === "managed") {
+        write(registry, "skills/imported/retained/SKILL.md", dependent);
+        writeImportRecipeStore(registry, {
+          ...readImportRecipeStore(registry),
+          recipes: [...readImportRecipeStore(registry).recipes, privateRecipe]
+        });
+        rememberRestoredRecipe(registry, privateRecipe);
+      } else if (consumer === "linked") {
+        write(linked, "retained/SKILL.md", dependent);
+        await runCliAsync(["skills", "add", linked, "--link"], runtime);
+      }
+
+      await runInstallSkillsLocked(runtime, sourceCheckout);
+      const lock = readFileSync(path.join(registry, "skills.lock.json"), "utf-8");
+      const marker = readFileSync(path.join(registry, "skills/.monke-restored.json"), "utf-8");
+
+      prepareSource(candidate);
+
+      if (consumer === "owned" || consumer === "rewritten") {
+        write(
+          candidate,
+          "skills/internal/retained/SKILL.md",
+          consumer === "owned" ? dependent : "---\nname: retained\n---\nSelf-contained guidance.\n"
+        );
+      }
+
+      write(candidate, "skills/imported/base/SKILL.md", "---\nname: base\n---\nNew skill.\n");
+      writeRepoImportRecipeStore(candidate, {
+        recipes: [{ commit: "0".repeat(40), skills: [{ ...reference, kind: "skill" }], source }],
+        version: 4
+      });
+
+      for (const recipe of readImportRecipeStore(candidate).recipes) {
+        rememberRestoredRecipe(candidate, recipe);
+      }
+
+      const succeeds = consumer === "rewritten";
+
+      const expected = succeeds
+        ? /^accepted$/u
+        : /Cannot replace Imported reference base; it is used by .*retained\/SKILL.md/u;
+
+      const outcome = await activateLocal({
+        home,
+        installId: "local-second",
+        monkeHome,
+        sourceCheckout: candidate
+      }).then(
+        () => "accepted",
+        (cause: unknown) => errorMessage(ThrownValueSchema.parse(cause))
+      );
+
+      expect(outcome).toMatch(expected);
+
+      const refreshed = await runInstallSkillsLocked(runtime, candidate).then(
+        () => "accepted",
+        (cause: unknown) => errorMessage(ThrownValueSchema.parse(cause))
+      );
+
+      expect(refreshed).toMatch(expected);
+      let followed = "accepted";
+
+      try {
+        followBundledImports(runtime, registry, candidate);
+      } catch (cause) {
+        followed = errorMessage(ThrownValueSchema.parse(cause));
+      }
+
+      expect(followed).toMatch(expected);
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        succeeds ? "installs/local-second" : "installs/local-first"
+      );
+      expect(readFileSync(path.join(registry, "skills.lock.json"), "utf-8") === lock).toBe(
+        !succeeds
+      );
+      expect(
+        readFileSync(path.join(registry, "skills/.monke-restored.json"), "utf-8") === marker
+      ).toBe(!succeeds);
+      const entry = succeeds ? "imported/base/SKILL.md" : "references/imported/base/MAIN.md";
+      const contents = succeeds ? "---\nname: base\n---\nNew skill.\n" : "Accepted base.\n";
+      expect(readFileSync(path.join(registry, "skills", entry), "utf-8")).toBe(contents);
+      expect(readFileSync(path.join(home, ".codex/skills/monke-tools", entry), "utf-8")).toBe(
+        contents
+      );
+      const support = path.join(registry, "skills/references/imported/base/guide.txt");
+      expect(existsSync(support) ? readFileSync(support, "utf-8") : undefined).toBe(
+        succeeds ? undefined : "Supporting guidance.\n"
+      );
+      expect(existsSync(path.join(registry, "skills/imported/base"))).toBe(succeeds);
+      expect(
+        readdirSync(registry).filter((name) => name.startsWith(".monke-guidance-backup-"))
+      ).toStrictEqual([]);
+
+      const retainedSource =
+        consumer === "linked"
+          ? path.join(linked, "retained/SKILL.md")
+          : consumer === "managed"
+            ? path.join(registry, "skills/imported/retained/SKILL.md")
+            : path.join(sourceCheckout, ownedFolder, "retained/SKILL.md");
+
+      expect(readFileSync(retainedSource, "utf-8")).toBe(dependent);
     }
   );
 

@@ -10,7 +10,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { importedGuidancePath, transformPreparedReference } from "../scripts/import-guidance.ts";
+import {
+  copyStagedGuidanceToManagedRoots,
+  importedGuidancePath
+} from "../scripts/import-guidance.ts";
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
@@ -33,6 +36,22 @@ import {
 } from "./skills.ts";
 import type { ExplicitSkillTargetSelection, SkillPublicationScope } from "./skills.ts";
 import type { Runtime } from "./types.ts";
+
+const OWNED_GUIDANCE_FOLDERS = [
+  "skills/internal",
+  "skills/codex",
+  "skills/references/internal",
+  "instructions"
+];
+
+/** Initialization retains an owned folder when the candidate does not supply it. */
+function ownedGuidanceSources(root: string, guidance: string) {
+  return OWNED_GUIDANCE_FOLDERS.map((folder) => {
+    const source = path.join(guidance, folder);
+
+    return { folder, source: existsSync(source) ? source : path.join(root, folder) };
+  });
+}
 
 export function activeGuidanceRoot(runtime: Runtime) {
   const active = loadActiveToolInstall(getMonkeHome(runtime));
@@ -104,7 +123,7 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
     ]
   });
 
-  return { imports, next };
+  return { imports, next, registryRoot: root };
 }
 
 /** Bundled guidance a registry copies for one recipe, replacing its obsolete items. */
@@ -164,43 +183,66 @@ function followBundledRecipe(
   };
 }
 
-function copyBundledImports(root: string, guidance: string, imports: BundledImport[]) {
-  for (const { converted, copied, obsolete, recipe } of imports) {
-    for (const item of copied) {
-      const source = converted
-        ? importedGuidancePath(root, { ...item, kind: "skill" })
-        : importedGuidancePath(guidance, item);
-
-      const target = importedGuidancePath(root, item);
-
-      if (converted) {
-        // An interrupted conversion may have already replaced its retained skill.
-        if (!existsSync(source)) {
-          continue;
-        }
-
-        rmSync(target, { force: true, recursive: true });
-      }
-
-      mkdirSync(path.dirname(target), { recursive: true });
-      cpSync(source, target, { recursive: true, verbatimSymlinks: true });
-
-      if (converted) {
-        transformPreparedReference(target);
-      }
-    }
-
-    for (const item of obsolete) {
-      rmSync(importedGuidancePath(root, item), { force: true, recursive: true });
-    }
-
-    rememberRestoredRecipe(root, recipe);
+/** Publish the complete bundled change so consumers are checked after every replacement. */
+function publishBundledImports(
+  root: string,
+  guidance: string,
+  { imports, next, registryRoot }: ReturnType<typeof planRegistryImports>,
+  commitState?: () => void
+) {
+  if (imports.length === 0) {
+    return;
   }
+
+  const retained = new Set(
+    next.recipes.flatMap((recipe) => recipe.skills.map((item) => importedGuidancePath(root, item)))
+  );
+
+  const converted = new Set(
+    imports
+      .filter((item) => item.converted)
+      .flatMap(({ copied }) => copied.map((item) => importedGuidancePath(root, item)))
+  );
+
+  copyStagedGuidanceToManagedRoots({
+    commitState,
+    consumerRoots: new Map([
+      ...[
+        path.join(root, "skills/imported"),
+        path.join(root, "skills/references/imported"),
+        ...retained
+      ].map((source): [string, string] => [source, source]),
+      ...ownedGuidanceSources(registryRoot, guidance).map(
+        ({ folder, source }): [string, string] => [source, path.join(root, folder)]
+      )
+    ]),
+    // Bundled bytes already carry metadata; following a kind must not reapply recipe policy.
+    guidance: imports.flatMap(({ copied }) =>
+      copied.map(({ kind, selector, slug }) => ({ kind, selector, slug }))
+    ),
+    obsoleteGuidance: imports
+      .flatMap(({ obsolete }) => obsolete)
+      .filter((item) => !retained.has(importedGuidancePath(root, item))),
+    repoRoot: root,
+    retainedRoot: registryRoot,
+    stagedGuidancePath(item) {
+      if (!converted.has(importedGuidancePath(root, item))) {
+        return importedGuidancePath(guidance, item);
+      }
+
+      const skill = importedGuidancePath(root, { ...item, kind: "skill" });
+
+      // An interrupted conversion may have already replaced its retained skill.
+      return existsSync(skill) ? skill : importedGuidancePath(root, item);
+    },
+    stagingDirectory: root
+  });
 }
 
 /** Follow the bundled declarations, returning the guidance they replaced and copied. */
 export function followBundledImports(runtime: Runtime, root: string, guidance: string) {
-  const { imports, next } = planRegistryImports(root, guidance, true);
+  const plan = planRegistryImports(root, guidance, true);
+  const { imports, next } = plan;
 
   if (imports.length === 0) {
     return [];
@@ -209,8 +251,13 @@ export function followBundledImports(runtime: Runtime, root: string, guidance: s
   // A followed skill can collide with another owner of its slug, so validate before persisting.
   preflightSkillRegistryInstall(runtime, guidance);
   assertSkillRestoreMarker(root);
-  copyBundledImports(root, guidance, imports);
-  writeImportRecipeStore(root, next);
+  publishBundledImports(root, guidance, plan, () => {
+    writeImportRecipeStore(root, next);
+  });
+
+  for (const { recipe } of imports) {
+    rememberRestoredRecipe(root, recipe);
+  }
 
   return imports.flatMap(({ copied, obsolete }) => [...obsolete, ...copied]);
 }
@@ -221,21 +268,23 @@ export function initializeSkillRegistry(
   includeNewSources = false
 ) {
   const root = path.join(getMonkeHome(runtime), "skill-registry");
-  const { imports, next } = planRegistryImports(root, guidance, includeNewSources);
+  const plan = planRegistryImports(root, guidance, includeNewSources);
+  const { imports, next } = plan;
 
   if (imports.length > 0) {
     assertSkillRestoreMarker(root);
   }
 
   mkdirSync(root, { recursive: true });
-  copyBundledImports(root, guidance, imports);
+  publishBundledImports(root, guidance, plan, () => {
+    writeImportRecipeStore(root, next);
+  });
 
-  for (const folder of [
-    "skills/internal",
-    "skills/codex",
-    "skills/references/internal",
-    "instructions"
-  ]) {
+  for (const { recipe } of imports) {
+    rememberRestoredRecipe(root, recipe);
+  }
+
+  for (const folder of OWNED_GUIDANCE_FOLDERS) {
     const source = path.join(guidance, folder);
     const target = path.join(root, folder);
 
@@ -256,7 +305,7 @@ export function initializeSkillRegistry(
 
   mkdirSync(path.join(root, "skills", "imported"), { recursive: true });
 
-  if (imports.length > 0 || !existsSync(path.join(root, SKILL_LOCK_PATH))) {
+  if (!existsSync(path.join(root, SKILL_LOCK_PATH))) {
     writeImportRecipeStore(root, next);
   }
 
@@ -314,24 +363,20 @@ export function preflightSkillRegistryInstall(
   const proposal = mkdtempSync(path.join(tmpdir(), "monke-install-guidance-"));
 
   try {
-    const { imports } = planRegistryImports(registry, guidance, true);
+    const plan = planRegistryImports(registry, guidance, true);
 
-    for (const folder of [
-      "skills/internal",
-      "skills/codex",
-      "skills/references/internal",
-      "instructions",
-      "skills/imported",
-      "skills/references/imported"
+    for (const { folder, source } of [
+      ...ownedGuidanceSources(registry, guidance),
+      ...["skills/imported", "skills/references/imported"].map((imported) => ({
+        folder: imported,
+        source: path.join(registry, imported)
+      }))
     ]) {
-      const owner = folder.endsWith("/imported") ? registry : guidance;
-      const source = path.join(owner, folder);
-
       if (existsSync(source)) {
         const target = path.join(proposal, folder);
         mkdirSync(path.dirname(target), { recursive: true });
 
-        if (owner === registry) {
+        if (folder.endsWith("/imported")) {
           cpSync(source, target, { recursive: true, verbatimSymlinks: true });
         } else {
           symlinkSync(source, target, "dir");
@@ -339,7 +384,7 @@ export function preflightSkillRegistryInstall(
       }
     }
 
-    copyBundledImports(proposal, guidance, imports);
+    publishBundledImports(proposal, guidance, plan);
     preflightInstallGuidance(runtime, proposal, explicitTargets, adoptedLinks);
   } finally {
     rmSync(proposal, { force: true, recursive: true });
