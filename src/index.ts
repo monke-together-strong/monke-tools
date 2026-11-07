@@ -80,7 +80,7 @@ function createProgram(runtime: Runtime) {
     .addOption(
       new Option(
         "--from <ref>",
-        "start the Root repo from a branch, tag, or commit without carrying edits"
+        "start the Root repo from a branch, tag, or commit, and dependencies from default branches, without carrying edits"
       ).conflicts(["main", "master"])
     )
     .option("--codex")

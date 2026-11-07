@@ -635,7 +635,7 @@ function resolveSpawnSourcePlan(
   }
 
   throw new MonkeError(
-    `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`
+    `Session state already exists for "${session}"; -m and --from require a fresh Session`
   );
 }
 
@@ -683,7 +683,9 @@ function sameSpawnOptions(left: SpawnOptions, right: SpawnOptions) {
 
 function formatSpawnPolicy(options: SpawnOptions) {
   if (options.mode === "default-branch") {
-    return options.from === undefined ? "the pinned default branch" : `pinned ref ${options.from}`;
+    return options.from === undefined
+      ? "the pinned default branch"
+      : `the pinned start ref ${options.from}`;
   }
 
   if (options.mode === "session-branch") {
@@ -707,7 +709,7 @@ function formatSpawnRetryCommand(session: string, options: SpawnOptions) {
   return `mt spawn ${session}`;
 }
 
-/** Resolve each repo's start ref once: `rootFrom` for the Root repo, default branches otherwise. */
+/** Memoize start refs so graph loading and worktree creation use the same pinned commit. */
 function createStartRefResolver(
   runtime: Runtime,
   rootSourceRoot: string,
@@ -1046,7 +1048,7 @@ function requirePinnedRef(state: SessionState, sourceRoot: string) {
 
 function requireRepoPinnedRef(repo: SessionRepoState | undefined, sourceRoot: string) {
   if (!repo?.pinnedRef) {
-    throw new MonkeError(`Missing pinned default-branch ref for ${sourceRoot}`);
+    throw new MonkeError(`Missing pinned start commit for ${sourceRoot}`);
   }
 
   return repo.pinnedRef;

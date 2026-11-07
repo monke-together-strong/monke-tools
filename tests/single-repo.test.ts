@@ -1290,7 +1290,7 @@ apps:
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
   });
 
-  it("starts spawn --from an origin-only branch without carrying edits", () => {
+  it("starts spawn --from an origin-only branch or unfetched tag without carrying edits", () => {
     const sandbox = makeTempDir("single-repo-from-origin-branch");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), { "monke.yml": "apps: {}\n" });
@@ -1310,7 +1310,7 @@ apps:
 
     expect(() =>
       runMonke({ args: ["spawn", "missing", "--from", "nope"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/Could not resolve start ref "nope"/u);
+    ).toThrow(/Could not resolve --from ref "nope"/u);
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, "missing"))).toBeFalsy();
 
     runMonke({ args: ["spawn", "stacked", "--from", "base"], cwd: repoRoot, monkeHome: home });
@@ -1324,7 +1324,7 @@ apps:
       spawnSource: "default-branch"
     });
 
-    // A tag on a commit this repo lacks is outside the default fetch, so it needs a targeted fetch.
+    // The default fetch skips tags on commits outside origin's branches, so this tag needs a targeted fetch.
     const publisher = path.join(sandbox, "publisher");
     git(sandbox, ["clone", "--quiet", origin, publisher]);
     git(publisher, ["switch", "--detach", "origin/base"]);
@@ -1349,7 +1349,7 @@ apps:
     });
   });
 
-  it("retries an incomplete spawn --from only with the same start ref", () => {
+  it("rejects -m when retrying an incomplete spawn --from", () => {
     const sandbox = makeTempDir("single-repo-from-retry");
     const home = path.join(sandbox, "home");
 
@@ -1372,7 +1372,9 @@ apps:
     ).toThrow("mt spawn tagged --from 'v1'");
     expect(() =>
       runMonke({ args: ["spawn", "tagged", "-m"], cwd: repoRoot, monkeHome: home })
-    ).toThrow("incomplete Spawn using pinned ref v1; retry with mt spawn tagged --from 'v1'");
+    ).toThrow(
+      "incomplete Spawn using the pinned start ref v1; retry with mt spawn tagged --from 'v1'"
+    );
   });
 
   it("retains a failed fresh spawn -m preparation at its pinned ref for retry", () => {

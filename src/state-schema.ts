@@ -221,7 +221,7 @@ function validateDirtyPolicy(state: ParsedSessionState, issue: LifecycleIssue) {
 
 function validateSourcePolicy(state: ParsedSessionState, issue: LifecycleIssue) {
   if (state.spawnFrom !== undefined && state.spawnSource !== "default-branch") {
-    issue("spawnFrom requires pinned-ref Spawn", ["spawnFrom"]);
+    issue("spawnFrom requires spawnSource default-branch", ["spawnFrom"]);
   }
 
   if (state.spawnSource !== undefined && state.graphSource !== "session-branch") {

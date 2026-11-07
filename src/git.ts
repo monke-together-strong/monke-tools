@@ -293,19 +293,23 @@ export function resolveDefaultBranchRef(
 export interface PinnedStartRef {
   /** Commit the Session branch starts from. */
   pinnedRef: string;
-  /** Full ref name, or the commit when the start point names no ref. */
+  /** Full name of a shared ref that resolves to `pinnedRef`; otherwise `pinnedRef` itself. */
   ref: string;
 }
 
 /** Shared refs that resolve the same way inside every worktree of the repository. */
-const PORTABLE_REF_PATTERN = /^refs\/(?:heads|remotes|tags)\//u;
+const SHARED_REF_PATTERN = /^refs\/(?:heads|remotes|tags)\//u;
 
-/** Scratch destination for a targeted start-ref fetch; the global lock serializes Spawns. */
+/**
+ * Fixed scratch ref for a targeted start-ref fetch. A fixed name is safe because Spawn runs under
+ * the Monke global lock.
+ */
 const START_REF_FETCH_REF = "refs/monke/spawn-start";
 
 /**
- * Resolve a named Spawn start point after refreshing origin. Accepts origin branches without a
- * local branch, and fetches refs outside origin's fetch refspec, such as new tags.
+ * Resolve a Spawn start point after refreshing origin. A local name wins over a same-named origin
+ * branch. Refs the default fetch skips, such as tags on commits outside origin's branches, are
+ * fetched directly. Throws when nothing resolves.
  */
 export function resolveStartRef(
   runtime: Runtime,
@@ -313,7 +317,7 @@ export function resolveStartRef(
   name: string
 ): PinnedStartRef {
   if (name.startsWith("-")) {
-    throw new MonkeError(`Start ref "${name}" must not begin with "-"`);
+    throw new MonkeError(`--from ref "${name}" must not begin with "-"`);
   }
 
   runtime.exec("git", ["fetch", "--prune", "origin"], { allowFailure: true, cwd: sourceRoot });
@@ -329,10 +333,11 @@ export function resolveStartRef(
 
       const ref = fullName.stdout.trim();
 
-      // Keep a name only when every worktree resolves it to the pinned commit: HEAD,
-      // refs/bisect/*, and refs named like another commit's SHA would not.
+      // Record the name only if every worktree shares it and it still resolves to the pinned
+      // commit. HEAD and refs/bisect/* are per-worktree, and a branch named like another
+      // commit's full SHA resolves elsewhere.
       const portable =
-        PORTABLE_REF_PATTERN.test(ref) && resolveCommit(runtime, sourceRoot, ref) === pinnedRef;
+        SHARED_REF_PATTERN.test(ref) && resolveCommit(runtime, sourceRoot, ref) === pinnedRef;
 
       return { pinnedRef, ref: portable ? ref : pinnedRef };
     }
@@ -341,7 +346,9 @@ export function resolveStartRef(
   const pinnedRef = fetchStartCommit(runtime, sourceRoot, name);
 
   if (pinnedRef === undefined) {
-    throw new MonkeError(`Could not resolve start ref "${name}" for ${sourceRoot}`);
+    throw new MonkeError(
+      `Could not resolve --from ref "${name}" locally or on origin for ${sourceRoot}`
+    );
   }
 
   return { pinnedRef, ref: pinnedRef };
@@ -355,7 +362,7 @@ function fetchStartCommit(runtime: Runtime, sourceRoot: string, name: string) {
       "--no-tags",
       "origin",
       "--end-of-options",
-      // A remote-tracking spelling names one of origin's branches, never a same-named tag.
+      // Fetch origin/<branch> as origin's refs/heads/<branch> so a same-named tag cannot match.
       `+${name.replace(/^(?:refs\/remotes\/)?origin\//u, "refs/heads/")}:${START_REF_FETCH_REF}`
     ],
     { allowFailure: true, cwd: sourceRoot }
@@ -522,7 +529,7 @@ function prepareFreshSessionWorktree(
   };
 }
 
-/** Assert that default branch spawn mode can spawn a fresh Session worktree. */
+/** Assert that `-m` and `--from` can spawn a fresh Session worktree. */
 export function assertFreshSessionWorktreeAvailable(
   runtime: Runtime,
   home: string,
@@ -536,7 +543,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (branchExists(runtime, sourceRoot, session)) {
     throw new MonkeError(
-      `Session branch "${session}" already exists for ${sourceRoot}; default branch spawn mode requires a fresh Session branch`
+      `Session branch "${session}" already exists for ${sourceRoot}; -m and --from require a fresh Session branch`
     );
   }
 
@@ -546,7 +553,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (branchMatch) {
     throw new MonkeError(
-      `Session "${session}" already has a worktree at ${branchMatch.path}; default branch spawn mode requires a fresh Session worktree`
+      `Session "${session}" already has a worktree at ${branchMatch.path}; -m and --from require a fresh Session worktree`
     );
   }
 
@@ -559,7 +566,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (pathMatch || existsSync(expectedPath)) {
     throw new MonkeError(
-      `Session worktree path collision at ${expectedPath}; default branch spawn mode requires an unused ${path.basename(sourceRoot)}/${session} path`
+      `Session worktree path collision at ${expectedPath}; -m and --from require an unused ${path.basename(sourceRoot)}/${session} path`
     );
   }
 }
