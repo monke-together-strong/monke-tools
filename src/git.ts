@@ -350,7 +350,14 @@ export function resolveStartRef(
 function fetchStartCommit(runtime: Runtime, sourceRoot: string, name: string) {
   const fetched = runtime.exec(
     "git",
-    ["fetch", "--no-tags", "origin", "--end-of-options", `+${name}:${START_REF_FETCH_REF}`],
+    [
+      "fetch",
+      "--no-tags",
+      "origin",
+      "--end-of-options",
+      // Origin names its own branches without the local origin/ remote-tracking prefix.
+      `+${name.replace(/^(?:refs\/remotes\/)?origin\//u, "")}:${START_REF_FETCH_REF}`
+    ],
     { allowFailure: true, cwd: sourceRoot }
   );
 
