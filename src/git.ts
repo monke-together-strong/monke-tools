@@ -329,8 +329,12 @@ export function resolveStartRef(
 
       const ref = fullName.stdout.trim();
 
-      // Worktree-private refs such as HEAD or refs/bisect/* would not resolve as a Diff base.
-      return { pinnedRef, ref: PORTABLE_REF_PATTERN.test(ref) ? ref : pinnedRef };
+      // Keep a name only when every worktree resolves it to the pinned commit: HEAD,
+      // refs/bisect/*, and refs named like another commit's SHA would not.
+      const portable =
+        PORTABLE_REF_PATTERN.test(ref) && resolveCommit(runtime, sourceRoot, ref) === pinnedRef;
+
+      return { pinnedRef, ref: portable ? ref : pinnedRef };
     }
   }
 
