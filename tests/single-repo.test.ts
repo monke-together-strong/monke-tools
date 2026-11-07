@@ -1290,6 +1290,93 @@ apps:
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
   });
 
+  it("starts spawn --from an origin-only branch or unfetched tag without carrying edits", () => {
+    const sandbox = makeTempDir("single-repo-from-origin-branch");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "monke.yml": "apps: {}\n" });
+    const origin = path.join(sandbox, "origin.git");
+    git(repoRoot, ["init", "--bare", origin]);
+    git(repoRoot, ["remote", "add", "origin", origin]);
+    git(repoRoot, ["switch", "-c", "base"]);
+    write(repoRoot, "base.txt", "base branch\n");
+    git(repoRoot, ["add", "base.txt"]);
+    git(repoRoot, ["commit", "-m", "base branch"]);
+    git(repoRoot, ["push", "origin", "base"]);
+    const baseCommit = git(repoRoot, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["switch", "main"]);
+    git(repoRoot, ["branch", "-D", "base"]);
+    git(repoRoot, ["update-ref", "-d", "refs/remotes/origin/base"]);
+    write(repoRoot, "monke.yml", "apps: {}\n# dirty\n");
+
+    expect(() =>
+      runMonke({ args: ["spawn", "missing", "--from", "nope"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/Could not resolve --from ref "nope"/u);
+    expect(existsSync(getExpectedWorktreePath(home, repoRoot, "missing"))).toBeFalsy();
+
+    runMonke({ args: ["spawn", "stacked", "--from", "base"], cwd: repoRoot, monkeHome: home });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "stacked");
+    expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(baseCommit);
+    expect(read(worktreeRoot, "monke.yml")).toBe("apps: {}\n");
+    expect(loadSessionState(home, repoRoot, "stacked")).toMatchObject({
+      repos: [{ diffBaseRef: "refs/remotes/origin/base", pinnedRef: baseCommit }],
+      spawnFrom: "base",
+      spawnSource: "default-branch"
+    });
+
+    // The default fetch skips tags on commits outside origin's branches, so this tag needs a targeted fetch.
+    const publisher = path.join(sandbox, "publisher");
+    git(sandbox, ["clone", "--quiet", origin, publisher]);
+    git(publisher, ["switch", "--detach", "origin/base"]);
+    git(publisher, [
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=Test User",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "tag outside branch history"
+    ]);
+    const taggedCommit = git(publisher, ["rev-parse", "HEAD"]);
+    git(publisher, ["push", "origin", "HEAD:refs/tags/orphan"]);
+
+    runMonke({ args: ["spawn", "from-tag", "--from", "orphan"], cwd: repoRoot, monkeHome: home });
+
+    expect(loadSessionState(home, repoRoot, "from-tag").repos[0]).toMatchObject({
+      diffBaseRef: taggedCommit,
+      pinnedRef: taggedCommit
+    });
+  });
+
+  it("rejects -m when retrying an incomplete spawn --from", () => {
+    const sandbox = makeTempDir("single-repo-from-retry");
+    const home = path.join(sandbox, "home");
+
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/package.json": "{}\n",
+      "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
+    });
+
+    git(repoRoot, ["tag", "v1"]);
+
+    expect(() =>
+      runMonke({ args: ["spawn", "tagged", "--from", "v1"], cwd: repoRoot, monkeHome: home })
+    ).toThrow("mt spawn tagged --from 'v1'");
+    expect(() =>
+      runMonke({ args: ["spawn", "tagged", "-m"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(
+      "incomplete Spawn using the pinned start ref v1; retry with mt spawn tagged --from 'v1'"
+    );
+  });
+
   it("retains a failed fresh spawn -m preparation at its pinned ref for retry", () => {
     const sandbox = makeTempDir("single-repo-main-rollback");
     const binDirectory = path.join(sandbox, "bin");
@@ -1422,7 +1509,7 @@ apps: {}
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted");
     installGitShim(binDirectory, {
       failCommand: {
-        args: `worktree add -b interrupted ${worktreeRoot} ${pinnedRef}`,
+        args: `worktree add -b interrupted ${worktreeRoot} ${pinnedRef}^{commit}`,
         message: "injected early worktree failure"
       }
     });

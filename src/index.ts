@@ -16,6 +16,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import type { SpawnOptions } from "./monke.ts";
 import { runPrsCreate, runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
@@ -73,20 +74,27 @@ function createProgram(runtime: Runtime) {
   program
     .command("spawn")
     .argument("<session>")
-    .option("--no-dirty")
-    .option("-m, --main")
-    .option("--master")
-    .option("--codex")
-    .action((session, options) =>
-      runSpawn(
-        runtime,
-        session,
-        options.main || options.master
-          ? { mode: "default-branch" }
-          : { copyDirty: options.dirty, mode: "current-head" },
-        { codex: options.codex }
-      )
-    );
+    .option("--no-dirty", "require clean checkouts instead of carrying their edits")
+    .option("-m, --main", "start from default branches without carrying edits")
+    .option("--master", "alias for --main")
+    .addOption(
+      new Option(
+        "--from <ref>",
+        "start the Root repo from a branch, tag, or commit, and dependencies from default branches, without carrying edits"
+      ).conflicts(["main", "master"])
+    )
+    .option("--codex", "open the Session in Codex once it is ready")
+    .action((session, options) => {
+      let spawnOptions: SpawnOptions = { copyDirty: options.dirty, mode: "current-head" };
+
+      if (options.from !== undefined) {
+        spawnOptions = { from: options.from, mode: "default-branch" };
+      } else if (options.main || options.master) {
+        spawnOptions = { mode: "default-branch" };
+      }
+
+      return runSpawn(runtime, session, spawnOptions, { codex: options.codex });
+    });
 
   program
     .command("swing")
