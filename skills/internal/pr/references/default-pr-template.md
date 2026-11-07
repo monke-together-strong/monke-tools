@@ -8,13 +8,14 @@ result or limitation.
 ```markdown
 ## Summary
 
-<One or two sentences: problem and resulting behavior. Link the source issue.>
+<One or two sentences: the problem. Link the source issue.>
 
-<For interaction changes, insert the small view chosen with show-me.>
+<The show-me view or consumer code blocks from Choose the explanation, when it
+calls for them. Otherwise, a separate paragraph on the resulting behavior.>
 
 ## Evidence
 
-<Code blocks and view from Chooose the explaination, when it calls for them.>
+<Decisive behavior evidence, a meaningful benchmark, or a material verification limitation.>
 ```
 
 For visual proof or deployment-dependent changes, use the sections required by

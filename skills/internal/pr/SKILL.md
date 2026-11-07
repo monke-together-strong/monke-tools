@@ -39,16 +39,19 @@ Link the source issue or Spec. Identify material risks, including rollback limit
 
 ## Choose the explanation
 
-Lead with the problem and resulting behavior. A simple change usually needs one
-or two sentences. Aim for under 200 words; expand only for a concrete review
-decision or required template field.
+Lead with a paragraph of one or two sentences on the problem, then show the
+resulting behavior separately. Aim for under 200 words of prose; expand only for
+a concrete review decision or required template field. Give each later point its
+own short paragraph.
 
-For changes to public API or configuration contract, show code blocks of what a
-consumer writes.
+When the change alters behavior along a path, such as control flow, error
+handling, state transitions, component interactions, schemas, or key data
+structures, apply [show-me](../../imported/show-me/SKILL.md) to show the before
+and after, and leave that behavior out of the prose. Use prose for the resulting
+behavior only when no such path changes, as in a rename or a configuration value.
 
-For changes to component interactions, such as a new extension point, or runtime compnent,
-or state transitions, schemas, or key data structures, apply [show-me](../../imported/show-me/SKILL.md).
-It should complement the consumer code blocks. Use prose alone for simple changes.
+For changes to a public API or configuration contract, show code blocks of what
+a consumer writes.
 
 Describe the final implementation. Keep investigation history and reviewer
 bookkeeping in work records. Keep each fact in one place and remove prose that
