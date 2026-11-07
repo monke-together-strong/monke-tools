@@ -16,6 +16,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import type { SpawnOptions } from "./monke.ts";
 import { runPrsCreate, runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
@@ -83,18 +84,17 @@ function createProgram(runtime: Runtime) {
       ).conflicts(["main", "master"])
     )
     .option("--codex")
-    .action((session, options) =>
-      runSpawn(
-        runtime,
-        session,
-        options.from !== undefined
-          ? { from: options.from, mode: "default-branch" }
-          : options.main || options.master
-            ? { mode: "default-branch" }
-            : { copyDirty: options.dirty, mode: "current-head" },
-        { codex: options.codex }
-      )
-    );
+    .action((session, options) => {
+      let spawnOptions: SpawnOptions = { copyDirty: options.dirty, mode: "current-head" };
+
+      if (options.from !== undefined) {
+        spawnOptions = { from: options.from, mode: "default-branch" };
+      } else if (options.main || options.master) {
+        spawnOptions = { mode: "default-branch" };
+      }
+
+      return runSpawn(runtime, session, spawnOptions, { codex: options.codex });
+    });
 
   program
     .command("swing")

@@ -54,6 +54,7 @@ import {
   loadSessionState,
   SessionStateStore
 } from "./session-state-store.ts";
+import { shellQuote } from "./shell-quote.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type {
   RepoConfig,
@@ -116,7 +117,7 @@ type PrepareRepoLifecycleNode = SessionMaterializationNode<
 interface ConfiguredSpawn {
   checkoutSources: Map<string, CheckoutSource>;
   dirtySnapshots: Map<string, DirtySnapshot>;
-  getDefaultRef: (sourceRoot: string) => PinnedStartRef;
+  getStartRef: (sourceRoot: string) => PinnedStartRef;
   home: string;
   reposInOrder: RepoConfig[];
   rootSourceRoot: string;
@@ -224,15 +225,15 @@ async function prepareSpawn(
   assertSpawnRequest(runtime, rootSourceRoot, session, sourcePlan);
   const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
 
-  const getDefaultRef = createStartRefResolver(
+  const getStartRef = createStartRefResolver(
     runtime,
     rootSourceRoot,
     sourcePlan.mode === "default-branch" ? sourcePlan.from : undefined
   );
 
-  const rootDefaultRef =
+  const rootStartRef =
     sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh"
-      ? getDefaultRef(rootSourceRoot)
+      ? getStartRef(rootSourceRoot)
       : null;
 
   const resumedState =
@@ -240,7 +241,7 @@ async function prepareSpawn(
       ? retainedState
       : undefined;
 
-  let rootConfigRef = rootDefaultRef?.pinnedRef;
+  let rootConfigRef = rootStartRef?.pinnedRef;
 
   if (rootConfigRef === undefined && resumedState) {
     rootConfigRef = requirePinnedRef(resumedState, rootSourceRoot);
@@ -267,7 +268,7 @@ async function prepareSpawn(
       rootSourceRoot,
       session,
       sourcePlan,
-      rootDefaultRef,
+      rootStartRef,
       rootCheckoutRoot
     );
   }
@@ -277,7 +278,7 @@ async function prepareSpawn(
     rootSourceRoot,
     session,
     sourcePlan,
-    getDefaultRef,
+    getStartRef,
     resumedState
   );
 
@@ -293,7 +294,7 @@ async function prepareSpawn(
 
   return {
     ...prepared,
-    getDefaultRef,
+    getStartRef,
     home,
     reposInOrder: graph.reposInMaterializationOrder,
     rootSourceRoot,
@@ -354,9 +355,9 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       execution.sourcePlan.mode === "default-branch" &&
       execution.sourcePlan.attempt === "fresh"
     ) {
-      const defaultRef = execution.getDefaultRef(repoConfig.sourceRoot);
-      initialState.diffBaseRef = defaultRef.ref;
-      initialState.pinnedRef = defaultRef.pinnedRef;
+      const startRef = execution.getStartRef(repoConfig.sourceRoot);
+      initialState.diffBaseRef = startRef.ref;
+      initialState.pinnedRef = startRef.pinnedRef;
     }
 
     return createRepoLifecycleNode({
@@ -696,7 +697,7 @@ function formatSpawnRetryCommand(session: string, options: SpawnOptions) {
   if (options.mode === "default-branch") {
     return options.from === undefined
       ? `mt spawn ${session} -m`
-      : `mt spawn ${session} --from ${options.from}`;
+      : `mt spawn ${session} --from ${shellQuote(options.from)}`;
   }
 
   if (options.mode === "current-head" && !options.copyDirty) {
@@ -732,7 +733,7 @@ function createStartRefResolver(
   };
 }
 
-function resolveDefaultStartRef(runtime: Runtime, sourceRoot: string): PinnedStartRef {
+function resolveDefaultStartRef(runtime: Runtime, sourceRoot: string) {
   const { ref } = resolveDefaultBranchRef(runtime, sourceRoot);
 
   return { pinnedRef: runGit(runtime, sourceRoot, ["rev-parse", `${ref}^{commit}`]).trim(), ref };
@@ -771,8 +772,8 @@ interface ConfiglessSpawn {
   checkoutSource?: CheckoutSource;
   existingRepoState?: SessionRepoState;
   home: string;
-  rootDefaultRef: PinnedStartRef | null;
   rootSourceRoot: string;
+  rootStartRef: PinnedStartRef | null;
   runtime: Runtime;
   session: string;
   sourcePlan: SpawnSourcePlan;
@@ -784,7 +785,7 @@ async function spawnWithoutConfig(
   rootSourceRoot: string,
   session: string,
   sourcePlan: SpawnSourcePlan,
-  rootDefaultRef: PinnedStartRef | null,
+  rootStartRef: PinnedStartRef | null,
   rootCheckoutRoot: string
 ): Promise<never> {
   const { home } = store;
@@ -798,8 +799,8 @@ async function spawnWithoutConfig(
         : undefined,
     existingRepoState: priorSessionState?.repos.find((repo) => repo.sourceRoot === rootSourceRoot),
     home,
-    rootDefaultRef,
     rootSourceRoot,
+    rootStartRef,
     runtime,
     session,
     sourcePlan
@@ -869,13 +870,13 @@ function prepareConfiglessWorktreeCheckpoint(spawn: ConfiglessSpawn) {
   return {
     diffBaseRef:
       spawn.existingRepoState?.diffBaseRef ??
-      spawn.rootDefaultRef?.ref ??
+      spawn.rootStartRef?.ref ??
       resolveFreshCurrentHeadDiffBase({
         sessionBranchExisted,
         sourceHeadRef: spawn.checkoutSource?.headRef,
         spawnOptions: spawn.sourcePlan
       }),
-    pinnedRef: spawn.rootDefaultRef?.pinnedRef ?? spawn.existingRepoState?.pinnedRef,
+    pinnedRef: spawn.rootStartRef?.pinnedRef ?? spawn.existingRepoState?.pinnedRef,
     worktreePath: getExpectedWorktreePath(spawn.home, spawn.rootSourceRoot, spawn.session)
   };
 }
@@ -982,7 +983,7 @@ function loadSpawnGraph(
   rootSourceRoot: string,
   session: string,
   sourcePlan: SpawnSourcePlan,
-  getDefaultRef: (sourceRoot: string) => PinnedStartRef,
+  getStartRef: (sourceRoot: string) => PinnedStartRef,
   resumedState: SessionState | undefined
 ) {
   if (sourcePlan.mode === "default-branch") {
@@ -999,7 +1000,7 @@ function loadSpawnGraph(
     return loadGraphAtRefs(
       runtime,
       rootSourceRoot,
-      (sourceRoot) => getDefaultRef(sourceRoot).pinnedRef
+      (sourceRoot) => getStartRef(sourceRoot).pinnedRef
     );
   }
 

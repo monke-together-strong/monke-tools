@@ -1323,6 +1323,30 @@ apps:
       spawnFrom: "base",
       spawnSource: "default-branch"
     });
+
+    // A tag on a commit this repo lacks is outside the default fetch, so it needs a targeted fetch.
+    const publisher = path.join(sandbox, "publisher");
+    git(sandbox, ["clone", "--quiet", origin, publisher]);
+    git(publisher, ["switch", "--detach", "origin/base"]);
+    git(publisher, [
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=Test User",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "tag outside branch history"
+    ]);
+    const taggedCommit = git(publisher, ["rev-parse", "HEAD"]);
+    git(publisher, ["push", "origin", "HEAD:refs/tags/orphan"]);
+
+    runMonke({ args: ["spawn", "from-tag", "--from", "orphan"], cwd: repoRoot, monkeHome: home });
+
+    expect(loadSessionState(home, repoRoot, "from-tag").repos[0]).toMatchObject({
+      diffBaseRef: taggedCommit,
+      pinnedRef: taggedCommit
+    });
   });
 
   it("retries an incomplete spawn --from only with the same start ref", () => {
@@ -1345,10 +1369,10 @@ apps:
 
     expect(() =>
       runMonke({ args: ["spawn", "tagged", "--from", "v1"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/mt spawn tagged --from v1/u);
+    ).toThrow("mt spawn tagged --from 'v1'");
     expect(() =>
       runMonke({ args: ["spawn", "tagged", "-m"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/incomplete Spawn using pinned ref v1; retry with mt spawn tagged --from v1/u);
+    ).toThrow("incomplete Spawn using pinned ref v1; retry with mt spawn tagged --from 'v1'");
   });
 
   it("retains a failed fresh spawn -m preparation at its pinned ref for retry", () => {

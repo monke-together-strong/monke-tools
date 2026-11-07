@@ -298,8 +298,8 @@ export interface PinnedStartRef {
 }
 
 /**
- * Resolve a named Spawn start point after refreshing origin, accepting unchecked-out origin
- * branches.
+ * Resolve a named Spawn start point after refreshing origin. Accepts origin branches without a
+ * local branch, and fetches refs outside origin's fetch refspec, such as new tags.
  */
 export function resolveStartRef(
   runtime: Runtime,
@@ -309,25 +309,44 @@ export function resolveStartRef(
   runtime.exec("git", ["fetch", "--prune", "origin"], { allowFailure: true, cwd: sourceRoot });
 
   for (const candidate of [name, `refs/remotes/origin/${name}`]) {
-    const commit = runtime.exec(
-      "git",
-      ["rev-parse", "--verify", "--quiet", "--end-of-options", `${candidate}^{commit}`],
-      { allowFailure: true, cwd: sourceRoot }
-    );
+    const pinnedRef = resolveCommit(runtime, sourceRoot, candidate);
 
-    if (commit.exitCode === 0) {
-      const pinnedRef = commit.stdout.trim();
-
+    if (pinnedRef !== undefined) {
       const fullName = runtime.exec("git", ["rev-parse", "--symbolic-full-name", candidate], {
         allowFailure: true,
         cwd: sourceRoot
       });
 
-      return { pinnedRef, ref: fullName.stdout.trim() || pinnedRef };
+      const ref = fullName.stdout.trim();
+
+      // Only full refs resolve the same way inside the Session worktree; HEAD and ORIG_HEAD do not.
+      return { pinnedRef, ref: ref.startsWith("refs/") ? ref : pinnedRef };
     }
   }
 
-  throw new MonkeError(`Could not resolve start ref "${name}" for ${sourceRoot}`);
+  const fetched = runtime.exec("git", ["fetch", "origin", "--end-of-options", name], {
+    allowFailure: true,
+    cwd: sourceRoot
+  });
+
+  const pinnedRef =
+    fetched.exitCode === 0 ? resolveCommit(runtime, sourceRoot, "FETCH_HEAD") : undefined;
+
+  if (pinnedRef === undefined) {
+    throw new MonkeError(`Could not resolve start ref "${name}" for ${sourceRoot}`);
+  }
+
+  return { pinnedRef, ref: pinnedRef };
+}
+
+function resolveCommit(runtime: Runtime, sourceRoot: string, revision: string) {
+  const commit = runtime.exec(
+    "git",
+    ["rev-parse", "--verify", "--quiet", "--end-of-options", `${revision}^{commit}`],
+    { allowFailure: true, cwd: sourceRoot }
+  );
+
+  return commit.exitCode === 0 ? commit.stdout.trim() : undefined;
 }
 
 export function ensureCleanCheckout(
