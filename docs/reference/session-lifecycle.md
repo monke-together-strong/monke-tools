@@ -4,7 +4,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Preparation and materialization
 
-**Default branch spawn mode**: A **Spawn** mode whose starting content comes from each participating repo's default branch.
+**Default branch spawn mode**: A **Spawn** mode whose starting content comes from each participating repo's default branch, or for the Root repo from an explicit start ref. Each repo's start commit is pinned for retries.
 
 **Worktree preparation**: Creation or validation of one **Session worktree**, including its permitted source changes and **Seed material**.
 

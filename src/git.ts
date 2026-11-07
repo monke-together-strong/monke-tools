@@ -289,6 +289,47 @@ export function resolveDefaultBranchRef(
   throw new MonkeError(`Could not resolve a default branch ref for ${sourceRoot}`);
 }
 
+/** A Spawn start point: the ref recorded as the Diff base and the commit it resolved to. */
+export interface PinnedStartRef {
+  /** Commit the Session branch starts from. */
+  pinnedRef: string;
+  /** Full ref name, or the commit when the start point names no ref. */
+  ref: string;
+}
+
+/**
+ * Resolve a named Spawn start point after refreshing origin, accepting unchecked-out origin
+ * branches.
+ */
+export function resolveStartRef(
+  runtime: Runtime,
+  sourceRoot: string,
+  name: string
+): PinnedStartRef {
+  runtime.exec("git", ["fetch", "--prune", "origin"], { allowFailure: true, cwd: sourceRoot });
+
+  for (const candidate of [name, `refs/remotes/origin/${name}`]) {
+    const commit = runtime.exec(
+      "git",
+      ["rev-parse", "--verify", "--quiet", "--end-of-options", `${candidate}^{commit}`],
+      { allowFailure: true, cwd: sourceRoot }
+    );
+
+    if (commit.exitCode === 0) {
+      const pinnedRef = commit.stdout.trim();
+
+      const fullName = runtime.exec("git", ["rev-parse", "--symbolic-full-name", candidate], {
+        allowFailure: true,
+        cwd: sourceRoot
+      });
+
+      return { pinnedRef, ref: fullName.stdout.trim() || pinnedRef };
+    }
+  }
+
+  throw new MonkeError(`Could not resolve start ref "${name}" for ${sourceRoot}`);
+}
+
 export function ensureCleanCheckout(
   runtime: Runtime,
   sourceRoot: string,

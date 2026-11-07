@@ -13,7 +13,9 @@ the Session. Use `mt <command> --help` for flags.
 
 Spawn starts from the invoking checkout's `HEAD` and carries its edits; dependencies
 use their source checkouts. `--no-dirty` requires clean checkouts. `-m` starts from
-default branches without carrying edits. Existing worktrees retain their contents.
+default branches without carrying edits. `--from <ref>` starts the root repo from a
+branch, including an origin-only one, a tag, or a commit, with dependencies on default
+branches and no edits carried. Existing worktrees retain their contents.
 Source checkouts provide configuration and seed files.
 
 After failure, use the reported retry command from the recorded checkout. A created

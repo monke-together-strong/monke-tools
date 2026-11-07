@@ -1290,6 +1290,67 @@ apps:
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
   });
 
+  it("starts spawn --from an origin-only branch without carrying edits", () => {
+    const sandbox = makeTempDir("single-repo-from-origin-branch");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "monke.yml": "apps: {}\n" });
+    const origin = path.join(sandbox, "origin.git");
+    git(repoRoot, ["init", "--bare", origin]);
+    git(repoRoot, ["remote", "add", "origin", origin]);
+    git(repoRoot, ["switch", "-c", "base"]);
+    write(repoRoot, "base.txt", "base branch\n");
+    git(repoRoot, ["add", "base.txt"]);
+    git(repoRoot, ["commit", "-m", "base branch"]);
+    git(repoRoot, ["push", "origin", "base"]);
+    const baseCommit = git(repoRoot, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["switch", "main"]);
+    git(repoRoot, ["branch", "-D", "base"]);
+    git(repoRoot, ["update-ref", "-d", "refs/remotes/origin/base"]);
+    write(repoRoot, "monke.yml", "apps: {}\n# dirty\n");
+
+    expect(() =>
+      runMonke({ args: ["spawn", "missing", "--from", "nope"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/Could not resolve start ref "nope"/u);
+    expect(existsSync(getExpectedWorktreePath(home, repoRoot, "missing"))).toBeFalsy();
+
+    runMonke({ args: ["spawn", "stacked", "--from", "base"], cwd: repoRoot, monkeHome: home });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "stacked");
+    expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(baseCommit);
+    expect(read(worktreeRoot, "monke.yml")).toBe("apps: {}\n");
+    expect(loadSessionState(home, repoRoot, "stacked")).toMatchObject({
+      repos: [{ diffBaseRef: "refs/remotes/origin/base", pinnedRef: baseCommit }],
+      spawnFrom: "base",
+      spawnSource: "default-branch"
+    });
+  });
+
+  it("retries an incomplete spawn --from only with the same start ref", () => {
+    const sandbox = makeTempDir("single-repo-from-retry");
+    const home = path.join(sandbox, "home");
+
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/package.json": "{}\n",
+      "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
+    });
+
+    git(repoRoot, ["tag", "v1"]);
+
+    expect(() =>
+      runMonke({ args: ["spawn", "tagged", "--from", "v1"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/mt spawn tagged --from v1/u);
+    expect(() =>
+      runMonke({ args: ["spawn", "tagged", "-m"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/incomplete Spawn using pinned ref v1; retry with mt spawn tagged --from v1/u);
+  });
+
   it("retains a failed fresh spawn -m preparation at its pinned ref for retry", () => {
     const sandbox = makeTempDir("single-repo-main-rollback");
     const binDirectory = path.join(sandbox, "bin");

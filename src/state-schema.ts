@@ -186,6 +186,7 @@ const SessionStateFieldsSchema = z.strictObject({
   repos: z.array(SessionRepoStateSchema),
   rootSourceRoot: NonEmptyStringSchema,
   session: NonEmptyStringSchema,
+  spawnFrom: NonEmptyStringSchema.optional(),
   spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
   version: z.literal(2)
 });
@@ -219,6 +220,10 @@ function validateDirtyPolicy(state: ParsedSessionState, issue: LifecycleIssue) {
 }
 
 function validateSourcePolicy(state: ParsedSessionState, issue: LifecycleIssue) {
+  if (state.spawnFrom !== undefined && state.spawnSource !== "default-branch") {
+    issue("spawnFrom requires pinned-ref Spawn", ["spawnFrom"]);
+  }
+
   if (state.spawnSource !== undefined && state.graphSource !== "session-branch") {
     issue("retained Spawn source policy requires Session-branch graph source", ["graphSource"]);
   }

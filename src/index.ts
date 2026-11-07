@@ -74,16 +74,24 @@ function createProgram(runtime: Runtime) {
     .command("spawn")
     .argument("<session>")
     .option("--no-dirty")
-    .option("-m, --main")
-    .option("--master")
+    .option("-m, --main", "start from default branches without carrying edits")
+    .option("--master", "alias for --main")
+    .addOption(
+      new Option(
+        "--from <ref>",
+        "start the Root repo from a branch, tag, or commit without carrying edits"
+      ).conflicts(["main", "master"])
+    )
     .option("--codex")
     .action((session, options) =>
       runSpawn(
         runtime,
         session,
-        options.main || options.master
-          ? { mode: "default-branch" }
-          : { copyDirty: options.dirty, mode: "current-head" },
+        options.from !== undefined
+          ? { from: options.from, mode: "default-branch" }
+          : options.main || options.master
+            ? { mode: "default-branch" }
+            : { copyDirty: options.dirty, mode: "current-head" },
         { codex: options.codex }
       )
     );
