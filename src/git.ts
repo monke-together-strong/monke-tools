@@ -355,8 +355,8 @@ function fetchStartCommit(runtime: Runtime, sourceRoot: string, name: string) {
       "--no-tags",
       "origin",
       "--end-of-options",
-      // Origin names its own branches without the local origin/ remote-tracking prefix.
-      `+${name.replace(/^(?:refs\/remotes\/)?origin\//u, "")}:${START_REF_FETCH_REF}`
+      // A remote-tracking spelling names one of origin's branches, never a same-named tag.
+      `+${name.replace(/^(?:refs\/remotes\/)?origin\//u, "refs/heads/")}:${START_REF_FETCH_REF}`
     ],
     { allowFailure: true, cwd: sourceRoot }
   );
