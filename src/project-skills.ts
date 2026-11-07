@@ -18,6 +18,7 @@ import { containsPath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withScopedLockAsync } from "./runtime.ts";
 import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
 import {
+  projectSkillProjectionRecoveryPaths,
   reconcileSkillNamespaces,
   resolveSkillInstallTargets,
   skillPublicationPaths
@@ -162,21 +163,10 @@ export function withProjectSkillPublicationTransaction<T>(
 ) {
   const exclude = path.join(context.gitCommonDir, "info", "exclude");
   preflightProjectSkillExclusions(exclude);
-  const targets = resolveSkillInstallTargets({ ...scope, project: true });
 
   return withSkillPublicationTransaction(
     runtime,
-    [
-      context.root,
-      exclude,
-      ...targets.flatMap((target) => {
-        const physical = existsSync(target.agentSkillRoot)
-          ? [realpathSync.native(target.agentSkillRoot)]
-          : [];
-
-        return [target.agentSkillRoot, ...physical];
-      })
-    ],
+    [context.root, exclude, ...projectSkillProjectionRecoveryPaths(scope)],
     publish,
     withSnapshotLocks
   );

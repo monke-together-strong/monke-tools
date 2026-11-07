@@ -55,5 +55,5 @@ an older report.
 For example, a direct push left ticket closure and cleanup pending. A later
 handoff completed both, and skill edits repaired handoff authorization. The
 effective skill still required a merged PR. Report only the remaining direct-push
-entry gap as a source mismatch. Do not call the ticket unfinished, propose the
+entry gap, as `partial`. Do not call the ticket unfinished, propose the
 handoff repair again, or claim another failed run without evidence.

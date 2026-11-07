@@ -1,16 +1,30 @@
 ---
 name: post-merge
-description: Finish a PR after it merges.
+description: Finish a PR after it merges, or a commit pushed directly to the base branch.
 ---
 
 # Post-Merge
 
 ## Resolve the PR
 
-Use the explicit number or URL; otherwise use `gh pr view`. Ask if no single PR
+For a PR, use the explicit number or URL; otherwise use `gh pr view`. Ask if no single PR
 resolves. Continue only when
 `gh pr view <number> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
 reports `MERGED`.
+
+For an authorized direct push, there is no PR. Use the pushed commit's full SHA
+as `mergeCommit` and the branch it was pushed to as `baseRefName`. Continue only
+when it has landed:
+
+```sh
+git fetch origin <baseRefName> && git merge-base --is-ancestor <mergeCommit> FETCH_HEAD
+```
+
+Set `headRefName` and `headRefOid` to the source branch and the commit pushed
+from it. With no known source branch, or when it is `baseRefName`, skip worktree
+and branch cleanup. Elsewhere, read "the PR" as the pushed commit: link the
+commit where a step links the PR, use its checkout as the PR checkout, and use
+the task's own verification requirements as the PR contract.
 
 ## Load the contracts
 
@@ -44,7 +58,8 @@ Code, start it with `t3_thread_launch`. Finish here only when no thread tool
 exists. Otherwise:
 
 1. Start a new thread on GPT 6.1 Sol, high effort, that runs post-merge for the
-   PR with this skill and its PR checkout. Link it.
+   PR, or the pushed commit with its base and source branches, using this skill
+   and its checkout. Link it.
 2. Finish this thread in the same turn. The deploy gate, contract checks,
    demo repairs and cleanup now belong to the new thread. Recap only what
    remains here outside them: a decision still waiting on the user, or agreed
@@ -78,15 +93,15 @@ Use the deployment or release gate named by the applicable contract or task
 requirement. Continue to **Verify** when its checks need no gate.
 
 In T3 Code, rename the thread with `t3_thread_update` to
-`Verify #<number>: <subject>`, where the subject names the behavior under check
+`Verify #<number>: <subject>`, or `Verify <short-sha>: <subject>` for a direct
+push, where the subject names the behavior under check
 and its environment, such as `Verify #123: web embeds on production`.
 
-Run [wait-for-gate](scripts/wait-for-gate.ts) from this skill's directory on the
-merge commit, and wait for it to exit:
+Run `mt prs wait-for-gate` on the merge commit, and wait for it to exit:
 
 ```sh
-bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
-bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit> --status <context>
+mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
+mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --status <context>
 ```
 
 - **Deployment**: the deploy job within its workflow, or the commit status a
@@ -96,7 +111,7 @@ bun <skill-dir>/scripts/wait-for-gate.ts --repo <owner/name> --sha <mergeCommit>
   publish the new version, follow [library release](references/library-release.md).
 
 On `skipped`, the gate did not deploy, so skip its deployment checks. On
-`timed_out`, ask before waiting longer. When the gate has no signal the script
+`timed_out`, ask before waiting longer. When the gate has no signal `mt prs wait-for-gate`
 can watch, ask before testing.
 
 ## Verify

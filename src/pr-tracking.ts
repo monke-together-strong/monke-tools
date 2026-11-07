@@ -298,10 +298,7 @@ async function handOffPostMerge(
 
   const message = `${pr.url} was merged outside this thread. Follow ${skill} for it. Its checkout was ${pr.checkout}.`;
 
-  const sent = await runtime.execAsync(t3, ["thread", "send", pr.thread, message], {
-    allowFailure: true,
-    timeoutSeconds: T3_TIMEOUT_SECONDS
-  });
+  const sent = await runT3HandoffCommand(runtime, t3, ["thread", "send", pr.thread, message]);
 
   if (sent.exitCode === 0) {
     runtime.writeStdout(`Sent post-merge for ${pr.url} to thread ${pr.thread}\n`);
@@ -311,19 +308,15 @@ async function handOffPostMerge(
 
   // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
   // as the project.
-  const started = await runtime.execAsync(
-    t3,
-    [
-      "thread",
-      "start",
-      "--title",
-      `Verify #${pr.number}`,
-      ...POST_MERGE_MODEL,
-      pr.sourceCheckout,
-      `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
-    ],
-    { allowFailure: true, timeoutSeconds: T3_TIMEOUT_SECONDS }
-  );
+  const started = await runT3HandoffCommand(runtime, t3, [
+    "thread",
+    "start",
+    "--title",
+    `Verify #${pr.number}`,
+    ...POST_MERGE_MODEL,
+    pr.sourceCheckout,
+    `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
+  ]);
 
   if (started.exitCode === 0) {
     runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
@@ -332,6 +325,17 @@ async function handOffPostMerge(
   }
 
   return `Could not hand off ${pr.url}: ${sent.stderr.trim()} ${started.stderr.trim()}`.trim();
+}
+
+async function runT3HandoffCommand(runtime: Runtime, t3: string, args: string[]) {
+  try {
+    return await runtime.execAsync(t3, args, {
+      allowFailure: true,
+      timeoutSeconds: T3_TIMEOUT_SECONDS
+    });
+  } catch (cause) {
+    return { exitCode: -1, stderr: errorMessage(ThrownValueSchema.parse(cause)), stdout: "" };
+  }
 }
 
 function resolveT3Cli(runtime: Runtime) {

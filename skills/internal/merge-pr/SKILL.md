@@ -9,8 +9,8 @@ A direct "merge this PR" / "merge PR #123" is approval.
 
 ## Checklist
 
-1. Resolve the PR: explicit number or URL wins; otherwise use `gh pr view`. Ask if no single PR resolves.
-2. Run `mt prs untrack <url>` so the external-merge poller leaves this PR to you. Merge the PR (squash-merge). Completion requires the merge command to succeed and `gh pr view <number> --json state` to report `MERGED`. If the merge fails or the state is not `MERGED`, such as with auto-merge or a merge queue, track it again with the thread and checkout that `untrack` printed.
+1. Resolve the PR: explicit number or URL wins; otherwise use `gh pr view`. Ask if no single PR resolves. Read its `headRefOid` with `gh pr view <number> --json headRefOid`.
+2. Run `mt prs untrack <url>` so the external-merge poller leaves this PR to you. Squash-merge with `gh pr merge <number> --squash --match-head-commit <sha>`, where `<sha>` is the head shepherding verified, otherwise that `headRefOid`. If GitHub rejects the merge because the head moved, report the new head, and shepherd it again when shepherding preceded the merge. Completion requires the merge command to succeed and `gh pr view <number> --json state` to report `MERGED`. If the merge fails or the state is not `MERGED`, such as with auto-merge or a merge queue, track it again with the thread and checkout that `untrack` printed.
 3. Run [post-merge](../post-merge/SKILL.md) for the merged PR.
 
 Report the PR URL and merge method with post-merge's hand-off or report.
