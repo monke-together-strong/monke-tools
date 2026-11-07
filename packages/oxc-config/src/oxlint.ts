@@ -139,12 +139,6 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "node/no-process-env": "off"
         }
       },
-      {
-        files: ["**/*.{ts,tsx}"],
-        rules: {
-          "unicorn/no-useless-undefined": ["error", { checkArguments: false }]
-        }
-      },
       ...framework.overrides,
       ...overrides
     ],
@@ -185,7 +179,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
       "sort-keys": "off",
-      // Optional-result helpers read naturally as an early value return followed by implicit undefined.
+      // Optional-result functions exit early with a bare `return`, which this rule rejects.
+      // noImplicitReturns already rejects falling off the end.
       "typescript/consistent-return": "off",
       "typescript/explicit-module-boundary-types": "off",
       "typescript/no-extraneous-class": ["error", { allowWithDecorator: true }],
@@ -213,6 +208,10 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "unicorn/no-array-reduce": "off",
       "unicorn/no-negated-condition": "off",
       "unicorn/no-nested-ternary": "off",
+      // Optional-result functions can end only with `return undefined`: noImplicitReturns rejects
+      // falling off the end, and no-useless-return rejects a final bare `return`. This rule flags
+      // `return undefined` unless the return type is annotated.
+      "unicorn/no-useless-undefined": "off",
       ...rules
     },
     settings: { ...framework.settings, ...settings }

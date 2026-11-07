@@ -79,6 +79,8 @@ The default Oxlint preset composes Ultracite's core, anti-slop, and Vitest prese
 
 Catch bindings and promise rejection callbacks use the name `cause`. Annotate rejection callbacks with `cause: unknown` and narrow the value before reading its properties. This aligns `unicorn/catch-error-name` with anti-slop's existing exception for unknown error parameters. Error helpers accepting `unknown` also use `cause`.
 
+When a function returns a value on some paths but not at its end, finish it with `return undefined`. `noImplicitReturns` rejects falling off the end, and `no-useless-return` rejects a final bare `return`. The preset disables `unicorn/no-useless-undefined`, which would otherwise flag `return undefined` whenever the return type is inferred.
+
 ### Framework presets
 
 `frameworks` enables Ultracite's React, TanStack, and shadcn presets and React Doctor's rules in the listed directories, relative to the config. `"."` covers the whole repository.
