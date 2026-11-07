@@ -297,6 +297,12 @@ export interface PinnedStartRef {
   ref: string;
 }
 
+/** Shared refs that resolve the same way inside every worktree of the repository. */
+const PORTABLE_REF_PATTERN = /^refs\/(?:heads|remotes|tags)\//u;
+
+/** Scratch destination for a targeted start-ref fetch; the global lock serializes Spawns. */
+const START_REF_FETCH_REF = "refs/monke/spawn-start";
+
 /**
  * Resolve a named Spawn start point after refreshing origin. Accepts origin branches without a
  * local branch, and fetches refs outside origin's fetch refspec, such as new tags.
@@ -319,24 +325,37 @@ export function resolveStartRef(
 
       const ref = fullName.stdout.trim();
 
-      // Only full refs resolve the same way inside the Session worktree; HEAD and ORIG_HEAD do not.
-      return { pinnedRef, ref: ref.startsWith("refs/") ? ref : pinnedRef };
+      // Worktree-private refs such as HEAD or refs/bisect/* would not resolve as a Diff base.
+      return { pinnedRef, ref: PORTABLE_REF_PATTERN.test(ref) ? ref : pinnedRef };
     }
   }
 
-  const fetched = runtime.exec("git", ["fetch", "origin", "--end-of-options", name], {
-    allowFailure: true,
-    cwd: sourceRoot
-  });
-
-  const pinnedRef =
-    fetched.exitCode === 0 ? resolveCommit(runtime, sourceRoot, "FETCH_HEAD") : undefined;
+  const pinnedRef = fetchStartCommit(runtime, sourceRoot, name);
 
   if (pinnedRef === undefined) {
     throw new MonkeError(`Could not resolve start ref "${name}" for ${sourceRoot}`);
   }
 
   return { pinnedRef, ref: pinnedRef };
+}
+
+function fetchStartCommit(runtime: Runtime, sourceRoot: string, name: string) {
+  const fetched = runtime.exec(
+    "git",
+    ["fetch", "--no-tags", "origin", "--end-of-options", `+${name}:${START_REF_FETCH_REF}`],
+    { allowFailure: true, cwd: sourceRoot }
+  );
+
+  try {
+    return fetched.exitCode === 0
+      ? resolveCommit(runtime, sourceRoot, START_REF_FETCH_REF)
+      : undefined;
+  } finally {
+    runtime.exec("git", ["update-ref", "-d", START_REF_FETCH_REF], {
+      allowFailure: true,
+      cwd: sourceRoot
+    });
+  }
 }
 
 function resolveCommit(runtime: Runtime, sourceRoot: string, revision: string) {
