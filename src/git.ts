@@ -312,6 +312,10 @@ export function resolveStartRef(
   sourceRoot: string,
   name: string
 ): PinnedStartRef {
+  if (name.startsWith("-")) {
+    throw new MonkeError(`Start ref "${name}" must not begin with "-"`);
+  }
+
   runtime.exec("git", ["fetch", "--prune", "origin"], { allowFailure: true, cwd: sourceRoot });
 
   for (const candidate of [name, `refs/remotes/origin/${name}`]) {
@@ -501,7 +505,8 @@ function prepareFreshSessionWorktree(
   mkdirSync(path.dirname(expectedPath), { recursive: true });
 
   return {
-    addArguments: ["worktree", "add", "-b", session, expectedPath, startRef],
+    // Peel to a commit so a ref named like a commit SHA cannot shadow the pinned start.
+    addArguments: ["worktree", "add", "-b", session, expectedPath, `${startRef}^{commit}`],
     path: expectedPath
   };
 }

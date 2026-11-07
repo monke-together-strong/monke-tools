@@ -1507,7 +1507,7 @@ apps: {}
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted");
     installGitShim(binDirectory, {
       failCommand: {
-        args: `worktree add -b interrupted ${worktreeRoot} ${pinnedRef}`,
+        args: `worktree add -b interrupted ${worktreeRoot} ${pinnedRef}^{commit}`,
         message: "injected early worktree failure"
       }
     });
