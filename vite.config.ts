@@ -43,7 +43,8 @@ export default defineConfig({
       path.resolve(workspaceRoot, "packages/oxc-config/src/oxlint.ts")
     ],
     format: ["esm"],
-    outDir: path.resolve(workspaceRoot, "packages/oxc-config/dist")
+    outDir: path.resolve(workspaceRoot, "packages/oxc-config/dist"),
+    tsconfig: path.resolve(workspaceRoot, "packages/oxc-config/tsconfig.build.json")
   },
   staged: {
     "*": "vp check --fix"
