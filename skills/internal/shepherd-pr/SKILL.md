@@ -62,8 +62,10 @@ typing, and duplication. Skip speculative scenarios, unnecessary abstractions,
 broad rewrites, and unrelated issues with a concrete reason. Low severity alone
 is not a reason to dismiss a useful fix.
 
-Commit and push fixes, then return to observation; the push normally triggers
-re-review. Inspect reviewer state before requesting anything manually.
+Before pushing a fix that changes documentation, comments, or user-facing
+messages, run the
+[documentation review](../../references/internal/DOC_REVIEW.md). Commit and
+push fixes, then return to observation; the push normally triggers re-review. Inspect reviewer state before requesting anything manually.
 
 ## Finish
 

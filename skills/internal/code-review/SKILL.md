@@ -14,9 +14,10 @@ correctness finding exposes a broken invariant, inspect analogous states and
 directly affected production paths, then report the defect class and all
 confirmed instances together."
 
-When the base workflow identifies coding-standards sources, include both:
+When the base workflow identifies coding-standards sources, include:
 
 - [the Team coding baseline](../../references/internal/CODING_STANDARDS.md)
+- [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md), for changes that fix a defect
 - Repo coding standards discovered by the base workflow
 
 Apply the Team coding baseline as defaults. Repo coding standards take precedence on conflicts.

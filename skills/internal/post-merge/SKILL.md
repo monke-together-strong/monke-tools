@@ -12,16 +12,44 @@ resolves. Continue only when
 `gh pr view <number> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
 reports `MERGED`.
 
+## Load the contracts
+
+A contract names the environment, deployment gate, and checks. Apply both
+sources:
+
+- **Repository contract**: root `POST_MERGE.md` at the merge commit, read with
+  `git show <mergeCommit>:POST_MERGE.md`. When the merge commit has none, use the
+  Source checkout's root `POST_MERGE.md` if
+  `git -C <source checkout> check-ignore -q POST_MERGE.md` confirms it is
+  local-only. It covers every merged PR within the scope it states.
+- **PR contract**: the `## Post-Merge Verification` section of the PR body. It
+  adds PR-specific checks. `Not required: <reason>` waives only this section.
+
+When no contract applies and the PR has no waiver, inspect the merged change and
+task requirements. When existing evidence establishes correctness, proceed with
+routine cleanup and report that evidence and its verification limits. Ask for a
+missing contract only when a specific deployment, migration, or target-environment
+check remains unverified by that evidence. Name the check and explain the gap.
+
 ## Hand off
 
-Post-merge ownership moves to an independent top-level thread. When this thread
-was started to run post-merge, continue below. If the runtime does not authorize
-creating a top-level thread, finish post-merge here. Otherwise:
+When only routine cleanup remains, run **Finish the merge**, then **Report** in
+the current thread, whether it is the original thread or an existing post-merge
+thread.
+
+When a specific verification check remains, move post-merge ownership to an
+independent top-level thread. When this thread was started to run post-merge,
+continue below. Running this skill is the user's request for that thread; in T3
+Code, start it with `t3_thread_launch`. Finish here only when no thread tool
+exists. Otherwise:
 
 1. Start a new thread on GPT 6.1 Sol, high effort, that runs post-merge for the
    PR with this skill and its PR checkout. Link it.
-2. Recap open questions and unfinished items in this thread beyond post-merge.
-   When none remain, settle this thread.
+2. Finish this thread in the same turn. The deploy gate, contract checks,
+   demo repairs and cleanup now belong to the new thread. Recap only what
+   remains here outside them: a decision still waiting on the user, or agreed
+   work not yet done. When nothing remains, settle this thread with
+   `t3_thread_organize` (`action: "settle"`).
 
 ## Finish the merge
 
@@ -44,26 +72,10 @@ creating a top-level thread, finish post-merge here. Otherwise:
 Never discard authored or unclassified changes, trust git ancestry alone for
 squash merges, or use `git reset --hard`, `git clean`, or forced worktree removal.
 
-## Load the contracts
-
-A contract names the environment, deployment gate, and checks. Apply both
-sources:
-
-- **Repository contract**: root `POST_MERGE.md` at the merge commit, read with
-  `git show <mergeCommit>:POST_MERGE.md`. When the merge commit has none, use the
-  Source checkout's root `POST_MERGE.md` if
-  `git -C <source checkout> check-ignore -q POST_MERGE.md` confirms it is
-  local-only. It covers every merged PR within the scope it states.
-- **PR contract**: the `## Post-Merge Verification` section of the PR body. It
-  adds PR-specific checks. `Not required: <reason>` waives only this section.
-
-When no contract applies and the PR has no waiver, inspect the merged change and
-task requirements. When existing evidence establishes correctness, finish and
-report that evidence and its verification limits. Ask for a missing contract only
-when a specific deployment, migration, or target-environment check remains
-unverified by that evidence. Name the check and explain the gap.
-
 ## Wait for the gate
+
+Use the deployment or release gate named by the applicable contract or task
+requirement. Continue to **Verify** when its checks need no gate.
 
 In T3 Code, rename the thread with `t3_thread_update` to
 `Verify #<number>: <subject>`, where the subject names the behavior under check
@@ -97,3 +109,6 @@ defect, open a root-cause fix PR with `$pr`, linking the merged PR.
 ## Report
 Report the base update, removals, skipped cleanup, contract sources, each check's
 result and evidence, any fix PR or release PR handoff, and any skip reason, any pending items.
+
+When no user decision or agreed work remains, settle the current thread with
+`t3_thread_organize` (`action: "settle"`).

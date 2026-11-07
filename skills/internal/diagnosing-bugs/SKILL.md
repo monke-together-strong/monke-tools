@@ -9,3 +9,6 @@ Follow:
 
 In Phase 5, apply the fix at the root cause per
 [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md).
+
+In Phase 5, write the regression test per
+[testing standards](../../references/internal/TESTING_STANDARDS.md).

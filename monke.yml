@@ -1,11 +1,12 @@
 apps: {}
 bootstrapCommand: vp install --frozen-lockfile
 skills:
-  - commit: 25abb38559ddbabec563646224d09eff9a250eca
+  - commit: f104aa8f821a3f7397318b0dc8ad2f7e4a1f8bc7
     source: https://github.com/backnotprop/pstack
     skills:
       - principle-encode-lessons-in-structure
       - principle-fix-root-causes
+      - principle-test-behavior-not-implementation
       - slug: show-me-your-work
         kind: reference
       - slug: technical-writing
@@ -13,16 +14,16 @@ skills:
       - slug: unslop
         modelInvocation: allow
         description: Cut AI tells from any writing.
-  - commit: 7bf1b7beb7e385790aaddbb482ade81c183fe217
+  - commit: 929481461f0dd435b7cb19fb2a3737987c15d8d6
     source: https://github.com/haydenbleasel/ultracite/tree/main/skills/ultracite
     skills:
       - slug: ultracite
         kind: reference
-  - commit: 653b6411c1f70c275a18e37673b042ff99f67ceb
+  - commit: 4d69d20f6e9b57b4fcf0d501ccfb1be961f0f329
     source: https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me
     skills:
       - show-me
-  - commit: a496f5513d4a4cf889bc48e189e579f4b0bdf6aa
+  - commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
     source: https://github.com/mattpocock/skills
     skills:
       - slug: code-review
@@ -39,7 +40,8 @@ skills:
       - improve-codebase-architecture
       - prototype
       - research
-      - retro
+      - slug: retro
+        kind: reference
       - setup-matt-pocock-skills
       - tdd
       - teach
@@ -54,21 +56,21 @@ skills:
       - wizard
       - slug: writing-for-agents
         modelInvocation: allow
-  - commit: a496f5513d4a4cf889bc48e189e579f4b0bdf6aa
+  - commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
     source: https://github.com/mattpocock/skills/tree/main/skills/engineering/pr
     skills:
       - slug: pr
         kind: reference
-  - commit: df3a4abe7d0840d5f60324812c432e00b66a4e75
+  - commit: c3bb418ee38ee49a6b999b7752c1368f3123a2bd
     source: https://github.com/pbakaus/impeccable
     skills:
       - impeccable
-  - commit: b8d7baa15b1dca5716f13153e63795fc3d741f6b
+  - commit: 8a3536678a528cc012b9e62484290e79d0be410f
     source: https://github.com/shadcn-ui/ui
     skills:
       - shadcn
   - acceptOpenClawRisks: true
-    commit: 9ac98356158876ca9e84f60f2e53884cd3e684bd
+    commit: 02f3158379a7ec355d73c92bf97d432fafb2adc9
     source: openclaw/agent-skills
     skills:
       - autoreview

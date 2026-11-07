@@ -7,7 +7,8 @@ monke-tools redistributes the guidance listed below under its upstream licenses.
 ### pstack
 
 - Source: <https://github.com/backnotprop/pstack>
-- Included skills: `skills/imported/principle-fix-root-causes`, `skills/imported/technical-writing`, `skills/imported/unslop`
+- Included skills: `skills/imported/principle-encode-lessons-in-structure`, `skills/imported/principle-fix-root-causes`, `skills/imported/principle-test-behavior-not-implementation`, `skills/imported/technical-writing`, `skills/imported/unslop`
+- Included references: `skills/references/imported/show-me-your-work`
 - Copyright: Copyright (c) 2026 Lauren Tan
 - License: [MIT](https://github.com/backnotprop/pstack/blob/124f622bcaeac490e7e9dac6af83f3ef9611d554/LICENSE)
 
@@ -53,6 +54,13 @@ monke-tools redistributes the guidance listed below under its upstream licenses.
 - Included skills: `skills/imported/autoreview`, `skills/imported/behavior-validator`
 - Copyright: Copyright (c) 2026 openclaw
 - License: [MIT](https://github.com/openclaw/agent-skills/blob/3d3034af58d4c0a137b8ffe42b4c190fcd5bdd38/LICENSE)
+
+### OpenClaw
+
+- Source: <https://github.com/openclaw/openclaw>
+- Adapted guidance: `skills/internal/test-audit` and the junk patterns and retention bar in `skills/references/internal/TESTING_STANDARDS.md`, from `.agents/skills/test-audit`
+- Copyright: Copyright (c) 2026 OpenClaw Foundation
+- License: [MIT](https://github.com/openclaw/openclaw/blob/650091daacdc10aa374e82a6327e8beffe136072/LICENSE)
 
 ## MIT License
 

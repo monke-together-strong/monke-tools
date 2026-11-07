@@ -8,7 +8,7 @@ description: Create or edit a PR
 ## Brief a delegate
 
 When a delegate will open the PR, name this skill in the brief, pass facts
-rather than body sections, and allow one subagent for the documentation review.
+rather than body sections, and allow a subagent for each documentation review run.
 
 ## Prepare the branch
 
@@ -20,12 +20,9 @@ including `docs/research/` and `docs/explorations/`, unless requested.
 
 ## Review branch documentation, comments, and terminology
 
-Have a subagent apply
-[documentation standards](../documentation-standards/SKILL.md) to documentation,
-code comments, and domain terminology in the full diff against the base, including
-pending edits and new files. Review its edits and code findings before verification
-and publishing. When your instructions bar subagents, apply the standards yourself.
-Either way, list each finding, or state that there were none, in your final reply.
+Run the [documentation review](../../references/internal/DOC_REVIEW.md) before
+verification and publishing, and again before pushing any later commit that
+changes documentation, comments, or user-facing messages.
 
 ## Load PR requirements
 

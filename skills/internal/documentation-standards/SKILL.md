@@ -1,15 +1,17 @@
 ---
 name: documentation-standards
-description: Use when writing or reviewing documentation, code comments, glossaries, or domain terminology.
+description: Use when writing or reviewing documentation, code comments, user-facing messages, glossaries, or domain terminology.
 ---
 
 # Documentation standards
 
 Repo-specific requirements take precedence on conflicts. When asked to review,
-report findings and leave the text unchanged; otherwise, edit passages in scope.
-Decide what to delete before rewrites or additions, then check what remains for
-accuracy. Finish only after deciding whether every passage in scope is kept,
-cut, or corrected.
+leave the text unchanged and report a decision for every passage in scope: list
+kept passages by location, grouping adjacent ones into ranges, and give each cut
+or correction as a finding. Otherwise, edit passages in scope. Decide what to
+delete before rewrites or additions, then check what remains for accuracy.
+Finish only after deciding whether every passage in scope is kept, cut, or
+corrected.
 
 Each finding names its location, the evidence, the problem, and the smallest fix.
 Report unresolved questions explicitly. Keep edits within the task's scope, and
@@ -24,8 +26,9 @@ changes, as separate findings.
   accurate text unchanged is a valid outcome.
 - Document an operational failure only when it is silent, misleading, or surfaces
   only after a slow or irreversible step. A startup or test failure whose error
-  names the cause documents itself. Leave out edge cases the reader is unlikely
-  to hit.
+  names the cause documents itself. Where a reference must still list such a
+  failure, state the condition that fails, not the message text or the fix it
+  already gives. Leave out edge cases the reader is unlikely to hit.
 - Write for someone who has not seen the conversation. Keep relevant reasons and
   consequences; put investigation history and reviewer bookkeeping in commit
   messages, PRs, or issues.
@@ -83,6 +86,12 @@ changes, as separate findings.
   [technical-writing](../../imported/technical-writing/SKILL.md) to prose and
   [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to agent-facing
   documents.
+
+## User-facing messages
+
+- State the condition that failed and the next action the reader can take. Use
+  terms the reader sees elsewhere, and leave out internal identifiers and
+  implementation details the reader cannot act on.
 
 ## Glossary and terminology
 

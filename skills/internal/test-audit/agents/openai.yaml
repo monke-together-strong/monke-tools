@@ -1,0 +1,5 @@
+interface:
+  display_name: "Test Audit"
+  short_description: "Prune or repair low-value tests with mutation proof"
+policy:
+  allow_implicit_invocation: false

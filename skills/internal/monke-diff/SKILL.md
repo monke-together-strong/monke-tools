@@ -1,9 +1,12 @@
 ---
 name: monke-diff
-description: Open visual diffs with mt. Use when presenting completed changes, reviewing dirty work, comparing branches or commits, selecting a time window, or configuring the Codiff or Monke See adapter.
+description: Open visual diffs with mt. Use only when the user asks to see, review, or compare changes visually (dirty work, branches, commits, or a time window), or to configure the Codiff or Monke See adapter.
 ---
 
 # Monke diff
+
+Each run opens a window on the user's screen. Don't open one just to present
+finished work, and never from delegated tasks, subagents, or automations.
 
 `mt diff` owns comparison selection. Use `mt diff --help` for sources and flags;
 `--pick` chooses a comparison base.
