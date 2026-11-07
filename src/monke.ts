@@ -225,11 +225,10 @@ async function prepareSpawn(
   assertSpawnRequest(runtime, rootSourceRoot, session, sourcePlan);
   const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
 
-  const getStartRef = createStartRefResolver(
-    runtime,
-    rootSourceRoot,
-    sourcePlan.mode === "default-branch" ? sourcePlan.from : undefined
-  );
+  const getStartRef = createStartRefResolver(runtime, rootSourceRoot, {
+    checkoutRoot: rootCheckoutRoot,
+    from: sourcePlan.mode === "default-branch" ? sourcePlan.from : undefined
+  });
 
   const rootStartRef =
     sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh"
@@ -713,7 +712,7 @@ function formatSpawnRetryCommand(session: string, options: SpawnOptions) {
 function createStartRefResolver(
   runtime: Runtime,
   rootSourceRoot: string,
-  rootFrom: string | undefined
+  root: { checkoutRoot: string; from: string | undefined }
 ): (sourceRoot: string) => PinnedStartRef {
   const startRefs = new Map<string, PinnedStartRef>();
 
@@ -724,9 +723,11 @@ function createStartRefResolver(
       return cached;
     }
 
+    // Resolve --from in the invoking checkout so per-worktree refs such as HEAD mean that
+    // checkout's; other refs resolve the same in every worktree.
     const resolved =
-      rootFrom !== undefined && sourceRoot === rootSourceRoot
-        ? resolveStartRef(runtime, sourceRoot, rootFrom)
+      root.from !== undefined && sourceRoot === rootSourceRoot
+        ? resolveStartRef(runtime, root.checkoutRoot, root.from)
         : resolveDefaultStartRef(runtime, sourceRoot);
 
     startRefs.set(sourceRoot, resolved);

@@ -74,7 +74,7 @@ function createProgram(runtime: Runtime) {
   program
     .command("spawn")
     .argument("<session>")
-    .option("--no-dirty")
+    .option("--no-dirty", "require clean checkouts instead of carrying their edits")
     .option("-m, --main", "start from default branches without carrying edits")
     .option("--master", "alias for --main")
     .addOption(
@@ -83,7 +83,7 @@ function createProgram(runtime: Runtime) {
         "start the Root repo from a branch, tag, or commit, and dependencies from default branches, without carrying edits"
       ).conflicts(["main", "master"])
     )
-    .option("--codex")
+    .option("--codex", "open the Session in Codex once it is ready")
     .action((session, options) => {
       let spawnOptions: SpawnOptions = { copyDirty: options.dirty, mode: "current-head" };
 

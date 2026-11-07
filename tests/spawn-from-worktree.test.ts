@@ -177,6 +177,13 @@ describe("spawn from worktrees", () => {
     }
   );
 
+  it("resolves spawn --from HEAD in the invoking worktree", () => {
+    const { donor, home, root } = createWorktreeFixture();
+    runMonke({ args: ["spawn", "from-donor-head", "--from", "HEAD"], cwd: donor, monkeHome: home });
+    const target = getExpectedWorktreePath(home, root, "from-donor-head");
+    expect(git(target, ["rev-parse", "HEAD"])).toBe(git(donor, ["rev-parse", "HEAD"]));
+  });
+
   it("compares an existing branch against donor HEAD during dirty carry and preserves existing destinations", () => {
     const { donor, home, root } = createWorktreeFixture();
     const target = getExpectedWorktreePath(home, root, "existing");
