@@ -22,9 +22,27 @@ The end is now. The start is the later of seven days ago and the end of the newe
 
 ## 2. Inventory units
 
-A **unit** is a T3 thread with `createdBy: user`, including forks, together with the subagent threads it spawned. List units for every project from `t3_project_list` with `t3_thread_list` (`includeSubagents: false`, `limit: 100`), paging until `updatedAt` falls before the start. Take units updated inside the window, plus the newest report's Deferred units. Exclude the current thread. Units still `running`, `waiting`, `queued`, or `starting` become Deferred.
+A **unit** is a T3 thread with `createdBy: user`, including forks, together with the subagent threads and sidechats it spawned. List units for every project from `t3_project_list` with `t3_thread_list` (`includeSubagents: false`, `limit: 100`), paging until `updatedAt` falls before the start. Take units updated inside the window, plus the newest report's Deferred units. Exclude the current thread. Units still `running`, `waiting`, `queued`, or `starting` become Deferred.
 
-Each T3 project is one repo; its worktrees already map to it. "No project" units form the global group. Batch each project's units: at most 8 units with `itemCount` of 50 or more, and at most 15 units in total, per batch. Pool projects with 3 or fewer units into one shared batch.
+`t3_thread_list` omits sidechats, so list the window's sidechats from T3's private store. This stopgap holds until T3 lists them:
+
+```sh
+sqlite3 -readonly ~/.t3/userdata/statev2.sqlite <<'SQL'
+select t.thread_id, t.project_id,
+  json_extract(t.payload_json, '$.lineage.parentThreadId') as parent,
+  json_extract(t.payload_json, '$.forkedFrom.runId') as fork_run,
+  (select count(*) from orchestration_v2_turn_item_positions p
+   where p.thread_id = t.thread_id) as item_count
+from orchestration_v2_projection_threads t
+where t.deleted_at is null
+  and json_extract(t.payload_json, '$.lineage.sideChat') = 1
+  and t.updated_at >= '<start>';
+SQL
+```
+
+Attach each sidechat to the unit holding its parent. When no in-window unit holds the parent, the parent and its sidechats form a new unit whose parent supplies context only, read up to `fork_run`. If the query fails, record unlisted sidechats as a coverage gap.
+
+Each T3 project is one repo; its worktrees already map to it. "No project" units form the global group. A unit's size is its thread's `itemCount` plus its sidechats' `item_count`, or only the sidechats' when the parent supplies context only. Batch each project's units: at most 8 units of size 50 or more, and at most 15 units in total, per batch. Pool projects with 3 or fewer units into one shared batch.
 
 **Done when** every in-window unit sits in exactly one batch or in Deferred.
 
@@ -35,7 +53,7 @@ Dispatch one worker per batch with your native subagent tool on your own model, 
 - the absolute path of [the worker brief](WORKER.md) and of the retro rubric, to read first;
 - the window;
 - each project's name and `workspaceRoot`;
-- each unit's link, status, `itemCount`, and PR URLs;
+- each unit's link, status, size, PR URLs, and sidechat thread ids, plus `fork_run` when the parent supplies context only;
 - the text of `accepted.md`.
 
 **Done when** every worker has returned findings and coverage, or its failure is recorded as a coverage gap.

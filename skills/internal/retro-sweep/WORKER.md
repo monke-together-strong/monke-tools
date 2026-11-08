@@ -10,9 +10,11 @@ A **friction point** is a moment where the work went off course: a user correcti
 
 ## 1. Skim every unit
 
-Read each unit's `messages` view with `t3_thread_read` (`limit: 40`, `maxCharsPerItem: 1000`), paging to the end. Items with `visibility: "inherited"` replay a fork's parent, and items updated before the window precede it: read both for context, and record friction only from the rest. Note each friction point's position.
+Read the `messages` view of each unit's thread and each of its sidechats with `t3_thread_read` (`limit: 40`, `maxCharsPerItem: 1000`), paging to the end. Items with `visibility: "inherited"` replay a fork's parent, and items updated before the window precede it: read both for context, and record friction only from the rest. Note each friction point's position.
 
-**Done when** every unit is read to its last page, or marked skipped with the reason it was unreadable.
+When the parent supplies context only, read just its tail before the sidechat's fork. Bisect `afterPosition` with `limit: 1` on the `messages` view for the first message whose `runId` ordinal exceeds `fork_run`'s, then read the 10 messages before it; reads page forward only, so start about 50 positions earlier.
+
+**Done when** every unit thread and sidechat is read to its last page (a context-only parent to its fork), or marked skipped with the reason it was unreadable.
 
 ## 2. Trace the costliest friction
 
