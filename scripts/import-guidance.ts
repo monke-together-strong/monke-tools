@@ -364,6 +364,49 @@ export function transformPreparedReference(referencePath: string) {
   const body = removeLeadingYamlFrontmatter(readFileSync(skillEntryPath, "utf-8"));
   unlinkSync(skillEntryPath);
   writeFileSync(referenceEntryPath, body, { encoding: "utf-8", flag: "wx" });
+  redirectEntryLinks(referencePath, skillEntryPath, referenceEntryPath);
+}
+
+/** Supporting documents that link to the renamed entry follow it to MAIN.md. */
+function redirectEntryLinks(referencePath: string, oldEntry: string, newEntry: string) {
+  for (const file of new Bun.Glob("**/*.md").scanSync({ cwd: referencePath, dot: true })) {
+    const filePath = path.join(referencePath, file);
+
+    if (!lstatSync(filePath).isFile()) {
+      continue;
+    }
+
+    const source = readFileSync(filePath, "utf-8");
+    let rewritten = source;
+
+    for (const link of relativeMarkdownLinks(source).toReversed()) {
+      if (path.resolve(path.dirname(filePath), link.destination) !== oldEntry) {
+        continue;
+      }
+
+      // The destination follows `](` in an inline link or `]:` in a definition.
+      const escaped = link.raw.replaceAll(/[$()*+.?[\\\]^{|}]/gu, String.raw`\$&`);
+
+      const match = new RegExp(String.raw`\](?:\(|:)\s*<?${escaped}`, "u").exec(
+        rewritten.slice(link.start, link.end)
+      );
+
+      if (!match) {
+        throw new MonkeError(
+          `Cannot redirect ${file}:${String(link.line)} to MAIN.md; write the link as plain ${link.raw}`
+        );
+      }
+
+      const start = link.start + match.index + match[0].length - link.raw.length;
+      const fragment = link.raw.slice((link.raw.split("#")[0] ?? "").length);
+      const target = path.relative(path.dirname(filePath), newEntry).split(path.sep).join("/");
+      rewritten = `${rewritten.slice(0, start)}${target}${fragment}${rewritten.slice(start + link.raw.length)}`;
+    }
+
+    if (rewritten !== source) {
+      writeFileSync(filePath, rewritten, "utf-8");
+    }
+  }
 }
 
 function removeLeadingYamlFrontmatter(markdown: string) {

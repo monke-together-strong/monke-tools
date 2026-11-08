@@ -11,7 +11,9 @@ const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
 
 /** Relative links share the same Markdown parsing rules for packaging and adoption. */
 export function relativeMarkdownLinks(source: string) {
-  const links: { destination: string; line: number; raw: string }[] = [];
+  const links: { destination: string; end: number; line: number; raw: string; start: number }[] =
+    [];
+
   visit(fromMarkdown(source), (node) => {
     if (node.type !== "link" && node.type !== "image" && node.type !== "definition") {
       return;
@@ -35,7 +37,13 @@ export function relativeMarkdownLinks(source: string) {
       // A literal percent sign can occur in a local filename.
     }
 
-    links.push({ destination, line: node.position?.start.line ?? 1, raw });
+    links.push({
+      destination,
+      end: node.position?.end.offset ?? source.length,
+      line: node.position?.start.line ?? 1,
+      raw,
+      start: node.position?.start.offset ?? 0
+    });
   });
 
   return links;
