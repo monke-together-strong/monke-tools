@@ -38,7 +38,8 @@ skills:
       - slug: implement
         kind: reference
       - improve-codebase-architecture
-      - prototype
+      - slug: prototype
+        kind: reference
       - research
       - slug: retro
         kind: reference

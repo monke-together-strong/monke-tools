@@ -5,7 +5,8 @@ skills with a repository. Monke records the source, full commit pin, selections,
 and overrides in the root `monke.yml`, then restores generated guidance into
 `skills/imported/` and `skills/references/imported/`. It adds missing ignore rules.
 Add `--ref` to restore references, whose `SKILL.md` becomes `MAIN.md` without its
-leading YAML frontmatter. Supporting files retain their bytes.
+leading YAML frontmatter. Supporting files retain their bytes, except that relative
+Markdown links to that `SKILL.md` point to `MAIN.md`.
 Re-adding a source keeps its existing selections and overrides. Add `--replace`
 to make `--skill` replace the selection.
 Repo recipes select a source's committed guidance without following that

@@ -3,7 +3,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
+import {
+  copyStagedGuidanceToManagedRoots,
+  transformPreparedReference
+} from "../scripts/import-guidance.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
 function guidanceFixture() {
@@ -26,6 +29,38 @@ function guidanceFixture() {
 
   return { guidance, repoRoot, stagingDirectory, target };
 }
+
+describe("reference conversion", () => {
+  it("points supporting links to the renamed entry", () => {
+    const reference = makeTempDir("reference-conversion-");
+    write(reference, "SKILL.md", "---\nname: alpha\n---\n\nSee [UI](UI.md).\n");
+    write(
+      reference,
+      "UI.md",
+      'The [SKILL](SKILL.md "SKILL.md") and [rules](SKILL.md#rules) mention SKILL.md.\n\n[entry]: SKILL.md\n'
+    );
+    write(reference, "nested/LOGIC.md", "Back to [SKILL](../SKILL.md).\n");
+
+    transformPreparedReference(reference);
+
+    expect(read(reference, "MAIN.md")).toBe("\nSee [UI](UI.md).\n");
+    expect(read(reference, "UI.md")).toBe(
+      'The [SKILL](MAIN.md "SKILL.md") and [rules](MAIN.md#rules) mention SKILL.md.\n\n[entry]: MAIN.md\n'
+    );
+    expect(read(reference, "nested/LOGIC.md")).toBe("Back to [SKILL](../MAIN.md).\n");
+  });
+
+  it("rejects an entry link it cannot locate in the source", () => {
+    const reference = makeTempDir("reference-conversion-");
+    write(reference, "SKILL.md", "Entry.\n");
+    write(reference, "UI.md", `${String.raw`See [SKILL](SKILL\.md).`}\n`);
+
+    expect(() => {
+      transformPreparedReference(reference);
+    }).toThrow("UI.md:1");
+    expect(read(reference, "UI.md")).toBe(`${String.raw`See [SKILL](SKILL\.md).`}\n`);
+  });
+});
 
 describe("guidance transaction recovery", () => {
   it("preserves a published skill after a case-only slug rename", () => {
