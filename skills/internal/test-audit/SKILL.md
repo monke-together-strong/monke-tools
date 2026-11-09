@@ -1,13 +1,13 @@
 ---
 name: test-audit
-description: "Sweep existing tests: remove duplicate or implementation-coupled proof and test-only production seams, without leaving any contract without its only proof. Use when asked to audit, prune, clean up, or dedupe tests."
+description: "Sweep existing tests: repair weak assertions, consolidate or remove duplicate or implementation-coupled proof, and remove test-only production seams, without leaving any contract without its only proof. Use when asked to audit, prune, clean up, or dedupe tests."
 argument-hint: "[path]"
 disable-model-invocation: true
 ---
 
 # Test Audit
 
-- Audits: remove low-value proof in coherent owner batches; never chase deletion counts.
+- Audits: repair or remove low-value proof in coherent owner batches; never chase deletion counts.
 - Judge every candidate against [testing standards](../../references/internal/TESTING_STANDARDS.md): its rules, junk patterns, and retention bar.
 - Discovery read-only; report before edits.
 - Audit and cleanup run sections 1–4 in full, including the `F` check; they differ only in whether section 5 edits are applied. Section 4 probes never touch the user's checkout.

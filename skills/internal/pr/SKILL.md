@@ -18,6 +18,12 @@ Rebase the PR branch onto the latest base before analyzing or verifying it.
 Exclude research and exploration artifacts,
 including `docs/research/` and `docs/explorations/`, unless requested.
 
+## Audit changed tests
+
+When creating a PR whose diff adds or changes tests, run
+[test audit](../test-audit/SKILL.md) in cleanup mode on those test files, then
+continue here.
+
 ## Review branch documentation, comments, and terminology
 
 Run the [documentation review](../../references/internal/DOC_REVIEW.md) before
