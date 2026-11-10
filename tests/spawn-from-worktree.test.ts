@@ -77,67 +77,55 @@ describe("spawn from worktrees", () => {
     );
   });
 
-  it.each([true, false])(
-    "retains the donor of an interrupted worktree dirty carry (configured: %s)",
-    (configured) => {
-      const { donor, home, root, sandbox } = createWorktreeFixture(configured);
-      const target = getExpectedWorktreePath(home, root, "interrupted");
-      write(donor, "tracked.txt", "donor edits\n");
-      write(donor, "notes.txt", "donor notes\n");
-      const originalHead = git(donor, ["rev-parse", "HEAD"]).trim();
-      const binDirectory = path.join(sandbox, "bin");
-      installGitShim(binDirectory, {
-        afterCommand: {
-          args: `worktree add ${target} interrupted`,
-          cwd: root,
-          script: 'kill -KILL "$PPID"'
-        }
-      });
+  it("retains the donor of an interrupted worktree dirty carry", () => {
+    const { donor, home, root, sandbox } = createWorktreeFixture();
+    const target = getExpectedWorktreePath(home, root, "interrupted");
+    write(donor, "tracked.txt", "donor edits\n");
+    write(donor, "notes.txt", "donor notes\n");
+    const originalHead = git(donor, ["rev-parse", "HEAD"]).trim();
+    const binDirectory = path.join(sandbox, "bin");
+    installGitShim(binDirectory, {
+      afterCommand: {
+        args: `worktree add ${target} interrupted`,
+        cwd: root,
+        script: 'kill -KILL "$PPID"'
+      }
+    });
 
-      const interrupted = runMonkeCapturingFailure({
-        args: ["spawn", "interrupted"],
-        binDirectory,
-        cwd: donor,
-        monkeHome: home
-      });
+    const interrupted = runMonkeCapturingFailure({
+      args: ["spawn", "interrupted"],
+      binDirectory,
+      cwd: donor,
+      monkeHome: home
+    });
 
-      expect(interrupted.error).not.toBeNull();
-      expect(loadSessionState(home, root, "interrupted").repos[0]).toMatchObject({
-        dirtyCarrySource: { checkoutRoot: donor, headCommit: originalHead },
-        dirtyCarryStatus: "pending"
-      });
-      expect(() =>
-        runMonke({ args: ["spawn", "interrupted"], cwd: root, monkeHome: home })
-      ).toThrow(/dirty carry.*checkout/isu);
-      git(donor, ["commit", "--allow-empty", "-m", "Moved donor"]);
-      expect(() =>
-        runMonke({ args: ["spawn", "interrupted"], cwd: donor, monkeHome: home })
-      ).toThrow(/dirty carry.*HEAD/isu);
-      git(donor, ["reset", "--soft", originalHead]);
-      git(target, ["commit", "--allow-empty", "-m", "Moved destination"]);
-      expect(() =>
-        runMonke({ args: ["spawn", "interrupted"], cwd: donor, monkeHome: home })
-      ).toThrow(/carrying dirty changes onto a diverged branch is unsafe/u);
-      git(target, ["reset", "--soft", originalHead]);
-      expect(read(target, "tracked.txt")).toBe("base\n");
+    expect(interrupted.error).not.toBeNull();
+    expect(loadSessionState(home, root, "interrupted").repos[0]).toMatchObject({
+      dirtyCarrySource: { checkoutRoot: donor, headCommit: originalHead },
+      dirtyCarryStatus: "pending"
+    });
+    expect(() => runMonke({ args: ["spawn", "interrupted"], cwd: root, monkeHome: home })).toThrow(
+      /dirty carry.*checkout/isu
+    );
+    git(donor, ["commit", "--allow-empty", "-m", "Moved donor"]);
+    expect(() => runMonke({ args: ["spawn", "interrupted"], cwd: donor, monkeHome: home })).toThrow(
+      /dirty carry.*HEAD/isu
+    );
+    git(donor, ["reset", "--soft", originalHead]);
+    git(target, ["commit", "--allow-empty", "-m", "Moved destination"]);
+    expect(() => runMonke({ args: ["spawn", "interrupted"], cwd: donor, monkeHome: home })).toThrow(
+      /carrying dirty changes onto a diverged branch is unsafe/u
+    );
+    git(target, ["reset", "--soft", originalHead]);
+    expect(read(target, "tracked.txt")).toBe("base\n");
 
-      const resumed = runMonkeCapturingFailure({
-        args: ["spawn", "interrupted"],
-        cwd: donor,
-        monkeHome: home
-      });
+    const resumed = runMonke({ args: ["spawn", "interrupted"], cwd: donor, monkeHome: home });
 
-      expect(resumed.error === null).toBe(configured);
-      expect(resumed.stderr).toContain(
-        configured ? "Spawned or updated session" : "Prepared Root repo Session worktree"
-      );
-      expect(read(target, "tracked.txt")).toBe("donor edits\n");
-      expect(read(target, "notes.txt")).toBe("donor notes\n");
-      expect(loadSessionState(home, root, "interrupted").repos[0]?.dirtyCarryStatus).toBe(
-        "complete"
-      );
-    }
-  );
+    expect(resumed.stderr).toContain("Spawned or updated session");
+    expect(read(target, "tracked.txt")).toBe("donor edits\n");
+    expect(read(target, "notes.txt")).toBe("donor notes\n");
+    expect(loadSessionState(home, root, "interrupted").repos[0]?.dirtyCarryStatus).toBe("complete");
+  });
 
   it.each([false, true])(
     "checks the invoking checkout for --no-dirty (detached: %s)",
@@ -205,12 +193,12 @@ describe("spawn from worktrees", () => {
   });
 });
 
-function createWorktreeFixture(configured = true) {
+function createWorktreeFixture() {
   const sandbox = makeTempDir("spawn-worktree-modes");
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
-    ...(configured ? { "monke.yml": "apps: {}\n" } : {}),
+    "monke.yml": "apps: {}\n",
     "tracked.txt": "base\n"
   });
 

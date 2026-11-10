@@ -1,3 +1,4 @@
+// Dirty carry for Worktree preparation. Only worktree-preparation.ts imports this file.
 import {
   copyFileSync,
   existsSync,
@@ -25,7 +26,13 @@ export interface DirtySnapshot {
   untrackedPaths: string[];
 }
 
-export function captureDirtySnapshot(runtime: Runtime, source: CheckoutSource) {
+/** Capture a content checkout's changes; an interrupted carry must resume from the same donor. */
+export function captureDirtySnapshot(
+  runtime: Runtime,
+  source: CheckoutSource,
+  retainedRepo: SessionRepoState | undefined
+): DirtySnapshot {
+  assertDirtyCarrySource(source, retainedRepo);
   const sourceRoot = source.checkoutRoot;
 
   const untrackedOutput = runGit(runtime, sourceRoot, [
@@ -47,12 +54,12 @@ export function captureDirtySnapshot(runtime: Runtime, source: CheckoutSource) {
   };
 }
 
-export function dirtySnapshotHasContent(snapshot: DirtySnapshot) {
+function dirtySnapshotHasContent(snapshot: DirtySnapshot) {
   return snapshot.trackedPatch.length > 0 || snapshot.untrackedPaths.length > 0;
 }
 
 /** An interrupted carry must not silently switch donor checkout or base commit. */
-export function assertDirtyCarrySource(source: CheckoutSource, state?: SessionRepoState) {
+function assertDirtyCarrySource(source: CheckoutSource, state: SessionRepoState | undefined) {
   if (state?.dirtyCarryStatus !== "pending" || !state.dirtyCarrySource) {
     return;
   }
@@ -69,13 +76,28 @@ export function assertDirtyCarrySource(source: CheckoutSource, state?: SessionRe
   }
 }
 
-export function dirtyCarrySource(snapshot: DirtySnapshot | undefined) {
-  return snapshot === undefined
-    ? undefined
-    : {
-        checkoutRoot: snapshot.source.checkoutRoot,
-        headCommit: snapshot.source.headCommit
-      };
+/**
+ * The dirty-carry fields to record before preparation starts: a carry stays pending until applied
+ * when it resumes or when the snapshot has content for a Session worktree that does not exist yet.
+ */
+export function trackDirtyCarry(
+  snapshot: DirtySnapshot,
+  retainedRepo: SessionRepoState | undefined,
+  worktreePath: string
+) {
+  const tracks =
+    retainedRepo?.dirtyCarryStatus === "pending" ||
+    (dirtySnapshotHasContent(snapshot) && !existsSync(worktreePath));
+
+  return tracks
+    ? {
+        dirtyCarrySource: {
+          checkoutRoot: snapshot.source.checkoutRoot,
+          headCommit: snapshot.source.headCommit
+        },
+        dirtyCarryStatus: "pending" as const
+      }
+    : undefined;
 }
 
 /** Refuse dirty carry when it would apply HEAD-relative patches onto a diverged Session branch. */
@@ -85,7 +107,7 @@ export function assertDirtyCarryBoundary(
   sourceRoot: string,
   session: string,
   snapshot: DirtySnapshot,
-  resumesDirtyCarry = false
+  resumesDirtyCarry: boolean
 ) {
   if (!dirtySnapshotHasContent(snapshot) || !branchExists(runtime, sourceRoot, session)) {
     return;
@@ -105,25 +127,38 @@ export function assertDirtyCarryBoundary(
   }
 }
 
-export function warnDirtyStateNotCarried(
+/**
+ * Apply the snapshot to a newly created Session worktree or one whose carry is resuming; warn
+ * instead when an existing worktree would otherwise receive it.
+ */
+export async function carryDirtySnapshot(
   runtime: Runtime,
-  sourceRoot: string,
-  session: string,
-  checkoutRoot = sourceRoot
+  request: {
+    home: string;
+    resumes: boolean;
+    session: string;
+    snapshot: DirtySnapshot;
+    sourceRoot: string;
+    worktree: { created: boolean; path: string };
+  }
 ) {
-  runtime.writeStderr(
-    `Warning: Session worktree for ${session} at ${sourceRoot} already exists; dirty ${checkoutRoot === sourceRoot ? "Source checkout" : `content checkout (${checkoutRoot})`} changes were not carried into it.\n`
-  );
-}
+  const { snapshot, worktree } = request;
 
-export async function applyDirtySnapshot(
-  runtime: Runtime,
-  home: string,
-  worktreePath: string,
-  snapshot: DirtySnapshot
-) {
-  await applyPatchAsync(runtime, worktreePath, snapshot.trackedPatch);
-  copyUntrackedPaths(home, snapshot.source.checkoutRoot, worktreePath, snapshot.untrackedPaths);
+  if (worktree.created || request.resumes) {
+    await applyPatchAsync(runtime, worktree.path, snapshot.trackedPatch);
+    copyUntrackedPaths(
+      request.home,
+      snapshot.source.checkoutRoot,
+      worktree.path,
+      snapshot.untrackedPaths
+    );
+  } else if (dirtySnapshotHasContent(snapshot)) {
+    const { checkoutRoot } = snapshot.source;
+
+    runtime.writeStderr(
+      `Warning: Session worktree for ${request.session} at ${request.sourceRoot} already exists; dirty ${checkoutRoot === request.sourceRoot ? "Source checkout" : `content checkout (${checkoutRoot})`} changes were not carried into it.\n`
+    );
+  }
 }
 
 async function applyPatchAsync(runtime: Runtime, worktreePath: string, patch: string) {
