@@ -419,61 +419,6 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
   return logPath;
 }
 
-export function installFakeGhForMergedPrs(
-  binDirectory: string,
-  options: {
-    prsByHead: Record<string, unknown[]>;
-    repo: string;
-  }
-) {
-  const logPath = path.join(binDirectory, "gh.log");
-
-  const cases = Object.entries(options.prsByHead)
-    .map(
-      ([head, prs]) =>
-        `    ${shellQuote(head)}) printf '%s\\n' ${shellQuote(JSON.stringify(prs))}; exit 0 ;;`
-    )
-    .join("\n");
-
-  const script = `#!/bin/sh
-set -eu
-first_arg=true
-for arg in "$@"; do
-  if [ "$first_arg" = true ]; then
-    first_arg=false
-  else
-    printf ' ' >> ${shellQuote(logPath)}
-  fi
-  printf '%s' "$arg" >> ${shellQuote(logPath)}
-done
-printf '\\n' >> ${shellQuote(logPath)}
-if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
-  printf '%s\\n' ${shellQuote(JSON.stringify({ nameWithOwner: options.repo }))}
-  exit 0
-fi
-if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
-  head=""
-  previous=""
-  for arg in "$@"; do
-    if [ "$previous" = "--head" ]; then
-      head="$arg"
-    fi
-    previous="$arg"
-  done
-  case "$head" in
-${cases}
-    *) printf '[]\\n'; exit 0 ;;
-  esac
-fi
-echo "unsupported gh invocation: $*" >&2
-exit 1
-`;
-
-  writeExecutable(path.join(binDirectory, "gh"), script);
-
-  return logPath;
-}
-
 interface RunMonkeOptions {
   args: string[];
   binDirectory?: string;
