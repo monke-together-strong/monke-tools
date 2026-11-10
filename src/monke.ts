@@ -602,8 +602,8 @@ function configRefOrLocal(runtime: Runtime, sourceRoot: string, ref: string | un
 }
 
 /**
- * Prepare only the Root repo Session worktree, with its default Seed material but no Repo
- * materialization, and fail with the generation-0 receipt.
+ * Run Worktree preparation for the Root repo only, skip Repo materialization, and fail with the
+ * generation-0 receipt.
  */
 async function spawnWithoutConfig(
   runtime: Runtime,

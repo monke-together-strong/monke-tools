@@ -179,7 +179,7 @@ describe("single-repo sessions", () => {
     expect(read(repoRoot, ".env")).toBe("PORT=3000\nOTHER=keep\n");
   });
 
-  it("creates an unmaterialized worktree and warns on spawn without monke.yml", () => {
+  it("creates a seeded, unmaterialized worktree and warns on spawn without monke.yml", () => {
     const sandbox = makeTempDir("single-repo-no-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

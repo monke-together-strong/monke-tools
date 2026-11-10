@@ -27,8 +27,9 @@ export function seedWorktreeFiles(
 }
 
 /**
- * Collect the Baseline ports in the Source checkout's managed env files. The config may come from
- * another branch, so a value without a port is skipped rather than rejected; it cannot collide.
+ * Collect the Baseline ports in the Source checkout's managed env files. The config may come from a
+ * different branch than the Source checkout, so a value without a readable port is skipped rather
+ * than rejected.
  */
 export function collectBaselinePorts(config: RepoConfig) {
   const ports = new Set<number>();
@@ -48,7 +49,7 @@ export function collectBaselinePorts(config: RepoConfig) {
 
     for (const mapping of app.localMappings) {
       for (const rawValue of values.get(mapping.targetEnv) ?? []) {
-        const port = baselinePort(rawValue, `${envPath}:${mapping.targetEnv}`);
+        const port = readPort(rawValue);
 
         if (port !== undefined) {
           ports.add(port);
@@ -58,14 +59,6 @@ export function collectBaselinePorts(config: RepoConfig) {
   }
 
   return ports;
-}
-
-function baselinePort(rawValue: string, location: string) {
-  try {
-    return extractPort(rawValue, location);
-  } catch {
-    return undefined;
-  }
 }
 
 export function rewriteManagedEnvFiles(
@@ -453,12 +446,9 @@ function replaceUrlPort(value: string, newPort: number, location: string) {
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
 
-function extractPort(rawValue: string, location: string) {
+/** Read the port an env value names as a number or a URL port, if it names one. */
+function readPort(rawValue: string) {
   const trimmed = rawValue.trim();
-
-  if (!trimmed) {
-    throw new MonkeError(`Empty env value at ${location}`);
-  }
 
   const unwrapped =
     trimmed.startsWith('"') && trimmed.endsWith('"')
@@ -471,29 +461,9 @@ function extractPort(rawValue: string, location: string) {
     return Number(unwrapped);
   }
 
-  if (!unwrapped.includes("://")) {
-    throw new MonkeError(
-      `Unsupported env value at ${location}: ${describeRedactedValue(unwrapped)}`
-    );
-  }
+  const port = unwrapped.includes("://") ? URL.parse(unwrapped)?.port : undefined;
 
-  let parsed: URL;
-
-  try {
-    parsed = new URL(unwrapped);
-  } catch {
-    throw new MonkeError(
-      `Malformed URL or DSN at ${location}: ${describeRedactedValue(unwrapped)}`
-    );
-  }
-
-  if (!parsed.port) {
-    throw new MonkeError(
-      `Expected explicit port at ${location}: ${describeRedactedValue(unwrapped)}`
-    );
-  }
-
-  return Number(parsed.port);
+  return port ? Number(port) : undefined;
 }
 
 function requireAssignedPort(assignments: Map<string, number>, key: string, appLabel: string) {
