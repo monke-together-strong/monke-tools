@@ -74,13 +74,16 @@ describe("Cleanup authority", () => {
     (operation) => {
       const sandbox = makeTempDir("cleanup-static-authority");
       const home = path.join(sandbox, "home");
+      const cleanupLog = path.join(sandbox, "cleanup.log");
 
       const root = createRepo(path.join(sandbox, "root"), {
-        "monke.yml":
-          'apps: {}\nbootstrapCommand: true\ncleanupCommand: test "$OWNER" = original\nresources:\n  values:\n    OWNER: original\n'.replace(
-            "bootstrapCommand: true",
-            "bootstrapCommand: 'true'"
-          )
+        "monke.yml": `apps: {}
+bootstrapCommand: 'true'
+cleanupCommand: 'printf %s "$OWNER" > "${cleanupLog}"'
+resources:
+  values:
+    OWNER: original
+`
       });
 
       runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
@@ -92,9 +95,8 @@ describe("Cleanup authority", () => {
         cwd,
         monkeHome: home
       });
-      expect(() =>
-        runMonke({ args: ["chop", "retained", "--force"], cwd: root, monkeHome: home })
-      ).not.toThrow();
+      runMonke({ args: ["chop", "retained", "--force"], cwd: root, monkeHome: home });
+      expect(readFileSync(cleanupLog, "utf-8")).toBe("original");
     }
   );
 

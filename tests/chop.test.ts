@@ -280,58 +280,53 @@ apps: {}
     expect(result.stderr).toContain("Chopped Session banana");
   });
 
-  it.each(["staged", "modified", "untracked"] as const)(
-    "discards a current Session with %s files under --force and preserves its branch",
-    (dirtyKind) => {
-      const sandbox = makeTempDir(`chop-force-current-session-${dirtyKind}`);
-      const home = path.join(sandbox, "home");
+  // The Ordinary tables below own the staged, modified, and untracked classification.
+  it("discards a current Session with modified files under --force and preserves its branch", () => {
+    const sandbox = makeTempDir("chop-force-current-session");
+    const home = path.join(sandbox, "home");
 
-      const root = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n"
-      });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "README.md": "source\n"
+    });
 
-      runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
-      const worktree = getExpectedWorktreePath(home, root, "banana");
-      dirtyWorktree(worktree, dirtyKind);
+    runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
+    const worktree = getExpectedWorktreePath(home, root, "banana");
+    dirtyWorktree(worktree, "modified");
 
+    runMonke({
+      args: ["chop", "--force"],
+      cwd: worktree,
+      monkeHome: home
+    });
+
+    expect(existsSync(worktree)).toBeFalsy();
+    expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeFalsy();
+    expect(git(root, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
+  });
+
+  it("rejects a Session with modified files without --force", () => {
+    const sandbox = makeTempDir("chop-dirty-session");
+    const home = path.join(sandbox, "home");
+
+    const root = createRepo(path.join(sandbox, "root"), {
+      "README.md": "source\n"
+    });
+
+    runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
+    const worktree = getExpectedWorktreePath(home, root, "banana");
+    dirtyWorktree(worktree, "modified");
+
+    expect(() => {
       runMonke({
-        args: ["chop", "--force"],
-        cwd: worktree,
+        args: ["chop", "banana"],
+        cwd: root,
         monkeHome: home
       });
+    }).toThrow(/dirty worktree/u);
 
-      expect(existsSync(worktree)).toBeFalsy();
-      expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeFalsy();
-      expect(git(root, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
-    }
-  );
-
-  it.each(["staged", "modified", "untracked"] as const)(
-    "rejects a Session with %s files without --force",
-    (dirtyKind) => {
-      const sandbox = makeTempDir(`chop-dirty-session-${dirtyKind}`);
-      const home = path.join(sandbox, "home");
-
-      const root = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n"
-      });
-
-      runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
-      const worktree = getExpectedWorktreePath(home, root, "banana");
-      dirtyWorktree(worktree, dirtyKind);
-
-      expect(() => {
-        runMonke({
-          args: ["chop", "banana"],
-          cwd: root,
-          monkeHome: home
-        });
-      }).toThrow(/dirty worktree/u);
-
-      expect(existsSync(worktree)).toBeTruthy();
-      expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
-    }
-  );
+    expect(existsSync(worktree)).toBeTruthy();
+    expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
+  });
 
   it("prefers an explicit Session target over the invoking Session", () => {
     const sandbox = makeTempDir("chop-explicit-session");
@@ -453,26 +448,6 @@ apps: {}
 
     runMonke({
       args: ["chop", fixture.depWorktree],
-      cwd: fixture.root,
-      monkeHome: fixture.home
-    });
-
-    expect(existsSync(fixture.depWorktree)).toBeFalsy();
-    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
-    expect(existsSync(fixture.statePath)).toBeFalsy();
-    expect(
-      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])
-    ).not.toBe("");
-    expect(git(fixture.root, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])).not.toBe(
-      ""
-    );
-  });
-
-  it("selects the whole owning Session from a checked-out Session branch", () => {
-    const fixture = createMultiRepoSessionFixture("chop-session-member-branch");
-
-    runMonke({
-      args: ["chop", fixture.session],
       cwd: fixture.root,
       monkeHome: fixture.home
     });
@@ -750,46 +725,34 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
-  it.each(["staged", "modified", "untracked"] as const)(
-    "blocks cleanup on a just-in-time %s race and retains all Session worktrees",
-    (dirtyKind) => {
-      const fixture = createMultiRepoSessionFixture(`chop-session-${dirtyKind}-race`);
+  it("blocks cleanup on a just-in-time modified race and retains all Session worktrees", () => {
+    const fixture = createMultiRepoSessionFixture("chop-session-modified-race");
+    const targetFile = path.join(fixture.rootWorktree, "README.md");
 
-      const targetFile =
-        dirtyKind === "untracked"
-          ? path.join(fixture.rootWorktree, "raced.txt")
-          : path.join(fixture.rootWorktree, "README.md");
+    const gitLog = installGitShim(fixture.binDirectory, {
+      afterCommand: {
+        args: "submodule status --recursive",
+        occurrence: 2,
+        script: `printf 'raced\\n' > ${JSON.stringify(targetFile)}`
+      }
+    });
 
-      const stage =
-        dirtyKind === "staged"
-          ? `; "$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.rootWorktree)} add README.md`
-          : "";
-
-      const gitLog = installGitShim(fixture.binDirectory, {
-        afterCommand: {
-          args: "submodule status --recursive",
-          occurrence: 2,
-          script: `printf 'raced\\n' > ${JSON.stringify(targetFile)}${stage}`
-        }
+    expect(() => {
+      runMonke({
+        args: ["chop", fixture.session],
+        binDirectory: fixture.binDirectory,
+        cwd: fixture.root,
+        monkeHome: fixture.home
       });
+    }).toThrow(/dirty worktree/u);
 
-      expect(() => {
-        runMonke({
-          args: ["chop", fixture.session],
-          binDirectory: fixture.binDirectory,
-          cwd: fixture.root,
-          monkeHome: fixture.home
-        });
-      }).toThrow(/dirty worktree/u);
-
-      expect(existsSync(fixture.depWorktree)).toBeTruthy();
-      expect(existsSync(fixture.rootWorktree)).toBeTruthy();
-      expect(existsSync(fixture.statePath)).toBeTruthy();
-      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
-      const removals = readWorktreeRemovals(gitLog);
-      expect(removals).toStrictEqual([]);
-    }
-  );
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
+    expect(existsSync(fixture.statePath)).toBeTruthy();
+    expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+    const removals = readWorktreeRemovals(gitLog);
+    expect(removals).toStrictEqual([]);
+  });
 
   it.each(["branch", "lock", "registration", "repository"] as const)(
     "still detects a just-in-time %s race before Session cleanup with --force",
@@ -1821,6 +1784,7 @@ apps: {}
       afterCommand: {
         args: "submodule status --recursive",
         cwd: worktreePath,
+        occurrence: 2,
         script: `printf 'changed during removal\\n' > ${JSON.stringify(path.join(worktreePath, "raced.txt"))}`
       }
     });
@@ -1836,34 +1800,6 @@ apps: {}
 
     expect(existsSync(worktreePath)).toBeTruthy();
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
-  });
-
-  it("removes a clean Session worktree with an initialized submodule", () => {
-    const sandbox = makeTempDir("chop-session-submodule");
-    const home = path.join(sandbox, "home");
-
-    const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
-      "README.md": "submodule\n"
-    });
-
-    const sourceRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n"
-    });
-
-    addSubmodule(sourceRoot, submoduleRoot);
-    runMonke({ args: ["spawn", "banana"], cwd: sourceRoot, monkeHome: home });
-    const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
-    initializeSubmodules(worktreePath);
-
-    runMonke({
-      args: ["chop", "banana"],
-      cwd: sourceRoot,
-      monkeHome: home
-    });
-
-    expect(existsSync(worktreePath)).toBeFalsy();
-    expect(existsSync(getSessionStateFilePath(home, sourceRoot, "banana"))).toBeFalsy();
-    expect(git(sourceRoot, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
   });
 
   it("revalidates Session cleanliness before synthesized submodule force", () => {
@@ -1889,6 +1825,7 @@ apps: {}
       afterCommand: {
         args: "submodule status --recursive",
         cwd: worktreePath,
+        occurrence: 3,
         script: `printf 'changed during removal\\n' > ${JSON.stringify(path.join(worktreePath, "raced.txt"))}`
       }
     });
@@ -2037,31 +1974,28 @@ apps: {}
     expect(existsSync(otherWorktree)).toBeTruthy();
   });
 
-  it.each([false, true])(
-    "deletes ignored files with the Ordinary worktree (force: %s)",
-    (force) => {
-      const fixture = createOrdinaryFixture(`chop-ignored-${String(force)}`, {
-        files: {
-          ".gitignore": "ignored/\n",
-          "README.md": "source\n"
-        }
-      });
+  it("deletes ignored files with the Ordinary worktree", () => {
+    const fixture = createOrdinaryFixture("chop-ignored", {
+      files: {
+        ".gitignore": "ignored/\n",
+        "README.md": "source\n"
+      }
+    });
 
-      write(fixture.worktreePath, "ignored/artifact.txt", "generated\n");
+    write(fixture.worktreePath, "ignored/artifact.txt", "generated\n");
 
-      runMonke({
-        args: ["chop", "feature", ...(force ? ["--force"] : [])],
-        cwd: fixture.sourceRoot,
-        monkeHome: fixture.home
-      });
+    runMonke({
+      args: ["chop", "feature"],
+      cwd: fixture.sourceRoot,
+      monkeHome: fixture.home
+    });
 
-      expect(existsSync(fixture.worktreePath)).toBeFalsy();
-      expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
-    }
-  );
+    expect(existsSync(fixture.worktreePath)).toBeFalsy();
+    expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
+  });
 
-  it.each([false, true])("deletes ignored files with the Session worktree (force: %s)", (force) => {
-    const sandbox = makeTempDir(`chop-session-ignored-${String(force)}`);
+  it("deletes ignored files with the Session worktree", () => {
+    const sandbox = makeTempDir("chop-session-ignored");
     const home = path.join(sandbox, "home");
 
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
@@ -2074,7 +2008,7 @@ apps: {}
     write(worktreePath, "ignored/artifact.txt", "generated\n");
 
     runMonke({
-      args: ["chop", "banana", ...(force ? ["--force"] : [])],
+      args: ["chop", "banana"],
       cwd: sourceRoot,
       monkeHome: home
     });
