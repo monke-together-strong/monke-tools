@@ -239,7 +239,7 @@ async function pollStatus(gate: Extract<Gate, { kind: "status" }>, gh: GhApi): P
     }
 
     case "success": {
-      // Railway reports services whose watched paths did not change this way.
+      // Railway reports success with "No deployment needed" when a service's watched paths did not change.
       const deployed = !/no deployment needed/iu.test(status.description ?? "");
 
       return { detail, status: deployed ? "passed" : "skipped" };

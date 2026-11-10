@@ -48,7 +48,7 @@ const ComparisonSchema = z.object({
   status: z.enum(["ahead", "behind", "diverged", "identical"])
 });
 
-/** A member-level Git check. A dependency pass still requires whole-Session preflight. */
+/** Input to one member-level check. A passing dependency still requires whole-Session preflight. */
 export interface CleanupCandidate {
   allowDetached?: boolean;
   archiveUntracked?: boolean;
@@ -151,8 +151,8 @@ interface RepositoryInspection {
 }
 
 /**
- * Ancestry and cross-branch PR proof wait so a just-spawned Session is not removed before work
- * starts.
+ * Every proof except an exact merged-PR head waits this long, so a just-spawned Session is not
+ * removed before work starts. Processes younger than this also block removal.
  */
 export const RECENT_WORKTREE_MS = 24 * 60 * 60 * 1000;
 
@@ -246,10 +246,10 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     ]);
   }
 
-  // A clean worktree whose HEAD is already inside the verified default branch
-  // holds no unique work, whatever its role or PR history. The local check
-  // above already rejected any uncommitted change. A freshly spawned Session
-  // looks the same, so this proof alone waits a day.
+  // A worktree whose HEAD is already inside the verified default branch holds
+  // no unique commits, whatever its role or PR history. The local check above
+  // already rejected uncommitted changes or proved them preserved. A freshly
+  // spawned Session looks the same, so this proof waits a day.
   if (snapshot.ancestorOfDefault) {
     const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
 
@@ -708,7 +708,10 @@ function inspectCandidatePending(
     : null;
 }
 
-/** Recheck local proof synchronously after all members finish provider reads. */
+/**
+ * Recheck local evidence synchronously, after slow provider reads and before acting. Returns a
+ * blocking decision when the checkout changed since collection; otherwise null.
+ */
 export function revalidateCleanupEvidence(
   runtime: Runtime,
   snapshot: CleanupEvidence
@@ -1070,8 +1073,8 @@ async function inspectAncestry(
       return true;
     }
 
-    // Exit 1 means both commits are present and unrelated. Trust it unless history is
-    // shallow, where a cut-off could hide the ancestry.
+    // Exit 1 means both commits are present and head is not an ancestor. Trust it unless
+    // history is shallow, where a cut-off could hide the ancestry.
     if (
       result.exitCode === 1 &&
       runtime

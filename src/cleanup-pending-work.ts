@@ -125,8 +125,7 @@ function diskEntry(root: string, name: string): Entry | null {
     : readFileSync(full);
 
   return {
-    // Git records executable permissions as a mode bit.
-    // oxlint-disable-next-line eslint/no-bitwise
+    // oxlint-disable-next-line eslint/no-bitwise -- stat.mode exposes executable permission only as mode bits.
     mode: stat.isSymbolicLink() ? "120000" : (stat.mode & 0o111) !== 0 ? "100755" : "100644",
     oid: gitBlobOid(bytes)
   };
@@ -164,7 +163,10 @@ function parseIndex(rawIndex: string): Map<string, Entry> | null {
   return index;
 }
 
-/** Complete dirty set, every index entry and raw pending disk bytes; unsupported states fail closed. */
+/**
+ * Snapshot every dirty path's HEAD, index, and disk entries. The fingerprint covers status, the
+ * full index, and pending disk bytes. Unsupported states return null.
+ */
 export function inspectPendingWork(
   runtime: Runtime,
   root: string,
@@ -259,7 +261,10 @@ export function inspectPendingWork(
   }
 }
 
-/** No package-manager invocation, fetch, or Git object writes. */
+/**
+ * Prove that discarding the pending changes loses no work. False means disproven; null means the
+ * evidence is unavailable. Runs no package manager, fetch, or Git object writes.
+ */
 export function provePendingWork(
   runtime: Runtime,
   source: string,

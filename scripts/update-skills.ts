@@ -431,8 +431,6 @@ async function updateSkills(
     runtime
   });
 
-  // Every recipe reaches the loop tail; Oxlint currently misclassifies the try/finally body.
-  // oxlint-disable-next-line no-unreachable-loop
   for (const [index, recipe] of recipes.entries()) {
     let stagingDirectory: string | undefined;
 

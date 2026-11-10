@@ -17,9 +17,9 @@ skills into Monke home with `mt skills adopt ~/.claude/skills/my-workflow`.
 Monke links them to your configured agents. Import private or personal skills with
 `mt skills add /path/to/skill-repo --link`,
 `mt skills add owner/repo`, or `mt skills add --name course --command 'installer --project --yes'`.
-`mt skills update` updates all registered imports and opens one Codiff comparison.
+`mt skills update` updates all registered imports and opens one comparison.
 Recipes, invocation policies, and private content stay outside monke's repository.
-See [imported Skill registry](skills/internal/monke-skills/SKILL.md).
+See [Monke skills](skills/internal/monke-skills/SKILL.md).
 
 For unattended installation, replace the trailing `sh` with `sh -s -- --targets codex claude cursor`. See the [installation guide](skills/internal/monke-install/SKILL.md) for custom targets, local builds, and recovery.
 
@@ -32,16 +32,16 @@ mt spawn banana          # Prepare this repo and its dependencies
 mt diff                  # Review the current checkout through its machine-local adapter
 mt swing '^'             # Return to the source checkout
 mt swing banana          # Return to the session
-mt materialize           # Refresh the session's env and bootstrap
+mt materialize           # Rerun the session's env sync and bootstrap
 ```
 
 Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts. `-m` starts from default branches, and `--from <ref>` starts the root repo from a branch, tag, or commit. A retry of either reuses the commits pinned by the first attempt. Add `--codex` to open the session in Codex. See [Spawn usage](skills/internal/monke-worktrees/SKILL.md#create-and-resume-work) for details.
 
 When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees.
 
-Preview eligible Sessions across discovered Sources with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Repeatable `--source <repo>` options add repositories to discovery without restricting Session selection. Reports list inspected and skipped Sources and count registered linked worktrees.
+Preview eligible Sessions across discovered Sources with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Repeatable `--source <repo>` options add repositories to discovery without restricting Session selection.
 
-Positional worktree paths restrict cleanup targets. Use `--archive-untracked` to preserve untracked notes before removal; see the reference below for missing-worktree recovery and `--include-unowned`. Global scope never bypasses whole-Session eligibility.
+Positional worktree paths restrict cleanup targets. Use `--archive-untracked` to preserve untracked notes before removal. See [cleanup recovery](skills/references/internal/CLEANUP_RECOVERY.md) for missing worktrees and `--include-unowned`.
 
 The [session command reference](skills/internal/monke-worktrees/SKILL.md) covers branch reuse, PR navigation, and cleanup recovery. See [diff usage](skills/internal/monke-diff/SKILL.md) for comparisons and diff bases. Use `mt <command> --help` for available flags.
 
@@ -86,21 +86,13 @@ trees and equal-endpoint ranges are honest empty reviews, not HEAD substitutions
 Explicit sources cannot be combined with each other or `--pick`.
 
 Codiff **1.14.0 or newer is required** for desktop Diff. Stock 1.14.0 supports
-ordinary working-tree, commit, branch, and PR/MR commands without a custom fork or
-capability extension. Older launchers can misclassify provider URLs with trailing
-paths or query strings as branch requests; Monke rejects them before launching.
-PR/MR access and normal provider refresh remain Codiff-owned, including
-provider-reader failures.
+working-tree, commit, branch, and PR/MR comparisons. Codiff owns PR/MR access and
+provider refresh.
 
-**Range-forwarding limitation:** the packaged macOS shell launcher in Codiff 1.14.0
-rewrites positional `main..feature` and `main...feature` into `--branch RANGE`,
-even though the Codiff engine supports native ranges. Monke therefore opens ranges
-only when the invoked launcher advertises `desktop-source-v1` in `--help` and a
-version-1 `--capabilities` response containing `range`. The help probe avoids
-invoking an unknown capability flag on stock launchers. An upstream-only source
-sync or a newer version string alone does not prove this launcher defect is fixed.
-Unsupported ranges, invalid targets, and failed launches report errors without
-substituting another viewer, comparison, or picker.
+**Range limitation:** the packaged macOS launcher in Codiff 1.14.0 rewrites
+`main..feature` and `main...feature` into branch comparisons. Monke opens ranges
+only when the launcher advertises `desktop-source-v1` range support, and otherwise
+fails without opening another comparison.
 
 ## Use checkout resources
 
@@ -165,18 +157,11 @@ mt skills add ../local-file-viewer --project
 ```
 
 Local sources stay linked, so source edits and Git updates appear through the
-project's links. Add `--skill <slugs...>` to select skills. Use `--project` with
-`list`, `update`, `remove`, or `policy` to manage the project's sources.
-For a checkout, project imports prefer `skills/` over `.agents/skills`. Pass the
-exact skill directory to select another source folder.
-The first project install saves your global selection of built-in agent targets,
-or defaults to Codex, Claude, and Cursor if you have no saved selection. Codex
-project skills use `.agents/skills`. Claude and Cursor use their repo skill directories.
-Project registrations stay in shared Git metadata, and generated links are locally
-ignored. Spawn, materialize, and setup recreate links in each checkout. After a
-selection change or removal, run `mt setup` in other existing worktrees.
-
-Monke's skills cover [worktrees and Sessions](skills/internal/monke-worktrees/SKILL.md), [diff review](skills/internal/monke-diff/SKILL.md), [skill management](skills/internal/monke-skills/SKILL.md), and [repo configuration](skills/internal/monke-config/SKILL.md). Link directly to the manual-only [installation](skills/internal/monke-install/SKILL.md) skill when needed. Other workflows live in [internal skills](skills/internal) and [imported guidance](docs/skill-imports.md). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
+project's links. Project registrations stay in shared Git metadata, and generated
+links are locally ignored. Spawn, materialize, and setup recreate links in each
+checkout. After a selection change or removal, run `mt setup` in other existing
+worktrees. See [project installs](skills/internal/monke-skills/SKILL.md#project-installs)
+for skill selection and agent targets.
 
 Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
 

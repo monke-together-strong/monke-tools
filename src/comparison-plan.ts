@@ -52,7 +52,6 @@ export function isReviewUrl(target: string) {
   );
 }
 
-/** Plan a local-working-tree comparison without inspecting Codiff behavior. */
 export function planWorkingTreeComparison(context: RepoContext): ComparisonPlan {
   return { kind: "working-tree", worktreePath: context.worktreeRoot };
 }

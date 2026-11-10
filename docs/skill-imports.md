@@ -47,13 +47,8 @@ outside `skills`.
 
 Run `mt skills restore --repo` after changing selections or overrides, reverting
 pins, or cloning a repo. Restore uses only accepted commits, replaces local edits,
-and prunes guidance no longer declared. An entry without a commit fails and names
-`mt skills update --repo` as the command that pins it. Matching generated files
-and their local marker allow repeated restores without fetching.
-
-If a repo command reports an obstructed restoration marker or conflicting ignore
-rule, correct the reported path before retrying. Monke rejects these conditions
-before changing existing pins or guidance.
+and prunes guidance no longer declared. Matching generated files and their local
+marker allow repeated restores without fetching.
 
 Upstream symlinks must stay inside versioned source and outside Git metadata.
 The recipe's pins and overrides are authoritative. Change the overrides or
@@ -130,5 +125,4 @@ installation keeps that pin and only converts retained skills that monke-tools
 made references, so wrappers of the same name can install. Removing a
 source records that choice so later installations leave it removed. Bare
 `mt skills update` applies the same rules, so a wrapper in a local install's
-checkout installs without reinstalling. Existing machine registries
-migrate to compact recipes on first read.
+checkout installs without reinstalling.

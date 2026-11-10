@@ -38,7 +38,11 @@ process.once("message", (message) => {
 });
 `;
 
-/** A separate process group in the same Unix session preserves the controlling terminal. */
+/**
+ * A separate process group in the same Unix session preserves the controlling terminal. Spawn the
+ * returned command with IPC and send "start" once its PID is recorded; call restore() after it
+ * exits to return the terminal to the original foreground group.
+ */
 export function prepareForegroundCommand(command: string, args: string[]) {
   const library = process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6";
   const libc = dlopen(library, POSIX_SYMBOLS);

@@ -18,6 +18,6 @@ Reject new matches unless the [retention bar](#retention-bar) identifies an inde
 - Names promising behavior inputs/assertions never exercise.
 
 ## Retention bar
-- Keep independent public API, SDK, protocol, config, migration, storage, security, platform, default, prompt-byte, generated cross-language, package, release, architecture contracts. Keep observable ordering + credible regressions.
-- Source inspection valid when cheapest independent guard of user-facing key, byte, path, and survives identifier-only refactoring.
-- Static/slow ≠ deletion reason. Baseline failure may be product bug: reproduce + repair owner; never delete test for it.
+- Keep tests that independently guard a public API, SDK, protocol, config, migration, storage, security, platform, default, prompt-byte, generated cross-language, package, release, or architecture contract. Keep tests of observable ordering and of credible regressions.
+- A source-inspection test is valid when it is the cheapest independent guard of a user-facing key, byte, or path, and it survives identifier-only refactoring.
+- Being static or slow is not a reason to delete a test. A failing test on the base branch may expose a product bug: reproduce it and repair the owning code instead of deleting the test.

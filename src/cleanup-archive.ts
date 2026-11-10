@@ -188,7 +188,7 @@ function assertArchivedFile(
     throw new MonkeError("Cleanup archive file replaced");
   }
 
-  // oxlint-disable-next-line eslint/no-bitwise
+  // oxlint-disable-next-line eslint/no-bitwise -- stat.mode exposes executable permission only as mode bits.
   if (!link && ((stat.mode & 0o111) !== 0) !== (expected?.mode === "100755")) {
     throw new MonkeError("Cleanup archive executable mode changed");
   }

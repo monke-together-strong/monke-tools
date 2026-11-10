@@ -37,7 +37,6 @@ const CONTROL_RE = new RegExp(
   "gu"
 );
 
-/** Options for resolving exact selector-to-slug mappings with isolated installs. */
 export interface ResolveSkillSelectorSlugMappingsOptions {
   /** Upstream Skill import selectors to install one at a time. */
   selectors: readonly string[];

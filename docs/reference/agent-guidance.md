@@ -36,8 +36,6 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Model invocation override**: A local choice recorded by a **Skill import recipe** that replaces an imported skill's upstream model-invocation setting. It may be a source-wide default or a per-skill choice.
 
-**Core distributed skill**: The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration.
-
 **Internal skill**: A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**.
 
 **Imported guidance**: Agent guidance imported from a **Skill import source** and distributed as either an **Imported skill** or an **Imported reference**, whether bundled with monke-tools or registered personally.
@@ -125,7 +123,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 - A **Skill projection** exposes compatible skills and references in one **Agent skill root**. A **Managed skill namespace** groups them; a **Flat skill projection** exposes skills directly.
 - **Shared distributed skills** apply across compatible harnesses; **Harness-specific skills** apply only to their named harness.
 - Each **Imported guidance** item has one **Imported guidance owner** and one **Import kind**. Its recipe retains the source and choices needed to refresh it.
-- **Repo import recipes** belong to their publishing repo. monke-tools declares its own imports this way. A global **Skill registry** includes bundled imports and personal or private sources. A project registry contains only explicitly registered sources. Each registry retains its recipes and invocation choices independently. For a retained source at the bundled pin, installation still applies monke-tools' **Import kind** changes. Installation adds newly declared skills and references unless the registry narrowed that source's selection. At another pin, installation only converts retained skills that monke-tools made references.
+- **Repo import recipes** belong to their publishing repo. monke-tools declares its own imports this way. A global **Skill registry** includes bundled imports and personal or private sources. A project registry contains only explicitly registered sources. Each registry retains its recipes and invocation choices independently.
 - A **Skill import** selects a source collection. **Skill install preferences** select distribution targets; an installer's agent-specific output folder does not restrict those targets.
 - Authored skills from linked and installer-backed sources share editing authority with their **Skill source folder**. Their global and project **Skill projections** expose that same guidance; source refreshes may replace instruction edits. Publisher-declared imports and aliases into their generated folders use consumer-owned copies, preserving the publisher's pins and policies.
 - A skill may be both **Model-invoked** and **User-invoked**.

@@ -27,5 +27,5 @@ next steps.
 If you agree with their recommendations, revise the direction and ask them
 again. Continue until all delegates are satisfied with it.
 
-Do not let repeated rounds result in scope creep. It is your job to fight to
-keep scope limited.
+Hold the request's scope fixed across rounds. Push back on delegate proposals
+that add work the request does not need.

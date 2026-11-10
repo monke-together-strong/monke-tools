@@ -378,7 +378,10 @@ export function reconcileSkillNamespaces(options: {
   }
 }
 
-/** Additional projections replace pre-existing copies without enabling their harness. */
+/**
+ * Refuse adopted projection paths that exist but do not link to their imported skill; return the
+ * links to create.
+ */
 export function preflightAdoptedSkillLinks(root: string) {
   const links = new Map<string, string>();
 

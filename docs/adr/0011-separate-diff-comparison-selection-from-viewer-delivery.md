@@ -1,6 +1,6 @@
 # Separate Diff comparison selection from viewer delivery
 
-The agreed target design keeps `mt diff` as the stable review entry point and selects a machine-local Diff adapter through `mt diff configure`, rather than making the command synonymous with desktop Codiff. Monke owns comparison selection and presentation orchestration; the selected viewer owns rendering and the review lifecycle.
+`mt diff` remains as the stable review entry point and selects a machine-local Diff adapter through `mt diff configure`, rather than becoming synonymous with desktop Codiff. Monke owns comparison selection and presentation orchestration; the selected viewer owns rendering and the review lifecycle.
 
 The initial adapters use desktop Codiff and Monke See. Monke See owns its review CLI and canonical review URL; the Monke adapter passes the requested comparison to that CLI and prints the returned URL unchanged to stdout so callers and agents can relay it. Diagnostics remain on stderr. Monke does not reconstruct Monke See URLs, embed a second web viewer, or take over Monke See repository authorization and runtime configuration.
 
@@ -14,8 +14,4 @@ Monke See owns review-link retention. Links remain usable for 24 hours after the
 
 There is no explicit `--watch` flag. PR reviews fetch newly pushed commits through the viewer's normal Refresh action, with no background PR polling.
 
-This replaces the direct Codiff-only integration in the target design, not in the current implementation.
-
-## Implementation prerequisite
-
-Adapter compatibility must be verified against the executable being invoked, not only Codiff's source parsers. The inspected installed Codiff 1.14.0 desktop helper rewrites positional commit ranges into ordinary ref selectors even though the native parser supports ranges, so local range delivery needs corrected executable-level support. Invalid or unsupported explicit comparisons must fail rather than silently select a different Diff source.
+Monke verifies adapter compatibility against the executable it invokes, not only Codiff's source parsers: the Codiff 1.14.0 desktop launcher rewrites commit ranges into ordinary ref selectors even though its native parser supports ranges. Invalid or unsupported explicit comparisons fail rather than silently select a different Diff source.

@@ -1804,7 +1804,7 @@ repos: []
     );
 
     expect(() => runMonke({ args: ["spawn", "legacy"], cwd: repoRoot, monkeHome: home })).toThrow(
-      /Unsupported Session state version 1.*requires strict v2 Session state/su
+      /Unsupported Session state version 1.*cannot migrate it/su
     );
   });
 

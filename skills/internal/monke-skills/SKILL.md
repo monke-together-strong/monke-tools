@@ -38,8 +38,7 @@ Differences in bytes, metadata, permissions, or structure stop the whole batch;
 reconcile the reported paths and rerun. Individual aliases preserve their external
 source. Relocation checks cover Markdown links and symlinks, not dynamic script
 dependencies or plain-text references; use linked import when dependencies must
-stay external. Publication failures restore the batch or report retained recovery
-copies when restoration is obstructed.
+stay external.
 
 ## Publish repo imports
 
@@ -49,7 +48,7 @@ in the current repo's `monke.yml`. Add `--ref` for non-invocable references.
 or hand edits, run `mt skills restore --repo` to restore pinned imports.
 Run `mt skills update --repo` to pin missing commits, advance existing sources,
 and open one complete content review. Commit `monke.yml` after review. Restored
-files stay gitignored. monke-tools manages its own imports through this scope.
+files stay gitignored.
 
 Repo imports publish guidance alongside a repo's own skills. Global or project
 consumers receive that collection, with their selection and per-skill overrides.
@@ -116,12 +115,10 @@ Each checkout keeps its selections and overrides. Review and commit the changed
 YAML files. See [connected update scope](https://github.com/monke-together-strong/monke-tools/blob/main/docs/skill-imports.md#review-updates)
 for project, release, and installer behavior.
 Update reinstalls a Git source only when its ref resolves to a new commit or its
-restored guidance no longer matches the pin. Up to eight Git sources prepare
-concurrently. Remote Git sources do not wait for installer commands. Linked
-sources, installer commands, and publication run in recipe order.
+restored guidance no longer matches the pin.
 
 When skill or reference content changes, Monke invokes the installed Codex CLI
-with your configured model in read-only sessions, up to eight at once. Codex
+with your configured model in read-only sessions. Codex
 summarizes each changed skill or reference in the terminal and in
 `SKILL_UPDATE_SUMMARY.md` in the saved comparison. Identical changes across
 connected checkouts and installed skills share one summary. If Codex is

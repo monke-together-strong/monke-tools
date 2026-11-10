@@ -82,9 +82,6 @@ interface BuildReleaseBundleOptions {
   version: string;
 }
 
-// Bun 1.4.1 supports this option, but @types/bun 1.4.0 does not declare it yet.
-type BunBuildConfig = Bun.BuildConfig & { bytecodeDepth?: number };
-
 export function isReleaseOwnedPath(filePath: string) {
   const normalized = filePath.replaceAll("\\", "/");
 
@@ -275,7 +272,7 @@ async function compileExecutable(
 ) {
   const target = platform === "macos-arm64" ? "bun-darwin-arm64" : "bun-linux-x64";
 
-  const buildConfig: BunBuildConfig = {
+  const buildConfig: Bun.BuildConfig = {
     bytecode: true,
     bytecodeDepth: 1,
     compile: {

@@ -245,7 +245,7 @@ function resolveSwingTarget(
   }
 
   if (rawTarget.startsWith("mr:")) {
-    throw new MonkeError("Merge request Swing targets are out of scope");
+    throw new MonkeError("Merge request Swing targets are not supported");
   }
 
   if (rawTarget === "@") {

@@ -2,40 +2,11 @@
 
 This is the shared Better Stack query workflow. Repo-local wrapper skills own source IDs, table names, service tags, event names, and reusable domain SQL.
 
-## Commands
-
-Use a repo-local wrapper such as `pnpm betterstack` when available. Otherwise run the bundled CLI directly:
-
-```bash
-bun skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts --help
-```
-
-Supported commands:
-
-- `source list`
-- `source get --id <source-id>`
-- `connection list`
-- `query run --source-id <source-id> --table <table> --sql ...`
-- `query run --source-id <source-id> --table <table> --sql-file <path>`
-- `query run --source-id <source-id> --table <table> --stdin`
-
 ## Credentials
 
-Source and connection metadata commands use a Better Stack API token:
+`--help` lists the credential env vars. Source and connection metadata commands use a Better Stack API token; `query run` uses query connection credentials. When `query run` also has an API token, it checks that the table and query endpoint match the source.
 
-- `BETTER_STACK_TOKEN`
-- `BETTERSTACK_API_TOKEN`
-
-Query execution uses Better Stack query connection credentials:
-
-- `BETTERSTACK_QUERY_URL` or `BETTERSTACK_SQL_URL`
-- `BETTERSTACK_QUERY_HOST` or `BETTERSTACK_SQL_HOST`
-- `BETTERSTACK_QUERY_USERNAME` or `BETTERSTACK_SQL_USERNAME`
-- `BETTERSTACK_QUERY_PASSWORD` or `BETTERSTACK_SQL_PASSWORD`
-
-If `--env-file` is omitted and `.env.demo` exists in the current working directory, the CLI loads it automatically.
-
-Set `BETTERSTACK_ENV_FILE` in a repo-local wrapper script to choose a default env file when credentials do not live at root `.env.demo`.
+Without `--env-file`, the CLI loads `BETTERSTACK_ENV_FILE` when set, otherwise `.env.demo` from the current working directory when it exists. Set `BETTERSTACK_ENV_FILE` in a repo-local wrapper script when credentials live elsewhere.
 
 ## Source Metadata
 
@@ -51,17 +22,9 @@ Capture:
 - table name such as `t<team>.<source_slug>`
 - source `data_region`
 
-If `query run` reports an endpoint or region mismatch, inspect:
-
-```bash
-pnpm betterstack connection list
-```
-
-Then switch to a query connection in the same region as the source.
-
 ## Query Shape
 
-Always include `LIMIT`. Prefer explicit machine-readable output such as `FORMAT JSONEachRow`.
+Always include `LIMIT`. Prefer explicit machine-readable output such as `FORMAT JSONEachRow`. Pass longer SQL with `--sql-file <path>` or `--stdin`.
 
 For retained log history, query both hot and cold storage:
 
@@ -84,36 +47,6 @@ Rules:
 - Use `JSONExtract(..., 'Nullable(...)')` for extracted fields.
 - Use `_row_type = 1` for logs and `_row_type = 3` for spans in `s3Cluster`.
 - Do not stop at generic success markers when the same run id contains errors.
-
-## Execution Patterns
-
-Inline SQL:
-
-```bash
-pnpm betterstack query run \
-  --source-id <source-id> \
-  --table <table> \
-  --sql "SELECT 1 FORMAT JSONEachRow"
-```
-
-SQL file:
-
-```bash
-pnpm betterstack query run \
-  --source-id <source-id> \
-  --table <table> \
-  --sql-file /tmp/betterstack-query.sql
-```
-
-stdin:
-
-```bash
-printf '%s\n' "SELECT 1 FORMAT JSONEachRow" | \
-  pnpm betterstack query run \
-    --source-id <source-id> \
-    --table <table> \
-    --stdin
-```
 
 ## Investigation Closure
 

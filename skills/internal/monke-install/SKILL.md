@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/m
 
 The installer prompts for Codex, Claude, Cursor, or one custom skill root, then saves the selection. Later installs reuse it. `mt skills configure` changes targets or retries skill/instruction reconciliation. Noninteractive release installs without saved or explicit targets activate the core and recommend that command.
 
-For automation, add `--targets codex claude cursor` and/or `--custom-target /absolute/path/to/agent/skills` to the local installer command. For the release pipeline, replace the trailing `sh` with `sh -s --` followed by those options. Explicit selections replace saved preferences.
+For automation, add `--targets codex claude cursor` and/or `--custom-target /absolute/path/to/agent/skills` to the local installer command. For the release installer, replace the trailing `sh` with `sh -s --` followed by those options. Explicit selections replace saved preferences.
 
 `mt update --check` checks availability without changing installation state; successful checks exit zero whether current or outdated. `mt update` activates the highest stable official release without prompting. Both prefer nonempty `GH_TOKEN` over `GITHUB_TOKEN`, otherwise using anonymous access. Updating a local install switches to a release while preserving the source checkout; run `vpr install:local` there to resume local development.
 

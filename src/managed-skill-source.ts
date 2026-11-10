@@ -42,7 +42,7 @@ interface AdoptionPlan {
   slug: string;
 }
 
-/** Compare the guidance digest contract plus empty-directory structure, without dereferencing links. */
+/** Inventory file digests, executable bits, directories, and link targets without following links. */
 function skillInventory(root: string) {
   const entries = new Map<string, string>();
 
@@ -72,7 +72,7 @@ function skillInventory(root: string) {
   return entries;
 }
 
-/** Detect literal packaged dependencies without inferring script or plain-text references. */
+/** List symlinks and relative Markdown links; script and plain-text references are not inferred. */
 function skillDependencies(root: string) {
   const dependencies: { destination: string; file: string; location: string; symlink: boolean }[] =
     [];
@@ -669,7 +669,7 @@ export async function acquireManagedSkillSource(options: {
 
   if (!/^[a-z\d][a-z\d_-]*$/u.test(name)) {
     throw new MonkeError(
-      "Use a lowercase Skill source name containing letters, digits, hyphens, or underscores"
+      `Invalid Skill source name ${name}: use a lowercase Skill source name containing letters, digits, hyphens, or underscores`
     );
   }
 

@@ -12,7 +12,7 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
-// The model post-merge's hand-off names; `t3 thread start` cannot set its reasoning effort.
+// Matches the model in post-merge's hand-off step; `t3 thread start` cannot also set its high effort.
 const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.1-sol"];
 
 const PULL_REQUEST_URL =
