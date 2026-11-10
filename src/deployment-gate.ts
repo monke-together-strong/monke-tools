@@ -5,16 +5,16 @@ import * as z from "zod";
 
 import type { Runtime } from "./types.ts";
 
-export type GateStatus = "passed" | "failed" | "skipped" | "timed_out";
+type GateStatus = "passed" | "failed" | "skipped" | "timed_out";
 
-export interface GateResult {
+interface GateResult {
   readonly detail: string;
   readonly status: GateStatus;
 }
 
 type PollResult = GateResult | { readonly detail: string; readonly status: "pending" };
 
-export type Gate =
+type Gate =
   | {
       readonly job?: string;
       readonly kind: "workflow";
@@ -30,13 +30,11 @@ export type Gate =
     };
 
 /** Reads one GitHub REST endpoint and parses its JSON body. */
-export type GhApi = <T>(endpoint: string, schema: z.ZodType<T>) => Promise<T>;
+type GhApi = <T>(endpoint: string, schema: z.ZodType<T>) => Promise<T>;
 
-export interface WaitOptions {
+interface WaitOptions {
   readonly gh: GhApi;
   readonly intervalMs: number;
-  readonly now?: () => number;
-  readonly sleep?: (ms: number) => Promise<void>;
   readonly timeoutMs: number;
 }
 
@@ -84,10 +82,8 @@ const StatusSchema = z.object({
   )
 });
 
-export async function waitForGate(gate: Gate, options: WaitOptions): Promise<GateResult> {
-  const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? Bun.sleep;
-  const deadline = now() + options.timeoutMs;
+async function waitForGate(gate: Gate, options: WaitOptions): Promise<GateResult> {
+  const deadline = Date.now() + options.timeoutMs;
   let reachable = false;
 
   for (;;) {
@@ -110,12 +106,12 @@ export async function waitForGate(gate: Gate, options: WaitOptions): Promise<Gat
       return result;
     }
 
-    if (now() >= deadline) {
+    if (Date.now() >= deadline) {
       return { detail: result.detail, status: "timed_out" };
     }
 
     // oxlint-disable-next-line no-await-in-loop -- The interval separates checks.
-    await sleep(Math.min(options.intervalMs, deadline - now()));
+    await Bun.sleep(Math.min(options.intervalMs, deadline - Date.now()));
   }
 }
 

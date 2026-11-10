@@ -165,7 +165,7 @@ export function syncRootEnvFileWithRemovals(
   writeFileSync(envPath, rewritten.length > 0 ? `${rewritten.join("\n")}\n` : "", "utf-8");
 }
 
-export function rewriteEnvFile(filePath: string, requests: Map<string, number>) {
+function rewriteEnvFile(filePath: string, requests: Map<string, number>) {
   const original = readFileSync(filePath, "utf-8");
   const lines = original.split("\n");
   const touched = new Set<string>();

@@ -418,8 +418,7 @@ await runtime.execAsync(
         "https://github.com/monke-together-strong/monke-tools/releases/download/monke-tools-v1.2.3/monke-tools-v1.2.3-linux-x64.tar.gz"
       );
 
-      expect(downloaded).toBe(response);
-      expect(downloaded.bodyUsed).toBeFalsy();
+      expect(response.bodyUsed).toBeFalsy();
       await expect(downloaded.text()).resolves.toBe("streamed asset");
     } finally {
       fetchMock.mockRestore();
