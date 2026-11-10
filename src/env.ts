@@ -6,20 +6,12 @@ import { copyMissingEntries } from "./non-clobbering-copy.ts";
 import { samePath } from "./path-identity.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
-/** Options for collecting baseline ports from a concrete repo-content root. */
-export interface CollectBaselinePortsFromRootOptions {
-  /** Parsed repo config whose app env files are inspected. */
-  config: RepoConfig;
-  /** Source content root to read app env files from. */
-  sourceRoot: string;
-}
-
 /**
  * Seed local env, agent, PR, and Monke config files and configured seed paths from the source
  * checkout.
  */
 export function seedWorktreeFiles(
-  config: RepoConfig,
+  config: { seedPaths: readonly string[]; sourceRoot: string },
   worktreeRoot: string,
   onWarning?: (message: string) => void
 ) {
@@ -34,20 +26,20 @@ export function seedWorktreeFiles(
   }
 }
 
-/** Collect content-root ports that local session allocations should avoid. */
-export function collectBaselinePortsFromRoot(options: CollectBaselinePortsFromRootOptions) {
+/**
+ * Collect the Baseline ports in the Source checkout's managed env files. The config may come from a
+ * different branch than the Source checkout, so a value without a readable port is skipped rather
+ * than rejected.
+ */
+export function collectBaselinePorts(config: RepoConfig) {
   const ports = new Set<number>();
 
-  for (const app of options.config.appsInOrder) {
+  for (const app of config.appsInOrder) {
     if (app.localMappings.length === 0) {
       continue;
     }
 
-    const envPath = path.join(
-      options.sourceRoot,
-      path.relative(options.config.sourceRoot, app.absoluteAppPath),
-      app.relativeEnvFile
-    );
+    const envPath = path.join(app.absoluteAppPath, app.relativeEnvFile);
 
     if (!existsSync(envPath)) {
       continue;
@@ -57,7 +49,11 @@ export function collectBaselinePortsFromRoot(options: CollectBaselinePortsFromRo
 
     for (const mapping of app.localMappings) {
       for (const rawValue of values.get(mapping.targetEnv) ?? []) {
-        ports.add(extractPort(rawValue, `${envPath}:${mapping.targetEnv}`));
+        const port = readPort(rawValue);
+
+        if (port !== undefined) {
+          ports.add(port);
+        }
       }
     }
   }
@@ -450,12 +446,9 @@ function replaceUrlPort(value: string, newPort: number, location: string) {
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
 
-function extractPort(rawValue: string, location: string) {
+/** Read the port an env value names as a number or a URL port, if it names one. */
+function readPort(rawValue: string) {
   const trimmed = rawValue.trim();
-
-  if (!trimmed) {
-    throw new MonkeError(`Empty env value at ${location}`);
-  }
 
   const unwrapped =
     trimmed.startsWith('"') && trimmed.endsWith('"')
@@ -468,29 +461,9 @@ function extractPort(rawValue: string, location: string) {
     return Number(unwrapped);
   }
 
-  if (!unwrapped.includes("://")) {
-    throw new MonkeError(
-      `Unsupported env value at ${location}: ${describeRedactedValue(unwrapped)}`
-    );
-  }
+  const port = unwrapped.includes("://") ? URL.parse(unwrapped)?.port : undefined;
 
-  let parsed: URL;
-
-  try {
-    parsed = new URL(unwrapped);
-  } catch {
-    throw new MonkeError(
-      `Malformed URL or DSN at ${location}: ${describeRedactedValue(unwrapped)}`
-    );
-  }
-
-  if (!parsed.port) {
-    throw new MonkeError(
-      `Expected explicit port at ${location}: ${describeRedactedValue(unwrapped)}`
-    );
-  }
-
-  return Number(parsed.port);
+  return port ? Number(port) : undefined;
 }
 
 function requireAssignedPort(assignments: Map<string, number>, key: string, appLabel: string) {

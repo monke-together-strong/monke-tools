@@ -3,7 +3,7 @@ import path from "node:path";
 import { CheckoutResourceStore, resourceOwner } from "./checkout-resource-store.ts";
 import type { CheckoutResources } from "./checkout-resource-store.ts";
 import {
-  collectBaselinePortsFromRoot,
+  collectBaselinePorts,
   rewriteManagedEnvFiles,
   syncRootEnvFileWithRemovals
 } from "./env.ts";
@@ -28,9 +28,7 @@ import type {
 } from "./types.ts";
 
 interface MaterializeRepoOptions {
-  baselinePortsRoot: string;
   dependencyResults: Map<string, RepoMaterializationResult>;
-  diffBaseRef?: string;
   existingState: SessionRepoState | undefined;
   persistRepoState: (
     repoState: SessionRepoState,
@@ -114,7 +112,6 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
 
   const context = {
     ...options,
-    diffBaseRef: options.diffBaseRef || options.existingState?.diffBaseRef,
     hasBootstrapCommand: repoHasBootstrapCommand(options.repoConfig),
     replacementCleanupAuthorityEstablished: false,
     resolvedResourceValues: resolveResourceValues({
@@ -159,7 +156,7 @@ async function resolveCommandsBeforeAssignments(context: RepoMaterializationCont
 function resolveRepoAssignments(
   context: RepoMaterializationContext
 ): RepoMaterializationAssignments {
-  const { baselinePortsRoot, dependencyResults, existingState, repoConfig, store } = context;
+  const { dependencyResults, existingState, repoConfig, store } = context;
 
   const reservation = getOrCreateReservation(
     store.home,
@@ -167,13 +164,8 @@ function resolveRepoAssignments(
     repoConfig.localPortOrder.length
   );
 
-  const baselinePorts = collectBaselinePortsFromRoot({
-    config: repoConfig,
-    sourceRoot: baselinePortsRoot
-  });
-
   const localAssignments = allocateLocalPorts({
-    baselinePorts,
+    baselinePorts: collectBaselinePorts(repoConfig),
     existingRepoState: existingState,
     repoConfig,
     reservation,
@@ -337,7 +329,6 @@ function createRepoMaterializationState(
   return buildSessionRepoState({
     ...state,
     ...cleanupAuthority,
-    diffBaseRef: context.diffBaseRef,
     existingState: context.existingState,
     sourceRoot: context.repoConfig.sourceRoot,
     worktreePath: context.worktreePath
@@ -464,7 +455,6 @@ function buildSessionRepoState(options: {
   assignedPorts: AssignedPort[];
   cleanupCommand?: string;
   cleanupObligated: boolean;
-  diffBaseRef?: string;
   existingState?: SessionRepoState;
   materializationStatus: SessionRepoState["materializationStatus"];
   sourceRoot: string;
@@ -484,12 +474,6 @@ function buildSessionRepoState(options: {
     state.cleanupCommand = options.cleanupCommand;
   } else {
     delete state.cleanupCommand;
-  }
-
-  if (options.diffBaseRef) {
-    state.diffBaseRef = options.diffBaseRef;
-  } else {
-    delete state.diffBaseRef;
   }
 
   // Resource records are authoritative; never copy legacy arrays back into Session state.

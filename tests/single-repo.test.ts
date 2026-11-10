@@ -2,6 +2,7 @@ import {
   chmodSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -178,14 +179,18 @@ describe("single-repo sessions", () => {
     expect(read(repoRoot, ".env")).toBe("PORT=3000\nOTHER=keep\n");
   });
 
-  it("creates an unmaterialized worktree and warns on spawn without monke.yml", () => {
+  it("creates a seeded, unmaterialized worktree and warns on spawn without monke.yml", () => {
     const sandbox = makeTempDir("single-repo-no-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
 
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": ".env\nCLAUDE.local.md\n",
       "README.md": "hello\n"
     });
+
+    write(repoRoot, ".env", "PORT=3000\n");
+    write(repoRoot, "CLAUDE.local.md", "local notes\n");
 
     const result = runMonkeCapturingFailure({
       args: ["spawn", "banana"],
@@ -196,6 +201,8 @@ describe("single-repo sessions", () => {
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "README.md")).toBe("hello\n");
+    expect(read(worktreeRoot, ".env")).toBe("PORT=3000\n");
+    expect(read(worktreeRoot, "CLAUDE.local.md")).toBe("local notes\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
     expect(result.stderr).toContain(
       `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
@@ -287,10 +294,44 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
     expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      diffBaseRef: "refs/heads/main",
       dirtyCarryStatus: "complete",
       preparationStatus: "prepared"
     });
   });
+
+  it.each([true, false])(
+    "records the retrying checkout's branch as the Diff base when Spawn failed before creating the Session branch (monke.yml: %s)",
+    (configured) => {
+      const sandbox = makeTempDir("single-repo-diff-base-retry-branch");
+      const home = path.join(sandbox, "home");
+
+      const repoRoot = createRepo(path.join(sandbox, "root"), {
+        ...(configured ? { "monke.yml": "apps: {}\n" } : {}),
+        "README.md": "hello\n"
+      });
+
+      const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retry-base");
+      mkdirSync(worktreeRoot, { recursive: true });
+
+      const failed = runMonkeCapturingFailure({
+        args: ["spawn", "retry-base"],
+        cwd: repoRoot,
+        monkeHome: home
+      });
+
+      expect(failed.error?.message).toContain("already exists and is not registered");
+      rmSync(worktreeRoot, { recursive: true });
+      git(repoRoot, ["switch", "-c", "feature"]);
+
+      runMonkeCapturingFailure({ args: ["spawn", "retry-base"], cwd: repoRoot, monkeHome: home });
+
+      expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("retry-base");
+      expect(loadSessionState(home, repoRoot, "retry-base").repos[0]?.diffBaseRef).toBe(
+        "refs/heads/feature"
+      );
+    }
+  );
 
   it("preserves Session-local edits after interrupted dirty carry in configured Spawn", () => {
     const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
@@ -993,6 +1034,71 @@ apps:
     expect(existsSync(path.join(worktreeRoot, ".envrc"))).toBeFalsy();
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
     expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_ONLY=1\n");
+  });
+
+  it.each([
+    { args: ["spawn", "fresh"], from: "source" },
+    { args: ["materialize"], from: "worktree" }
+  ])(
+    "avoids source baseline ports when $args.0 resumes an interrupted spawn -m",
+    ({ args, from }) => {
+      const sandbox = makeTempDir("single-repo-resumed-baseline-ports");
+      const home = path.join(sandbox, "home");
+
+      const repoRoot = createRepo(path.join(sandbox, "root"), {
+        "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
+        "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
+      });
+
+      git(repoRoot, ["switch", "-c", "feature"]);
+      write(repoRoot, "apps/api/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
+
+      const interrupted = runMonkeCapturingFailure({
+        args: ["spawn", "fresh", "-m"],
+        cwd: repoRoot,
+        extraEnv: { MONKE_TEST_INTERRUPT_CHECKPOINT: "preparation" },
+        monkeHome: home
+      });
+
+      expect(interrupted.error).not.toBeNull();
+      const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+
+      runMonke({ args, cwd: from === "source" ? repoRoot : worktreeRoot, monkeHome: home });
+
+      expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
+    }
+  );
+
+  it("ignores a portless Source checkout value when collecting baseline ports for spawn -m", () => {
+    const sandbox = makeTempDir("single-repo-portless-baseline");
+    const home = path.join(sandbox, "home");
+
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "API_URL=http://localhost:3000\n",
+      "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: API_URL
+`
+    });
+
+    git(repoRoot, ["switch", "-c", "feature"]);
+    write(repoRoot, "apps/api/.env.local", "API_URL=https://staging.example.com\n");
+
+    runMonke({ args: ["spawn", "fresh", "-m"], cwd: repoRoot, monkeHome: home });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+    expect(read(worktreeRoot, "apps/api/.env.local")).toBe("API_URL=http://localhost:10000\n");
   });
 
   it("prefers fetched origin main over stale local main for spawn -m", () => {

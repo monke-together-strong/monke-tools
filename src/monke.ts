@@ -327,6 +327,10 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       ...plan.pendingDirtyCarry
     };
 
+    if (plan.freshDiffBaseRef !== undefined) {
+      initialState.diffBaseRef = plan.freshDiffBaseRef;
+    }
+
     if (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh") {
       const startRef = execution.getStartRef(repoConfig.sourceRoot);
       initialState.diffBaseRef = startRef.ref;
@@ -334,10 +338,6 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
     }
 
     return createRepoLifecycleNode({
-      baselinePortsFromWorktree:
-        (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "resume") ||
-        (sourcePlan.mode === "session-branch" &&
-          repoConfig.sourceRoot === execution.rootSourceRoot),
       context: {
         home: execution.home,
         retryCommand: formatSpawnRetryCommand(execution.session, sourcePlan),
@@ -353,7 +353,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
           home: execution.home,
           onWorktreeReady: checkpoint,
           plan,
-          repoConfig,
+          seedPaths: repoConfig.seedPaths,
           session: execution.session
         }),
       repoConfig
@@ -362,8 +362,6 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
 }
 
 function createRepoLifecycleNode(options: {
-  /** Read Baseline ports from the prepared Session worktree instead of the Source checkout. */
-  baselinePortsFromWorktree: boolean;
   context: RepoLifecycleNodeContext;
   initialState: SessionRepoState;
   prepare: PrepareRepoLifecycleNode;
@@ -376,11 +374,7 @@ function createRepoLifecycleNode(options: {
     initialState: options.initialState,
     async materialize({ checkpoint, dependencyResults, existingState, prepared }) {
       const result = await materializeRepo({
-        baselinePortsRoot: options.baselinePortsFromWorktree
-          ? prepared.worktreePath
-          : repoConfig.sourceRoot,
         dependencyResults,
-        diffBaseRef: prepared.diffBaseRef,
         existingState,
         persistRepoState: checkpoint,
         repoConfig,
@@ -608,8 +602,8 @@ function configRefOrLocal(runtime: Runtime, sourceRoot: string, ref: string | un
 }
 
 /**
- * Prepare only the Root repo Session worktree, without Seed material or Repo materialization, and
- * fail with the generation-0 receipt.
+ * Run Worktree preparation for the Root repo only, skip Repo materialization, and fail with the
+ * generation-0 receipt.
  */
 async function spawnWithoutConfig(
   runtime: Runtime,
@@ -653,7 +647,7 @@ async function spawnWithoutConfig(
       ...plan.pendingDirtyCarry,
       assignedPorts: [],
       cleanupObligated: false,
-      diffBaseRef: existingRepoState?.diffBaseRef ?? rootStartRef?.ref ?? plan.freshDiffBaseRef,
+      diffBaseRef: rootStartRef?.ref ?? plan.freshDiffBaseRef ?? existingRepoState?.diffBaseRef,
       materializationStatus: "pending",
       pinnedRef:
         sourcePlan.mode === "default-branch"
@@ -681,6 +675,7 @@ async function spawnWithoutConfig(
     existingState: pendingRepoState,
     home,
     plan,
+    seedPaths: [],
     session
   });
 
@@ -988,7 +983,6 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
       getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session);
 
     return createRepoLifecycleNode({
-      baselinePortsFromWorktree: execution.sessionState.graphSource === "session-branch",
       context: {
         home: execution.home,
         retryCommand: "mt materialize",
@@ -1018,7 +1012,7 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
           home: execution.home,
           onWorktreeReady: checkpoint,
           plan,
-          repoConfig,
+          seedPaths: repoConfig.seedPaths,
           session: execution.session
         });
       },

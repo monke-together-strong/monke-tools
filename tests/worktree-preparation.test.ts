@@ -120,6 +120,7 @@ async function prepareFromSessionBranch(
     ),
     home,
     plan,
+    seedPaths: [],
     session
   });
 }
