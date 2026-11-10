@@ -74,7 +74,7 @@ function resolveCheckout(runtime: Runtime) {
   );
 
   const pendingInfrastructureCleanup = Boolean(
-    sessionRepo?.cleanupEligible && sessionRepo.cleanupCommand
+    sessionRepo?.cleanupObligated && sessionRepo.cleanupCommand
   );
 
   const dependencyCheckout = (sourceRoot: string) => {

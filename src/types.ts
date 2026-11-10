@@ -33,7 +33,7 @@ export interface Runtime {
 export type InstallationActivationPhase = "final-rename" | "pointer-replacement";
 
 export type SessionMaterializationCheckpoint =
-  | "cleanup-eligibility"
+  | "cleanup-obligation"
   | "generation-completion"
   | "generation-start"
   | "preparation"

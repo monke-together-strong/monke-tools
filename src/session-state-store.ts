@@ -255,7 +255,7 @@ function parseSessionStateFile(home: string, filePath: string) {
 /**
  * Parse one Session state file, reporting an unsupported version rather than a shape mismatch.
  *
- * The strict v2 schema pins `version`, so a v1 record always fails it. Only that failure path pays
+ * The strict schema pins `version`, so an older record always fails it. Only that failure path pays
  * for a second read; a healthy record is read and parsed once.
  */
 function parseSupportedSessionState(filePath: string) {
@@ -264,7 +264,7 @@ function parseSupportedSessionState(filePath: string) {
   } catch (cause) {
     const { version } = parseOwnedYamlFile(filePath, SessionStateVersionSchema);
 
-    if (version !== 2) {
+    if (version !== 3) {
       throw new MonkeError(
         `Unsupported Session state version ${version} in ${filePath}; mt cannot migrate it. Move the file out of the sessions directory to treat its worktrees as Ordinary worktrees; its Cleanup commands and resource releases will not run.`
       );

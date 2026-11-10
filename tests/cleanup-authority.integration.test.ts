@@ -117,7 +117,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(path.join(fixture.worktreeRoot, "resource-runs"), "utf-8")).toBe("r");
     expect(state.repos[0]).toMatchObject({
       cleanupCommand: cleanupCommand("A", fixture.cleanupLog),
-      cleanupEligible: true
+      cleanupObligated: true
     });
     expect(
       new CheckoutResourceStore(fixture.home).get(
@@ -210,7 +210,7 @@ describe("Cleanup authority", () => {
 
     expect(loadSessionState(fixture.home, fixture.repoRoot, "retained").repos[0]).toMatchObject({
       cleanupCommand: cleanupCommand("A", fixture.cleanupLog),
-      cleanupEligible: true
+      cleanupObligated: true
     });
     runMonke({
       args: ["chop", "retained", "--force"],

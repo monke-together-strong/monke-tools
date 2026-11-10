@@ -46,7 +46,7 @@ const SessionRepoStateFieldsSchema = z.strictObject({
   assignedPorts: z.array(AssignedPortSchema),
   blockedBy: NonEmptyStringSchema.optional(),
   cleanupCommand: NonEmptyStringSchema.optional(),
-  cleanupEligible: z.boolean(),
+  cleanupObligated: z.boolean(),
   diffBaseRef: NonEmptyStringSchema.optional(),
   dirtyCarrySource: z
     .strictObject({
@@ -81,8 +81,8 @@ const SessionRepoStateSchema = SessionRepoStateFieldsSchema.check((context) => {
 });
 
 function validateCleanupLifecycle(repo: ParsedSessionRepoState, issue: LifecycleIssue) {
-  if ((repo.resourceCommandOutputs?.length ?? 0) > 0 && !repo.cleanupEligible) {
-    issue("Resource command outputs require Cleanup eligibility", ["cleanupEligible"]);
+  if ((repo.resourceCommandOutputs?.length ?? 0) > 0 && !repo.cleanupObligated) {
+    issue("Resource command outputs require a Cleanup obligation", ["cleanupObligated"]);
   }
 }
 
@@ -188,7 +188,7 @@ const SessionStateFieldsSchema = z.strictObject({
   session: NonEmptyStringSchema,
   spawnFrom: NonEmptyStringSchema.optional(),
   spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
-  version: z.literal(2)
+  version: z.literal(3)
 });
 
 type ParsedSessionState = z.output<typeof SessionStateFieldsSchema>;
@@ -242,8 +242,8 @@ function validateGeneration(state: ParsedSessionState, issue: LifecycleIssue) {
       ]);
     }
 
-    if (state.repos.some((repo) => repo.cleanupEligible)) {
-      issue("not-started generation cannot be cleanup-eligible", ["generation", "status"]);
+    if (state.repos.some((repo) => repo.cleanupObligated)) {
+      issue("not-started generation cannot carry a Cleanup obligation", ["generation", "status"]);
     }
   } else if (state.generation.number === 0) {
     issue("active or complete generation must have a positive number", ["generation", "number"]);

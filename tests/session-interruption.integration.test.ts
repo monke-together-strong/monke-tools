@@ -18,7 +18,7 @@ import {
 
 interface InterruptionCase {
   checkpoint: SessionMaterializationCheckpoint;
-  expectedCleanupEligible: boolean;
+  expectedCleanupObligated: boolean;
   expectedGeneration: "complete" | "incomplete";
   expectedMaterialization: "materialized" | "pending";
   expectedPreparation: "pending" | "prepared";
@@ -28,7 +28,7 @@ interface InterruptionCase {
 const INTERRUPTIONS: InterruptionCase[] = [
   {
     checkpoint: "generation-start",
-    expectedCleanupEligible: false,
+    expectedCleanupObligated: false,
     expectedGeneration: "incomplete",
     expectedMaterialization: "pending",
     expectedPreparation: "pending",
@@ -36,7 +36,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
   },
   {
     checkpoint: "worktree-ready",
-    expectedCleanupEligible: false,
+    expectedCleanupObligated: false,
     expectedGeneration: "incomplete",
     expectedMaterialization: "pending",
     expectedPreparation: "pending",
@@ -44,7 +44,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
   },
   {
     checkpoint: "preparation",
-    expectedCleanupEligible: false,
+    expectedCleanupObligated: false,
     expectedGeneration: "incomplete",
     expectedMaterialization: "pending",
     expectedPreparation: "prepared",
@@ -52,15 +52,15 @@ const INTERRUPTIONS: InterruptionCase[] = [
   },
   {
     checkpoint: "repo-progress",
-    expectedCleanupEligible: false,
+    expectedCleanupObligated: false,
     expectedGeneration: "incomplete",
     expectedMaterialization: "pending",
     expectedPreparation: "prepared",
     expectedResourceOutputs: false
   },
   {
-    checkpoint: "cleanup-eligibility",
-    expectedCleanupEligible: true,
+    checkpoint: "cleanup-obligation",
+    expectedCleanupObligated: true,
     expectedGeneration: "incomplete",
     expectedMaterialization: "pending",
     expectedPreparation: "prepared",
@@ -68,7 +68,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
   },
   {
     checkpoint: "resource-command-output",
-    expectedCleanupEligible: true,
+    expectedCleanupObligated: true,
     expectedGeneration: "incomplete",
     expectedMaterialization: "pending",
     expectedPreparation: "prepared",
@@ -76,7 +76,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
   },
   {
     checkpoint: "repo-result",
-    expectedCleanupEligible: true,
+    expectedCleanupObligated: true,
     expectedGeneration: "incomplete",
     expectedMaterialization: "materialized",
     expectedPreparation: "prepared",
@@ -84,7 +84,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
   },
   {
     checkpoint: "generation-completion",
-    expectedCleanupEligible: true,
+    expectedCleanupObligated: true,
     expectedGeneration: "complete",
     expectedMaterialization: "materialized",
     expectedPreparation: "prepared",
@@ -131,7 +131,7 @@ export default function () {
     expect(partial.generation.status).toBe(interruption.expectedGeneration);
     expect(partialRepo?.materializationStatus).toBe(interruption.expectedMaterialization);
     expect(partialRepo?.preparationStatus).toBe(interruption.expectedPreparation);
-    expect(partialRepo?.cleanupEligible).toBe(interruption.expectedCleanupEligible);
+    expect(partialRepo?.cleanupObligated).toBe(interruption.expectedCleanupObligated);
     expect(
       new CheckoutResourceStore(home).get(
         resourceOwner(repoRoot, getExpectedWorktreePath(home, repoRoot, "interrupted"))
@@ -203,7 +203,7 @@ apps: {}
     expect(interrupted.error).not.toBeNull();
     expect(loadSessionState(home, repoRoot, "retained").repos[0]).toMatchObject({
       cleanupCommand: `touch "${oldCleanupMarker}"`,
-      cleanupEligible: true,
+      cleanupObligated: true,
       materializationStatus: "pending"
     });
 

@@ -111,14 +111,14 @@ function createMultiRepoSessionFixture(prefix: string, session = "banana") {
       repos: [
         materializedRepoState({
           cleanupCommand: `printf "dep|%s|%s|%s\\n" "$PWD" "$DEP_RESOURCE" "$MONKE_SESSION" >> "${cleanupLog}"`,
-          cleanupEligible: true,
+          cleanupObligated: true,
           resourceValues: [{ env: "DEP_RESOURCE", value: `dep-${session}` }],
           sourceRoot: depRoot,
           worktreePath: depWorktree
         }),
         materializedRepoState({
           cleanupCommand: `printf "root|%s|%s|%s|%s\\n" "$PWD" "$ROOT_RESOURCE" "$ROOT_DYNAMIC" "$MONKE_SESSION" >> "${cleanupLog}"`,
-          cleanupEligible: true,
+          cleanupObligated: true,
           resourceCommandOutputs: [
             {
               name: "root-dynamic",
@@ -166,7 +166,7 @@ function createFailingCleanupSessionFixture(prefix: string) {
     repos: state.repos.map((repo) => ({
       ...repo,
       cleanupCommand: "exit 23",
-      cleanupEligible: true,
+      cleanupObligated: true,
       materializationStatus: "materialized"
     }))
   });
@@ -212,7 +212,7 @@ apps:
     });
 
     expect(spawn.error).not.toBeNull();
-    expect(loadSessionState(home, root, "prepared-only").repos[0]?.cleanupEligible).toBeFalsy();
+    expect(loadSessionState(home, root, "prepared-only").repos[0]?.cleanupObligated).toBeFalsy();
 
     runMonke({
       args: ["chop", "prepared-only", "--force"],
@@ -244,7 +244,7 @@ apps: {}
 
     expect(spawn.error).not.toBeNull();
     expect(
-      loadSessionState(home, root, "failed-materialization").repos[0]?.cleanupEligible
+      loadSessionState(home, root, "failed-materialization").repos[0]?.cleanupObligated
     ).toBeTruthy();
 
     runMonke({
@@ -391,7 +391,7 @@ apps: {}
       repos: [
         {
           assignedPorts: [],
-          cleanupEligible: false,
+          cleanupObligated: false,
           materializationStatus: "materialized",
           preparationStatus: "prepared",
           sourceRoot: fixture.sourceRoot,
@@ -400,7 +400,7 @@ apps: {}
       ],
       rootSourceRoot: fixture.sourceRoot,
       session: "feature",
-      version: 2
+      version: 3
     });
 
     expect(() =>
@@ -969,7 +969,7 @@ external:
         {
           assignedPorts: [],
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
 
@@ -979,7 +979,7 @@ external:
         },
         {
           assignedPorts: [],
-          cleanupEligible: false,
+          cleanupObligated: false,
           failure: {
             message: "Root repo Worktree preparation was interrupted",
             phase: "worktree-preparation"
@@ -992,7 +992,7 @@ external:
       ],
       rootSourceRoot: root,
       session: "partial",
-      version: 2
+      version: 3
     });
 
     runMonke({
@@ -1028,7 +1028,7 @@ external:
 
           cleanupCommand: `printf "retry\\n" >> "${attempts}"; test -f "${allow}"`,
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
           preparationStatus: "prepared",
@@ -1038,7 +1038,7 @@ external:
       ],
       rootSourceRoot: root,
       session: "retry",
-      version: 2
+      version: 3
     });
     const otherStatePath = getSessionStateFilePath(home, root, "other");
     const otherCleanup = path.join(sandbox, "other-cleanup");
@@ -1050,7 +1050,7 @@ external:
 
           cleanupCommand: `touch "${otherCleanup}"`,
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
           preparationStatus: "prepared",
@@ -1060,7 +1060,7 @@ external:
       ],
       rootSourceRoot: root,
       session: "other",
-      version: 2
+      version: 3
     });
 
     expect(() => {
@@ -1230,7 +1230,7 @@ external:
       repos: [
         {
           assignedPorts: [],
-          cleanupEligible: false,
+          cleanupObligated: false,
           materializationStatus: "materialized",
           preparationStatus: "prepared",
           sourceRoot: root,
@@ -1239,14 +1239,14 @@ external:
       ],
       rootSourceRoot: root,
       session: "selected",
-      version: 2
+      version: 3
     });
     saveSessionState(home, {
       generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
-          cleanupEligible: false,
+          cleanupObligated: false,
           materializationStatus: "materialized",
           preparationStatus: "prepared",
           sourceRoot: root,
@@ -1255,7 +1255,7 @@ external:
       ],
       rootSourceRoot: root,
       session: "conflicting",
-      version: 2
+      version: 3
     });
 
     expect(() => {
@@ -1291,7 +1291,7 @@ external:
     write(
       fixture.home,
       "sessions/relevant-corrupt.yml",
-      `version: 2
+      `version: 3
 session: conflicting
 rootSourceRoot: ${JSON.stringify(fixture.root)}
 repos:
@@ -1330,7 +1330,7 @@ repos:
     write(
       home,
       "sessions/relevant-selected-corrupt.yml",
-      `version: 2
+      `version: 3
 session: conflicting
 rootSourceRoot: ${JSON.stringify(root)}
 repos:
@@ -1358,7 +1358,7 @@ repos:
     write(
       fixture.home,
       "sessions/relevant-dependency-corrupt.yml",
-      `version: 2
+      `version: 3
 session: conflicting
 rootSourceRoot: ${JSON.stringify(fixture.root)}
 repos:
@@ -1406,7 +1406,7 @@ apps: {}
 
           cleanupCommand: `printf "saved-dep\\n" >> "${cleanupLog}"`,
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
           preparationStatus: "prepared",
@@ -1418,7 +1418,7 @@ apps: {}
 
           cleanupCommand: `printf "saved-root\\n" >> "${cleanupLog}"`,
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
           preparationStatus: "prepared",
@@ -1428,7 +1428,7 @@ apps: {}
       ],
       rootSourceRoot: root,
       session: "dead",
-      version: 2
+      version: 3
     });
 
     runMonke({

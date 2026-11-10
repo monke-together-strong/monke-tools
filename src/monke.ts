@@ -317,7 +317,7 @@ function isConfiglessPreparedState(state: SessionState) {
     (repo.preparationStatus === "prepared" ||
       repo.preparationStatus === "warning" ||
       repo.preparationStatus === "pending") &&
-    !repo.cleanupEligible &&
+    !repo.cleanupObligated &&
     repo.cleanupCommand === undefined &&
     repo.assignedPorts.length === 0 &&
     repo.resourceCommandOutputs === undefined &&
@@ -949,7 +949,7 @@ function createConfiglessSessionState(
         {
           ...spawn.existingRepoState,
           assignedPorts: [],
-          cleanupEligible: false,
+          cleanupObligated: false,
           diffBaseRef: prepared.diffBaseRef,
           dirtyCarrySource: options.dirtyCarrySource,
           dirtyCarryStatus: options.dirtyCarryStatus,
@@ -965,7 +965,7 @@ function createConfiglessSessionState(
     session: spawn.session,
     spawnFrom: spawnOptions.mode === "default-branch" ? spawnOptions.from : undefined,
     spawnSource: spawnOptions.mode === "current-head" ? undefined : spawnOptions.mode,
-    version: 2
+    version: 3
   };
 }
 
@@ -1176,7 +1176,7 @@ function createNewSessionState(
     ),
     rootSourceRoot,
     session,
-    version: 2
+    version: 3
   };
 }
 

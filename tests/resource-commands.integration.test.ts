@@ -252,7 +252,7 @@ export default function ({ previous }) {
       completeSessionState({
         repos: [
           materializedRepoState({
-            cleanupEligible: true,
+            cleanupObligated: true,
             resourceCommandOutputs: [
               {
                 name: "e2e-symbols",
@@ -308,7 +308,7 @@ export default function ({ previous }) {
         {
           assignedPorts: [],
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
 
@@ -330,7 +330,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "retained-a",
-      version: 2
+      version: 3
     });
     saveSessionState(scenario.home, {
       generation: { number: 1, status: "complete" },
@@ -338,7 +338,7 @@ export default function ({ previous }) {
         {
           assignedPorts: [],
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
 
@@ -358,7 +358,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "retained-b",
-      version: 2
+      version: 3
     });
     saveSessionState(scenario.home, {
       generation: { number: 1, status: "complete" },
@@ -366,7 +366,7 @@ export default function ({ previous }) {
         {
           assignedPorts: [],
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
 
@@ -383,7 +383,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "current",
-      version: 2
+      version: 3
     });
 
     scenario.spawn("current");
@@ -485,7 +485,7 @@ export default function ({ previous }) {
         {
           assignedPorts: [],
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
 
@@ -505,7 +505,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 2
+      version: 3
     });
 
     scenario.spawn("second");
@@ -610,7 +610,7 @@ export default function ({ previous }) {
         {
           assignedPorts: [],
 
-          cleanupEligible: true,
+          cleanupObligated: true,
 
           materializationStatus: "materialized",
 
@@ -627,7 +627,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 2
+      version: 3
     });
 
     scenario.spawn("second");

@@ -52,7 +52,7 @@ function fixture() {
     generation: { number: 1, status: "complete" },
     repos: sources.map((sourceRoot) => ({
       assignedPorts: [],
-      cleanupEligible: true,
+      cleanupObligated: true,
       materializationStatus: "materialized",
       preparationStatus: "prepared",
       sourceRoot,
@@ -60,7 +60,7 @@ function fixture() {
     })),
     rootSourceRoot: root,
     session,
-    version: 2
+    version: 3
   };
 
   saveSessionState(home, state);

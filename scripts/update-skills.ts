@@ -865,7 +865,9 @@ function validateImportedGuidanceDirectoriesAreTracked(
     );
 
     if (untrackedSlugs.length > 0) {
-      throw new MonkeError(`Untracked imported ${kind} directories: ${untrackedSlugs.join(", ")}`);
+      throw new MonkeError(
+        `Untracked imported ${kind} directories in ${path.join(repoRoot, root)}: ${untrackedSlugs.join(", ")}. Declare them with mt skills add <source> --skill <slug>, or remove those directories.`
+      );
     }
   }
 }
