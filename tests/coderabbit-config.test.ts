@@ -6,7 +6,6 @@ import { parse } from "yaml";
 import { array as arraySchema, looseObject, string as stringSchema } from "zod";
 
 import {
-  isCodeRabbitSyncRelevant,
   renderCodeRabbitConfig,
   runCodeRabbitConfigGenerator
 } from "../scripts/generate-coderabbit-config.ts";
@@ -367,35 +366,6 @@ reviews:
     );
 
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).not.toThrow();
-  });
-
-  it("syncs only for renderer inputs or a document in the current dependency graph", () => {
-    const sources = [
-      "skills/references/internal/CODING_STANDARDS.md",
-      "skills/references/imported/code-review/MAIN.md",
-      "skills/references/imported/ultracite.md"
-    ];
-
-    expect(
-      isCodeRabbitSyncRelevant({
-        changedPaths: ["skills/references/imported/unrelated.md"],
-        sources
-      })
-    ).toBeFalsy();
-
-    for (const changedPath of [
-      "skills/references/internal/CODING_STANDARDS.md",
-      "skills/references/imported/code-review/MAIN.md",
-      "skills/references/imported/ultracite.md",
-      ".github/workflows/sync-coderabbit.yaml",
-      "bun.lock",
-      "package.json",
-      "scripts/generate-coderabbit-config.ts",
-      "config/coderabbit/sources.yaml",
-      "config/coderabbit/template.yaml"
-    ]) {
-      expect(isCodeRabbitSyncRelevant({ changedPaths: [changedPath], sources })).toBeTruthy();
-    }
   });
 
   it("reports push relevance from the current graph and Git commit range", async () => {

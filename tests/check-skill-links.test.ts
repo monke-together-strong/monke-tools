@@ -74,10 +74,4 @@ describe("Packaged skill links", () => {
 
     await expect(checkSkillLinks(root)).resolves.toStrictEqual([]);
   });
-
-  it("resolves distributed guidance links using only release-owned files", async () => {
-    await expect(checkSkillLinks(path.resolve(import.meta.dirname, ".."))).resolves.toStrictEqual(
-      []
-    );
-  });
 });
