@@ -523,7 +523,7 @@ function worktreeAge(worktreePath: string): number | null {
   }
 }
 
-/** Read-only collection: no fetch, optional Git writes, write lock, or teardown. */
+/** Read-only collection: no fetch, optional Git writes, write lock, or Session removal. */
 export async function collectCleanupEvidence(
   runtime: Runtime,
   candidate: CleanupCandidate,

@@ -5,22 +5,22 @@ import { resourceCommandsForRelease } from "./resource-lifecycle.ts";
 import type { SessionAction } from "./session-removal.ts";
 import type { SessionState, SessionRepoState } from "./types.ts";
 
-export interface FinalizationOptions {
+export interface CleanupObligationOptions {
   cleanupFromSource?: boolean;
   recoveryCommand?: string;
 }
 
 /** Inspect retained obligations without migrating records or running cleanup. */
-export function inspectSessionFinalization(
+export function inspectCleanupObligations(
   home: string,
   state: SessionState,
-  options: FinalizationOptions = {}
+  options: CleanupObligationOptions = {}
 ) {
   const store = new CheckoutResourceStore(home, [state]);
 
   const repos = state.repos
     .toReversed()
-    .map((repo) => inspectRepoFinalization(store, state, repo, options));
+    .map((repo) => inspectRepoCleanupObligations(store, state, repo, options));
 
   return {
     actions: repos.flatMap(({ actions }) => actions),
@@ -31,11 +31,11 @@ export function inspectSessionFinalization(
 }
 
 /** One repo's Cleanup obligations, read from its canonical Checkout resource record. */
-export function inspectRepoFinalization(
+export function inspectRepoCleanupObligations(
   store: CheckoutResourceStore,
   state: SessionState,
   repo: SessionRepoState,
-  { cleanupFromSource, recoveryCommand }: FinalizationOptions
+  { cleanupFromSource, recoveryCommand }: CleanupObligationOptions
 ) {
   const record = store.get(resourceOwner(repo.sourceRoot, repo.worktreePath, state.session));
   const releaseCommands = resourceCommandsForRelease(record);

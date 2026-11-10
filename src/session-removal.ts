@@ -4,6 +4,7 @@ import path from "node:path";
 import { CheckoutResourceStore, resourceOwner } from "./checkout-resource-store.ts";
 import { archiveCleanupFiles, assertCleanupArchive } from "./cleanup-archive.ts";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
+import { inspectRepoCleanupObligations, inspectCleanupObligations } from "./cleanup-obligations.ts";
 import {
   assertRetainedHead,
   preserveDetachedHead,
@@ -16,7 +17,6 @@ import { containsPath, samePath } from "./path-identity.ts";
 import { releaseCheckoutResources } from "./resource-lifecycle.ts";
 import { acquireCheckoutResourceLock } from "./runtime.ts";
 import type { SessionCleanupMember } from "./session-cleanup-eligibility.ts";
-import { inspectRepoFinalization, inspectSessionFinalization } from "./session-finalization.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
   inspectSessionRepoRegistration
@@ -66,12 +66,12 @@ export interface SessionRemovalOptions {
   recoveryCommand?: string;
 }
 
-/** Tracks the current step, a possibly effective attempt, and completed actions. */
+/** Tracks the current step, the action whose effect may have happened, and completed actions. */
 export class SessionRemovalProgress {
   attempted: SessionAction | undefined;
   readonly completed: SessionAction[] = [];
   current: SessionAction;
-  /** Set once preflight passes; a retry still owes whatever of it did not complete. */
+  /** Set once preflight passes; a failure derives the remaining actions from it. */
   planned: SessionAction[] | undefined;
   started = false;
 
@@ -104,8 +104,9 @@ export interface SessionRemovalChecks {
   /** Runs after the checkout resource locks are held, before preflight or any effect. */
   beforeStart?: (progress: SessionRemovalProgress) => void;
   /**
-   * Runs for each live member in removal order, after its detached HEAD is retained and before
-   * Cleanup obligations. Effects must be reported through `progress`.
+   * Runs for each member still registered with Git (live or stale), in removal order, after its
+   * detached HEAD is retained and before Cleanup obligations. Effects must be reported through
+   * `progress`.
    */
   prepareMember?: (repo: SessionRepoState, progress: SessionRemovalProgress) => void;
   /** Rechecks the caller's own evidence each time removal revalidates a member. */
@@ -123,7 +124,7 @@ export type SessionRemovalResult =
       current: SessionAction;
       /** "not-started" means no effect was attempted. */
       outcome: "failed" | "not-started";
-      /** What a retry still has to do; undefined when removal stopped before it planned. */
+      /** What a retry still has to do; undefined before planning or when retry inspection failed. */
       remaining: SessionAction[] | undefined;
       retryInspectionFailure?: string;
       /** Cleanup obligations a retry runs again. */
@@ -194,8 +195,8 @@ function worktreeRemoval(repo: SessionRepoState): SessionAction {
 
 /**
  * The ordered effects of removing one Session: archives, retained detached HEADs, Cleanup
- * obligations, worktree removals, then state. Execution derives each phase from the same members,
- * so a Cleanup preview lists what execution does.
+ * obligations, worktree removals, then state. Execution applies the same per-member rules, so a
+ * Cleanup preview lists what execution does, except conditional process stops.
  */
 function planActions(
   state: SessionState,
@@ -244,8 +245,9 @@ export function planSessionRemoval(
 }
 
 /**
- * Remove a Session's worktrees and state while preserving local branches. A failure is returned,
- * not thrown, with how far removal got so the caller can explain and retry.
+ * Perform Session removal while preserving local branches, including recorded resource releases and
+ * Cleanup commands. A failure is returned, not thrown, with how far removal got so the caller can
+ * explain and retry.
  */
 export function removeSession(
   runtime: Runtime,
@@ -290,7 +292,7 @@ function failure(
   let retryInspectionFailure: string | undefined;
 
   try {
-    retryObligations = inspectSessionFinalization(home, state, options).actions;
+    retryObligations = inspectCleanupObligations(home, state, options).actions;
   } catch (inspectionCause) {
     retryInspectionFailure = errorMessage(ThrownValueSchema.parse(inspectionCause));
   }
@@ -350,7 +352,7 @@ function removeLocked(
   progress.planned = planActions(
     state,
     members,
-    inspectSessionFinalization(home, state, options).actions,
+    inspectCleanupObligations(home, state, options).actions,
     options.invocationPath
   );
 
@@ -415,7 +417,7 @@ function removeLocked(
 
       if (candidate.mode !== current.mode) {
         throw new MonkeError(
-          `Session worktree presence changed after preflight at ${current.repo.worktreePath}; retry teardown`
+          `Session worktree presence changed after preflight at ${current.repo.worktreePath}; rerun to inspect the Session again`
         );
       }
 
@@ -428,7 +430,7 @@ function removeLocked(
     effect(action, run);
   });
 
-  // Shutdown and cleanup commands can modify any sibling. Recheck the whole Session
+  // Process stops and Cleanup commands can modify any sibling. Recheck the whole Session
   // before removing its first worktree, then recheck each member at removal.
   revalidateAll();
 
@@ -512,12 +514,12 @@ function runCleanupObligations(
   for (const repo of state.repos) {
     progress.step(memberRevalidation(repo));
     assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
-    assertCleanupWorktree(inspectRepoFinalization(store, state, repo, options));
+    assertCleanupWorktree(inspectRepoCleanupObligations(store, state, repo, options));
   }
 
   for (const repo of state.repos.toReversed()) {
     // Read the canonical record under the locks before executing this repo.
-    const pending = inspectRepoFinalization(store, state, repo, options);
+    const pending = inspectRepoCleanupObligations(store, state, repo, options);
     assertCleanupWorktree(pending);
     const { cleanupAction, cleanupCommand, cleanupCwd, record, releaseAction } = pending;
     store.save(record);
@@ -580,10 +582,10 @@ function runCleanupObligations(
   }
 }
 
-function assertCleanupWorktree(pending: ReturnType<typeof inspectRepoFinalization>) {
+function assertCleanupWorktree(pending: ReturnType<typeof inspectRepoCleanupObligations>) {
   if (pending.recoveryRequired) {
     throw new MonkeError(
-      `Cannot run cleanup: Session worktree is missing: ${pending.record.owner.checkoutPath}. ` +
+      `Cannot satisfy Cleanup obligations: Session worktree is missing: ${pending.record.owner.checkoutPath}. ` +
         `Restore the worktree and retry. Only if the recorded commands are safe from source checkouts, ` +
         `use mt chop <session> --cleanup-from-source for explicit recovery. Session state is retained.`
     );
@@ -616,7 +618,7 @@ function assertSessionMemberUnchanged(
 ) {
   if (candidate.mode === "gone" && current.mode !== "gone") {
     throw new MonkeError(
-      `Session worktree reappeared after preflight at ${current.repo.worktreePath}; retry teardown to inspect it before cleanup`
+      `Session worktree reappeared after preflight at ${current.repo.worktreePath}; rerun to inspect it before removal`
     );
   }
 
@@ -688,7 +690,7 @@ function preflightSession(
   if (failed) {
     progress.step({ sourceRoot: failed.sourceRoot, step: "revalidation" });
     throw new MonkeError(
-      `Cannot Chop Session ${state.session}; preflight failed:\n${failures
+      `Cannot remove Session ${state.session}; preflight failed:\n${failures
         .map((problem) => `- ${problem.message}`)
         .join("\n")}`
     );
@@ -746,7 +748,7 @@ function warnSessionBranchMismatch(
   }
 
   createLogger(runtime).warning(
-    `Session ${state.session} worktree ${candidate.repo.worktreePath} ${mismatch}; chopping it anyway`
+    `Session ${state.session} worktree ${candidate.repo.worktreePath} ${mismatch}; removing it anyway`
   );
 }
 

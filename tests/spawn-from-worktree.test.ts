@@ -127,6 +127,22 @@ describe("spawn from worktrees", () => {
     expect(loadSessionState(home, root, "interrupted").repos[0]?.dirtyCarryStatus).toBe("complete");
   });
 
+  it("carries the invoking worktree's HEAD and edits into a config-less Spawn", () => {
+    const { donor, home, root } = createWorktreeFixture({ configless: true });
+    write(donor, "tracked.txt", "donor edits\n");
+
+    const result = runMonkeCapturingFailure({
+      args: ["spawn", "configless"],
+      cwd: donor,
+      monkeHome: home
+    });
+
+    const target = getExpectedWorktreePath(home, root, "configless");
+    expect(result.error?.message).toContain(`Prepared Root repo Session worktree: ${target}`);
+    expect(git(target, ["rev-parse", "HEAD"])).toBe(git(donor, ["rev-parse", "HEAD"]));
+    expect(read(target, "tracked.txt")).toBe("donor edits\n");
+  });
+
   it.each([false, true])(
     "checks the invoking checkout for --no-dirty (detached: %s)",
     (detached) => {
@@ -193,12 +209,12 @@ describe("spawn from worktrees", () => {
   });
 });
 
-function createWorktreeFixture() {
+function createWorktreeFixture(options: { configless?: boolean } = {}) {
   const sandbox = makeTempDir("spawn-worktree-modes");
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
-    "monke.yml": "apps: {}\n",
+    ...(options.configless === true ? {} : { "monke.yml": "apps: {}\n" }),
     "tracked.txt": "base\n"
   });
 

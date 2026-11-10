@@ -15,7 +15,7 @@ import {
 import { createRepo, git, makeTempDir } from "./helpers.ts";
 
 describe("Worktree preparation", () => {
-  it("requires cleanup before recreating a missing Session worktree", async () => {
+  it("requires recovering a stale worktree registration before recreating the Session worktree", async () => {
     const sandbox = makeTempDir("worktree-preparation-recreate");
     const sourceRoot = createRepo(path.join(sandbox, "root"), { "README.md": "base\n" });
     const runtime = createRuntime({ cwd: sourceRoot });

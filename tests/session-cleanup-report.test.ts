@@ -244,17 +244,17 @@ describe("Session cleanup explanations", () => {
     expect(formatSessionCleanupReport(report)).toContain("Eligible (not attempted)");
   });
 
-  it("reports a failed teardown's step and repo without claiming the whole Session was retained", () => {
+  it("reports a failed Session removal's step and repo without claiming the whole Session was retained", () => {
     const report = reportFor(fixture(), {
       message: "Channel deletion failed",
       outcome: "failed",
       sourceRoot: "/sources/root",
-      step: "teardown"
+      step: "cleanup-command"
     });
 
     expect(report.outcome).toBe("failed");
     const text = formatSessionCleanupReport(report);
-    expect(text).toContain("teardown failed in /sources/root: Channel deletion failed");
+    expect(text).toContain("cleanup-command failed in /sources/root: Channel deletion failed");
     expect(text).toContain("earlier steps may have succeeded");
     expect(text).not.toContain("Entire Session retained");
   });

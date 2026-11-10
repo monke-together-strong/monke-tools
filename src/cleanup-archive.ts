@@ -23,7 +23,7 @@ import { MonkeError } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
-/** Preserve the exact untracked bundle in an immutable, private archive before teardown. */
+/** Preserve the exact untracked bundle in an immutable, private archive before Session removal. */
 export function archiveCleanupFiles(runtime: Runtime, home: string, evidence: CleanupEvidence) {
   const proof = evidence.pendingWork;
   const { sourceRoot, worktreePath } = evidence.candidate;

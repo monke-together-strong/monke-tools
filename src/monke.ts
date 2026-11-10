@@ -639,7 +639,7 @@ async function spawnWithoutConfig(
   ok(plan, `Missing Worktree preparation plan for ${rootSourceRoot}`);
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
 
-  // Unlike configured Spawn, this checkpoint records a fresh Diff base before the worktree exists.
+  // Record the Diff base before creating the worktree, so a retry keeps it after the Session branch exists.
   const pendingRepoState = createInitialRepoLifecycleState(
     { cleanupCommand: undefined, sourceRoot: rootSourceRoot },
     worktreePath,
@@ -686,7 +686,7 @@ async function spawnWithoutConfig(
 
   store.checkpoint(preparedState);
   runtime.writeStderr(
-    `Warning: no monke.yml found for ${rootSourceRoot}; prepared session worktree without materializing it.\n`
+    `Warning: no monke.yml found for ${rootSourceRoot}; prepared the Session worktree without materializing it.\n`
   );
   throw new MonkeError(
     formatFailureReceipt(preparedState, {

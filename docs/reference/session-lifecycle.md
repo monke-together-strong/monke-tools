@@ -22,7 +22,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Cleanup obligation**: A repo's retained requirement to run its **Cleanup command** before its **Session state** can be removed. _Avoid_: Cleanup eligibility, prepared state, worktree existence
 
-**Session removal**: The ordered effects that remove one **Session**: preserving work that **Cleanup** proved, satisfying **Cleanup obligations**, removing each **Session worktree** with the invoking member last (otherwise the **Root repo** last), and **Session finalization**. Both **Chop** and **Cleanup** perform it, and a Cleanup dry run previews it.
+**Session removal**: The ordered effects that remove one **Session**: preserving work that **Cleanup** proved, satisfying **Cleanup obligations**, removing each **Session worktree**, and **Session finalization**. Both **Chop** and **Cleanup** perform it, and a Cleanup dry run previews it.
 
 **Session finalization**: Completion of **Session removal** after its **Cleanup obligations** are satisfied and all recorded worktrees are gone.
 
@@ -71,6 +71,6 @@ Part of the [domain glossary](../../GLOSSARY.md).
 - Each **Session** has one participating worktree per repo. **Worktree preparation** can complete independently; **Repo materialization** depends on that repo's preparation and its dependencies' materialization.
 - An incomplete **Materialization generation** retains completed work for resumption. A completed generation may be followed by another.
 - A **Prepared worktree** alone creates no **Cleanup obligation**. Repos incur Cleanup obligations during materialization.
-- **Chop** selects a whole Session or one Ordinary worktree. Only Session removal includes **Session finalization**.
+- **Chop** selects a whole Session or one Ordinary worktree; only a Session target performs **Session removal**.
 - A **Missing Session worktree** can still have a **Cleanup obligation**. Missing directories do not imply finalization.
 - **Swing** changes the working location; **Diff** changes neither the checkout nor its branch. A **Shell adapter** connects navigation to the user's shell.

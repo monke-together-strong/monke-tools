@@ -198,7 +198,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("hello\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
     );
     expect(result.error?.message).toContain(
       "Session materialization failed after all runnable work settled."
@@ -862,7 +862,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("main\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("fresh");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -1769,7 +1769,7 @@ apps:
     });
 
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
     );
   });
 

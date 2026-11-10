@@ -454,7 +454,7 @@ function reportSession(
     ? planSessionRemoval(
         state,
         snapshot.members,
-        snapshot.finalization?.actions ?? [],
+        snapshot.obligations?.actions ?? [],
         invocationPath(state, cwd)
       )
     : [];
@@ -547,7 +547,7 @@ function executeSession(
       },
       beforeStart(progress) {
         guard();
-        // Check every member before archives, process shutdown, or resource effects.
+        // Check every member before archives, process stops, or resource effects.
         processes = inspectProcesses(progress);
       },
       prepareMember(repo, progress) {

@@ -1,4 +1,4 @@
-// Dirty carry for Worktree preparation. Only worktree-preparation.ts imports this file.
+// Dirty carry for Worktree preparation; other modules go through worktree-preparation.ts.
 import {
   copyFileSync,
   existsSync,
@@ -26,7 +26,10 @@ export interface DirtySnapshot {
   untrackedPaths: string[];
 }
 
-/** Capture a content checkout's changes; an interrupted carry must resume from the same donor. */
+/**
+ * Capture a content checkout's changes. Throws when a pending carry recorded a different content
+ * checkout or HEAD.
+ */
 export function captureDirtySnapshot(
   runtime: Runtime,
   source: CheckoutSource,
@@ -77,8 +80,9 @@ function assertDirtyCarrySource(source: CheckoutSource, state: SessionRepoState 
 }
 
 /**
- * The dirty-carry fields to record before preparation starts: a carry stays pending until applied
- * when it resumes or when the snapshot has content for a Session worktree that does not exist yet.
+ * The pending dirty-carry fields to record before preparation starts, or undefined. A carry is
+ * tracked when it is resuming, or when the snapshot has content and the Session worktree does not
+ * exist yet.
  */
 export function trackDirtyCarry(
   snapshot: DirtySnapshot,
@@ -128,14 +132,14 @@ export function assertDirtyCarryBoundary(
 }
 
 /**
- * Apply the snapshot to a newly created Session worktree or one whose carry is resuming; warn
- * instead when an existing worktree would otherwise receive it.
+ * Apply the snapshot to a newly created Session worktree or one with a pending carry; warn instead
+ * when an existing worktree would otherwise receive it.
  */
 export async function carryDirtySnapshot(
   runtime: Runtime,
   request: {
     home: string;
-    resumes: boolean;
+    pending: boolean;
     session: string;
     snapshot: DirtySnapshot;
     sourceRoot: string;
@@ -144,7 +148,7 @@ export async function carryDirtySnapshot(
 ) {
   const { snapshot, worktree } = request;
 
-  if (worktree.created || request.resumes) {
+  if (worktree.created || request.pending) {
     await applyPatchAsync(runtime, worktree.path, snapshot.trackedPatch);
     copyUntrackedPaths(
       request.home,

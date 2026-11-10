@@ -88,7 +88,7 @@ export type SessionCleanupExecution = (
       message: string;
       outcome: "failed" | "skipped";
       sourceRoot: string;
-      step: SessionAction["step"] | "teardown" | "finalization";
+      step: SessionAction["step"];
     }
 ) & {
   attemptedAction?: SessionAction;

@@ -13,12 +13,12 @@ import {
   revalidateCleanupEvidence
 } from "./cleanup-eligibility.ts";
 import type { CleanupCode, CleanupDecision, CleanupEvidence } from "./cleanup-eligibility.ts";
+import { inspectCleanupObligations } from "./cleanup-obligations.ts";
 import { inspectStaleRegistration } from "./cleanup-stale-registration.ts";
 import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { OperationLock } from "./runtime.ts";
-import { inspectSessionFinalization } from "./session-finalization.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
   inspectSessionRepoRegistration
@@ -73,8 +73,8 @@ export interface SessionCleanupMember {
 export interface SessionCleanupEvidence {
   blockers: SessionCleanupBlocker[];
   filePath: string;
-  finalization?: ReturnType<typeof inspectSessionFinalization>;
   members: SessionCleanupMember[];
+  obligations?: ReturnType<typeof inspectCleanupObligations>;
   problems?: SessionCleanupProblem[];
   rootSourceRoot: string | null;
   session: string | null;
@@ -118,7 +118,7 @@ export interface SessionCleanupDecision {
   status: CleanupDecision["status"];
 }
 
-/** A Session snapshot with the verdict decided from exactly that snapshot. */
+/** A Session snapshot with the decision made from exactly that snapshot. */
 export interface SessionCleanupInspection {
   decision: SessionCleanupDecision;
   snapshot: SessionCleanupEvidence;
@@ -270,7 +270,6 @@ export function decideSessionCleanupMember(
   });
 }
 
-/** Repository evidence lists every pull request; keep the ones each member decision reads. */
 function withRelevantPullRequests(snapshot: SessionCleanupEvidence): SessionCleanupEvidence {
   return {
     ...snapshot,
@@ -496,9 +495,9 @@ export async function inspectSessionCleanup(
     }
 
     try {
-      snapshot.finalization = inspectSessionFinalization(home, state, options);
+      snapshot.obligations = inspectCleanupObligations(home, state, options);
 
-      if (snapshot.finalization.recoveryRequired.length > 0) {
+      if (snapshot.obligations.recoveryRequired.length > 0) {
         snapshot.blockers.push("resource-recovery-required");
       }
     } catch (cause) {

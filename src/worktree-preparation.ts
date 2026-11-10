@@ -26,7 +26,7 @@ import type { RepoConfig, Runtime, SessionRepoState, SessionState } from "./type
 
 /** Where Worktree preparation takes a missing Session worktree's content from. */
 export type WorktreeSource =
-  /** The content checkout's current HEAD, plus its dirty state when `copyDirty` is set. */
+  /** A missing Session branch starts at the content checkout's HEAD; `copyDirty` carries its edits. */
   | { copyDirty: boolean; mode: "current-head" }
   /** The existing Session branch, or the clean Source checkout HEAD when the branch is missing. */
   | { mode: "session-branch" }
@@ -54,7 +54,8 @@ export interface PreparedWorktree {
 
 /**
  * Resolve each repo's content checkout and capture its permitted dirty state. Throws, before any
- * Session state is written, when `--no-dirty` meets a dirty checkout or a carry cannot be applied.
+ * Session state is written, when `--no-dirty` meets a dirty checkout, a pending carry's checkout or
+ * HEAD changed, or a carry would land on a diverged Session branch.
  */
 export function planWorktreePreparation(
   runtime: Runtime,
@@ -141,9 +142,10 @@ export function planWorktreePreparation(
 }
 
 /**
- * Create or validate one Session worktree, finish its pending dirty carry, and copy missing Seed
- * material. `onWorktreeReady` receives the repo state before seeding starts; without `repoConfig`
- * nothing is seeded. Returns that state, the Prepared worktree, and any Preparation warnings.
+ * Create or validate one Session worktree, apply its pending dirty carry, copy missing Seed
+ * material, and reconcile project skills. `onWorktreeReady` receives the repo state before seeding
+ * starts; without `repoConfig` nothing is seeded or reconciled. Returns that state, the Prepared
+ * worktree, and any Preparation warnings.
  */
 export async function prepareWorktree(
   runtime: Runtime,
@@ -158,10 +160,10 @@ export async function prepareWorktree(
 ) {
   const { existingState, home, plan, session } = request;
   const { snapshot, source, sourceRoot } = plan;
-  const resumesDirtyCarry = snapshot !== undefined && existingState.dirtyCarryStatus === "pending";
+  const carryPending = snapshot !== undefined && existingState.dirtyCarryStatus === "pending";
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
 
-  if (resumesDirtyCarry && existsSync(expectedPath)) {
+  if (carryPending && existsSync(expectedPath)) {
     validateWorktreeForSession(runtime, home, sourceRoot, expectedPath, session);
   }
 
@@ -183,7 +185,7 @@ export async function prepareWorktree(
   if (snapshot) {
     await carryDirtySnapshot(runtime, {
       home,
-      resumes: resumesDirtyCarry,
+      pending: carryPending,
       session,
       snapshot,
       sourceRoot,
@@ -195,7 +197,7 @@ export async function prepareWorktree(
     ...existingState,
     diffBaseRef:
       existingState.diffBaseRef ?? (worktree.created ? plan.freshDiffBaseRef : undefined),
-    dirtyCarryStatus: resumesDirtyCarry ? "complete" : existingState.dirtyCarryStatus,
+    dirtyCarryStatus: carryPending ? "complete" : existingState.dirtyCarryStatus,
     worktreePath: worktree.path
   };
 
