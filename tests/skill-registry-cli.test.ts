@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { parse, stringify } from "yaml";
 
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { guidanceDigest, restoreLockedImports } from "../scripts/skill-lock.ts";
+import { guidanceDigest } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
@@ -1588,15 +1588,26 @@ done
       })
     );
     await runCliAsync(["skills", "list"], fixture.runtime);
-    const registry = read(fixture.registry, "skills.lock.json");
-    expect(registry).toContain('"version": 4');
-    expect(registry).toContain('"source": "https://github.com/owner/legacy/course#feature/topic"');
-    expect(registry).toContain(`"commit": "${"a".repeat(40)}"`);
-    expect(registry).toContain('"modelInvocation": "deny"');
-    expect(registry).toContain('"modelInvocation": "allow"');
-    expect(registry).toContain("Legacy trigger.");
-    expect(registry).not.toContain('"lock"');
-    expect(registry).not.toContain("importerVersion");
+    const migrated: unknown = JSON.parse(read(fixture.registry, "skills.lock.json"));
+    expect(migrated).toStrictEqual({
+      recipes: [
+        {
+          commit: "a".repeat(40),
+          modelInvocation: "deny",
+          name: "legacy",
+          skills: [
+            {
+              description: "Legacy trigger.",
+              modelInvocation: "allow",
+              selector: "upstream-legacy",
+              slug: "legacy"
+            }
+          ],
+          source: "https://github.com/owner/legacy/course#feature/topic"
+        }
+      ],
+      version: 4
+    });
   });
 
   it.each([
@@ -2350,7 +2361,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
 
       if (kind === "git") {
         rmSync(path.join(fixture.registry, "skills/imported/typography"), { recursive: true });
-        await restoreLockedImports(fixture.registry);
+        await runCliAsync(["skills", "update"], fixture.runtime);
       }
 
       expect(
@@ -4398,6 +4409,9 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
     expect(parse(read(fixture.installed.claude, "bravo/agents/openai.yaml"))).toMatchObject({
       policy: { allow_implicit_invocation: true }
     });
+    expect(read(fixture.registry, "skills/references/imported/alpha/MAIN.md")).toContain(
+      "Alpha instructions."
+    );
   });
 
   it("rejects a newly occupied target on policy refresh before publishing policy or new skills", async () => {

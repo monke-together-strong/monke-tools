@@ -1348,7 +1348,7 @@ export async function restoreLockedRecipe(
 
 export async function restoreLockedImports(
   repoRoot: string,
-  includeDeclaredImports = true,
+  includeDeclaredImports: boolean,
   runtime?: Runtime,
   store?: Pick<SkillImportRecipeStore, "recipes">,
   commitState?: () => void
