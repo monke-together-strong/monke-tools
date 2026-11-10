@@ -19,7 +19,7 @@ export interface CollectBaselinePortsFromRootOptions {
  * checkout.
  */
 export function seedWorktreeFiles(
-  config: RepoConfig,
+  config: { seedPaths: readonly string[]; sourceRoot: string },
   worktreeRoot: string,
   onWarning?: (message: string) => void
 ) {

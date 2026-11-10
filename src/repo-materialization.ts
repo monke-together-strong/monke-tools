@@ -30,7 +30,6 @@ import type {
 interface MaterializeRepoOptions {
   baselinePortsRoot: string;
   dependencyResults: Map<string, RepoMaterializationResult>;
-  diffBaseRef?: string;
   existingState: SessionRepoState | undefined;
   persistRepoState: (
     repoState: SessionRepoState,
@@ -114,7 +113,6 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
 
   const context = {
     ...options,
-    diffBaseRef: options.diffBaseRef || options.existingState?.diffBaseRef,
     hasBootstrapCommand: repoHasBootstrapCommand(options.repoConfig),
     replacementCleanupAuthorityEstablished: false,
     resolvedResourceValues: resolveResourceValues({
@@ -337,7 +335,6 @@ function createRepoMaterializationState(
   return buildSessionRepoState({
     ...state,
     ...cleanupAuthority,
-    diffBaseRef: context.diffBaseRef,
     existingState: context.existingState,
     sourceRoot: context.repoConfig.sourceRoot,
     worktreePath: context.worktreePath
@@ -464,7 +461,6 @@ function buildSessionRepoState(options: {
   assignedPorts: AssignedPort[];
   cleanupCommand?: string;
   cleanupObligated: boolean;
-  diffBaseRef?: string;
   existingState?: SessionRepoState;
   materializationStatus: SessionRepoState["materializationStatus"];
   sourceRoot: string;
@@ -484,12 +480,6 @@ function buildSessionRepoState(options: {
     state.cleanupCommand = options.cleanupCommand;
   } else {
     delete state.cleanupCommand;
-  }
-
-  if (options.diffBaseRef) {
-    state.diffBaseRef = options.diffBaseRef;
-  } else {
-    delete state.diffBaseRef;
   }
 
   // Resource records are authoritative; never copy legacy arrays back into Session state.

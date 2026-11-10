@@ -22,7 +22,7 @@ import {
   trackDirtyCarry
 } from "./session-dirty-carry.ts";
 import type { DirtySnapshot } from "./session-dirty-carry.ts";
-import type { RepoConfig, Runtime, SessionRepoState, SessionState } from "./types.ts";
+import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 
 /** Where Worktree preparation takes a missing Session worktree's content from. */
 export type WorktreeSource =
@@ -37,7 +37,10 @@ export type WorktreeSource =
 export interface WorktreePlan {
   /** The content checkout whose HEAD starts a missing Session branch; current-HEAD Spawn only. */
   checkout?: CheckoutSource;
-  /** The Diff base when preparation creates the Session branch from the content checkout's HEAD. */
+  /**
+   * The Diff base for a Session branch this attempt creates from the content checkout's HEAD.
+   * Callers record it before preparation, so a retry keeps it once the branch exists.
+   */
   freshDiffBaseRef?: string;
   /** Dirty-carry fields to record before the Session worktree is created. */
   pendingDirtyCarry?: Pick<SessionRepoState, "dirtyCarrySource" | "dirtyCarryStatus">;
@@ -48,7 +51,6 @@ export interface WorktreePlan {
 
 /** A Prepared worktree, ready for Repo materialization. */
 export interface PreparedWorktree {
-  diffBaseRef?: string;
   worktreePath: string;
 }
 
@@ -144,8 +146,7 @@ export function planWorktreePreparation(
 /**
  * Create or validate one Session worktree, apply its pending dirty carry, copy missing Seed
  * material, and reconcile project skills. `onWorktreeReady` receives the repo state before seeding
- * starts; without `repoConfig` nothing is seeded or reconciled. Returns that state, the Prepared
- * worktree, and any Preparation warnings.
+ * starts. Returns that state, the Prepared worktree, and any Preparation warnings.
  */
 export async function prepareWorktree(
   runtime: Runtime,
@@ -154,7 +155,8 @@ export async function prepareWorktree(
     home: string;
     onWorktreeReady?: (state: SessionRepoState) => void;
     plan: WorktreePlan;
-    repoConfig?: RepoConfig;
+    /** Configured Seed paths copied in addition to the discovered local files. */
+    seedPaths: readonly string[];
     session: string;
   }
 ) {
@@ -195,19 +197,19 @@ export async function prepareWorktree(
 
   const state: SessionRepoState = {
     ...existingState,
-    diffBaseRef:
-      existingState.diffBaseRef ?? (worktree.created ? plan.freshDiffBaseRef : undefined),
     dirtyCarryStatus: carryPending ? "complete" : existingState.dirtyCarryStatus,
     worktreePath: worktree.path
   };
 
   request.onWorktreeReady?.(state);
 
-  const warnings = request.repoConfig
-    ? await seedWorktree(runtime, request.repoConfig, worktree.path)
-    : [];
+  const warnings = await seedWorktree(
+    runtime,
+    { seedPaths: request.seedPaths, sourceRoot },
+    worktree.path
+  );
 
-  const value: PreparedWorktree = { diffBaseRef: state.diffBaseRef, worktreePath: worktree.path };
+  const value: PreparedWorktree = { worktreePath: worktree.path };
 
   return { state, value, warnings };
 }
@@ -220,17 +222,21 @@ function requirePinnedRef(state: SessionRepoState) {
   return state.pinnedRef;
 }
 
-async function seedWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreePath: string) {
+async function seedWorktree(
+  runtime: Runtime,
+  seed: Parameters<typeof seedWorktreeFiles>[0],
+  worktreePath: string
+) {
   const warnings: string[] = [];
 
   try {
-    seedWorktreeFiles(repoConfig, worktreePath, (message) => {
+    seedWorktreeFiles(seed, worktreePath, (message) => {
       warnings.push(message);
       runtime.writeStderr(`${message}\n`);
     });
   } catch (cause) {
     throw new MonkeError(
-      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
+      `Worktree preparation failed for ${seed.sourceRoot} in ${worktreePath}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
       { cause }
     );
   }

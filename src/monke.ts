@@ -327,6 +327,10 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       ...plan.pendingDirtyCarry
     };
 
+    if (plan.freshDiffBaseRef !== undefined) {
+      initialState.diffBaseRef = plan.freshDiffBaseRef;
+    }
+
     if (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh") {
       const startRef = execution.getStartRef(repoConfig.sourceRoot);
       initialState.diffBaseRef = startRef.ref;
@@ -353,7 +357,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
           home: execution.home,
           onWorktreeReady: checkpoint,
           plan,
-          repoConfig,
+          seedPaths: repoConfig.seedPaths,
           session: execution.session
         }),
       repoConfig
@@ -380,7 +384,6 @@ function createRepoLifecycleNode(options: {
           ? prepared.worktreePath
           : repoConfig.sourceRoot,
         dependencyResults,
-        diffBaseRef: prepared.diffBaseRef,
         existingState,
         persistRepoState: checkpoint,
         repoConfig,
@@ -608,8 +611,8 @@ function configRefOrLocal(runtime: Runtime, sourceRoot: string, ref: string | un
 }
 
 /**
- * Prepare only the Root repo Session worktree, without Seed material or Repo materialization, and
- * fail with the generation-0 receipt.
+ * Prepare only the Root repo Session worktree, with its default Seed material but no Repo
+ * materialization, and fail with the generation-0 receipt.
  */
 async function spawnWithoutConfig(
   runtime: Runtime,
@@ -653,7 +656,7 @@ async function spawnWithoutConfig(
       ...plan.pendingDirtyCarry,
       assignedPorts: [],
       cleanupObligated: false,
-      diffBaseRef: existingRepoState?.diffBaseRef ?? rootStartRef?.ref ?? plan.freshDiffBaseRef,
+      diffBaseRef: rootStartRef?.ref ?? plan.freshDiffBaseRef ?? existingRepoState?.diffBaseRef,
       materializationStatus: "pending",
       pinnedRef:
         sourcePlan.mode === "default-branch"
@@ -681,6 +684,7 @@ async function spawnWithoutConfig(
     existingState: pendingRepoState,
     home,
     plan,
+    seedPaths: [],
     session
   });
 
@@ -1018,7 +1022,7 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
           home: execution.home,
           onWorktreeReady: checkpoint,
           plan,
-          repoConfig,
+          seedPaths: repoConfig.seedPaths,
           session: execution.session
         });
       },

@@ -2,6 +2,7 @@ import {
   chmodSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -184,8 +185,12 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
 
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": ".env\nCLAUDE.local.md\n",
       "README.md": "hello\n"
     });
+
+    write(repoRoot, ".env", "PORT=3000\n");
+    write(repoRoot, "CLAUDE.local.md", "local notes\n");
 
     const result = runMonkeCapturingFailure({
       args: ["spawn", "banana"],
@@ -196,6 +201,8 @@ describe("single-repo sessions", () => {
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "README.md")).toBe("hello\n");
+    expect(read(worktreeRoot, ".env")).toBe("PORT=3000\n");
+    expect(read(worktreeRoot, "CLAUDE.local.md")).toBe("local notes\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
     expect(result.stderr).toContain(
       `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
@@ -287,9 +294,39 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
     expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      diffBaseRef: "refs/heads/main",
       dirtyCarryStatus: "complete",
       preparationStatus: "prepared"
     });
+  });
+
+  it("records the retrying checkout's branch as the Diff base when Spawn failed before creating the Session branch", () => {
+    const sandbox = makeTempDir("single-repo-diff-base-retry-branch");
+    const home = path.join(sandbox, "home");
+
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "README.md": "hello\n"
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retry-base");
+    mkdirSync(worktreeRoot, { recursive: true });
+
+    const failed = runMonkeCapturingFailure({
+      args: ["spawn", "retry-base"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(failed.error?.message).toContain("already exists and is not registered");
+    rmSync(worktreeRoot, { recursive: true });
+    git(repoRoot, ["switch", "-c", "feature"]);
+
+    runMonke({ args: ["spawn", "retry-base"], cwd: repoRoot, monkeHome: home });
+
+    expect(loadSessionState(home, repoRoot, "retry-base").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/feature"
+    );
   });
 
   it("preserves Session-local edits after interrupted dirty carry in configured Spawn", () => {
