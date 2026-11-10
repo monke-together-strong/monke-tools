@@ -300,34 +300,38 @@ describe("single-repo sessions", () => {
     });
   });
 
-  it("records the retrying checkout's branch as the Diff base when Spawn failed before creating the Session branch", () => {
-    const sandbox = makeTempDir("single-repo-diff-base-retry-branch");
-    const home = path.join(sandbox, "home");
+  it.each([true, false])(
+    "records the retrying checkout's branch as the Diff base when Spawn failed before creating the Session branch (monke.yml: %s)",
+    (configured) => {
+      const sandbox = makeTempDir("single-repo-diff-base-retry-branch");
+      const home = path.join(sandbox, "home");
 
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "hello\n"
-    });
+      const repoRoot = createRepo(path.join(sandbox, "root"), {
+        ...(configured ? { "monke.yml": "apps: {}\n" } : {}),
+        "README.md": "hello\n"
+      });
 
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retry-base");
-    mkdirSync(worktreeRoot, { recursive: true });
+      const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retry-base");
+      mkdirSync(worktreeRoot, { recursive: true });
 
-    const failed = runMonkeCapturingFailure({
-      args: ["spawn", "retry-base"],
-      cwd: repoRoot,
-      monkeHome: home
-    });
+      const failed = runMonkeCapturingFailure({
+        args: ["spawn", "retry-base"],
+        cwd: repoRoot,
+        monkeHome: home
+      });
 
-    expect(failed.error?.message).toContain("already exists and is not registered");
-    rmSync(worktreeRoot, { recursive: true });
-    git(repoRoot, ["switch", "-c", "feature"]);
+      expect(failed.error?.message).toContain("already exists and is not registered");
+      rmSync(worktreeRoot, { recursive: true });
+      git(repoRoot, ["switch", "-c", "feature"]);
 
-    runMonke({ args: ["spawn", "retry-base"], cwd: repoRoot, monkeHome: home });
+      runMonkeCapturingFailure({ args: ["spawn", "retry-base"], cwd: repoRoot, monkeHome: home });
 
-    expect(loadSessionState(home, repoRoot, "retry-base").repos[0]?.diffBaseRef).toBe(
-      "refs/heads/feature"
-    );
-  });
+      expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("retry-base");
+      expect(loadSessionState(home, repoRoot, "retry-base").repos[0]?.diffBaseRef).toBe(
+        "refs/heads/feature"
+      );
+    }
+  );
 
   it("preserves Session-local edits after interrupted dirty carry in configured Spawn", () => {
     const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
