@@ -54,6 +54,6 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     maxConcurrency: 1,
     maxWorkers: 2,
-    setupFiles: ["./tests/setup-git.ts"]
+    setupFiles: ["./tests/setup-git.ts", "./tests/setup-viewer-guard.ts"]
   }
 });
