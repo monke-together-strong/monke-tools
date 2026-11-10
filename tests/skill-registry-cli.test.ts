@@ -2430,7 +2430,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each([
-    { error: /lowercase Skill source name/u, name: "InvalidName" },
+    { error: /use lowercase letters, digits, hyphens, or underscores/u, name: "InvalidName" },
     { error: /non-managed/u, name: "new-workflow" }
   ])("restores the absent registry after a cold create failure ($name)", async (scenario) => {
     const fixture = registryFixture();
