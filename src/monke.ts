@@ -622,6 +622,11 @@ async function spawnWithoutConfig(
 ): Promise<never> {
   const { home } = store;
   assertNoGlobalWorktreePathStateCollisions(store, session, [{ sourceRoot: rootSourceRoot }]);
+
+  if (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh") {
+    assertFreshSessionWorktreeAvailable(runtime, home, rootSourceRoot, session);
+  }
+
   const priorSessionState = store.get(rootSourceRoot, session);
 
   const existingRepoState = priorSessionState?.repos.find(

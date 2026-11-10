@@ -1676,14 +1676,18 @@ apps:
     ).toThrow(/incomplete Spawn using current HEAD with dirty carry/u);
   });
 
-  it("fails spawn -m when the session branch already exists", () => {
-    const sandbox = makeTempDir("single-repo-main-existing-branch");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
+  it.each([true, false])(
+    "fails spawn -m before writing state when the session branch already exists (monke.yml: %s)",
+    (configured) => {
+      const sandbox = makeTempDir("single-repo-main-existing-branch");
+      const binDirectory = path.join(sandbox, "bin");
+      const home = path.join(sandbox, "home");
 
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `apps:
+      const repoRoot = createRepo(path.join(sandbox, "root"), {
+        "apps/api/.env.local": "PORT=3000\n",
+        ...(configured
+          ? {
+              "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -1691,19 +1695,26 @@ apps:
       - port: API_PORT
         env: PORT
 `
-    });
+            }
+          : {})
+      });
 
-    git(repoRoot, ["branch", "fresh"]);
+      git(repoRoot, ["branch", "fresh"]);
 
-    expect(() =>
-      runMonke({
-        args: ["spawn", "fresh", "-m"],
-        binDirectory,
-        cwd: repoRoot,
-        monkeHome: home
-      })
-    ).toThrow(/Session branch "fresh" already exists/u);
-  });
+      // A retry must refuse too, rather than resuming onto the existing branch.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        expect(() =>
+          runMonke({
+            args: ["spawn", "fresh", "-m"],
+            binDirectory,
+            cwd: repoRoot,
+            monkeHome: home
+          })
+        ).toThrow(/Session branch "fresh" already exists/u);
+        expect(existsSync(getSessionStateFilePath(home, repoRoot, "fresh"))).toBeFalsy();
+      }
+    }
+  );
 
   it("treats spawn --main and --master as aliases for default branch mode", () => {
     const sandbox = makeTempDir("single-repo-main-aliases");
