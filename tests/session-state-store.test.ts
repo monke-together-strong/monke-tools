@@ -804,56 +804,17 @@ repos:
     );
   });
 
-  it("rejects malformed persisted values in loadSessionState", () => {
-    const sandbox = makeTempDir("session-state-store-invalid-write");
-    const home = path.join(sandbox, "home");
-    const sourceRoot = path.join(sandbox, "root");
-
-    const filePath = getSessionStateFilePath(home, sourceRoot, "banana");
-    write(
-      path.dirname(filePath),
-      path.basename(filePath),
-      JSON.stringify({
-        generation: { number: 1, status: "incomplete" },
-        repos: "wrong",
-        rootSourceRoot: sourceRoot,
-        session: "banana",
-        version: 3
-      })
-    );
-    expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      /Invalid .*sessions.*repos/su
-    );
-  });
-
-  it("rejects corrupt persisted reservations in getOrCreateReservation", () => {
-    const sandbox = makeTempDir("session-state-store-corrupt-reservation");
-    const home = path.join(sandbox, "home");
-    const sourceRoot = path.join(sandbox, "root");
-    getOrCreateReservation(home, sourceRoot, 1);
-    const reservationDirectory = path.join(home, "repo-reservations");
-    const [reservationName] = readdirSync(reservationDirectory);
-
-    if (reservationName === undefined) {
-      throw new Error("expected a reservation file");
-    }
-
-    write(
-      reservationDirectory,
-      reservationName,
-      `version: 1
+  it.each([
+    {
+      contents: (sourceRoot: string) =>
+        `version: 1
 sourceRoot: ${sourceRoot}
 blockStart: 10000
 size: wrong
-`
-    );
-
-    expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(
-      /Invalid .*repo-reservations.*size/su
-    );
-  });
-
-  it.each([
+`,
+      expected: /Invalid .*repo-reservations.*size/su,
+      name: "malformed values"
+    },
     {
       contents: (sourceRoot: string) =>
         `version: 1
@@ -876,7 +837,7 @@ size: 1000
       name: "unknown future versions"
     }
   ])("rejects $name in getOrCreateReservation", ({ contents, expected }) => {
-    const sandbox = makeTempDir("session-state-store-reservation-versioning");
+    const sandbox = makeTempDir("session-state-store-invalid-reservation");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);

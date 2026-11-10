@@ -273,9 +273,49 @@ apps:
       expected: /resources\.commands.*must declare at least one command/u,
       name: "empty commands section",
       resources: `commands: {}`
+    },
+    {
+      expected: /DISCORD_CHANNEL/u,
+      name: "old flat resources mappings",
+      resources: `DISCORD_CHANNEL: mt-\${session}`
+    },
+    {
+      expected: /resources.*must contain values or commands/u,
+      name: "an empty resources section",
+      resources: "{}"
+    },
+    {
+      expected: /resources\.values.*must declare at least one value/u,
+      name: "an empty resource values section",
+      resources: "values: {}"
+    },
+    {
+      expected: /resources\.values\.discord_channel/u,
+      name: "an invalid resource value name",
+      resources: `values:
+    discord_channel: mt-\${session}`
+    },
+    {
+      expected: /DISCORD_CHANNEL.*non-empty string/u,
+      name: "an empty resource literal",
+      resources: `values:
+    DISCORD_CHANNEL: "   "`
+    },
+    {
+      expected: /unsupported placeholder.*session.*user/u,
+      name: "an unsupported resource placeholder",
+      resources: `values:
+    DISCORD_CHANNEL: mt-\${branch}`
+    },
+    {
+      expected: /Map keys must be unique|duplicate key/iu,
+      name: "duplicate resource value names",
+      resources: `values:
+    DISCORD_CHANNEL: one
+    DISCORD_CHANNEL: two`
     }
-  ])("rejects resource commands with $name in loadResolvedGraph", ({ expected, resources }) => {
-    const sandbox = makeTempDir("config-invalid-resource-command");
+  ])("rejects resources with $name in loadResolvedGraph", ({ expected, resources }) => {
+    const sandbox = makeTempDir("config-invalid-resources");
 
     const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
@@ -292,161 +332,5 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(expected);
-  });
-
-  it("rejects old flat resources mappings in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-flat-resources");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources:
-  DISCORD_CHANNEL: mt-\${session}
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/DISCORD_CHANNEL/u);
-  });
-
-  it("rejects empty resources sections in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-empty-resources");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources: {}
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /resources.*must contain values or commands/u
-    );
-  });
-
-  it("rejects empty resource values sections in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-empty-resource-values");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources:
-  values: {}
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /resources\.values.*must declare at least one value/u
-    );
-  });
-
-  it("rejects invalid resource value declarations in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-invalid-resources");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources:
-  values:
-    discord_channel: mt-\${session}
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /resources\.values\.discord_channel/u
-    );
-  });
-
-  it("rejects empty resource literals in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-empty-resource-literal");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources:
-  values:
-    DISCORD_CHANNEL: "   "
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /DISCORD_CHANNEL.*non-empty string/u
-    );
-  });
-
-  it("rejects unsupported resource placeholders in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-resource-placeholder");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources:
-  values:
-    DISCORD_CHANNEL: mt-\${branch}
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /unsupported placeholder.*session.*user/u
-    );
-  });
-
-  it("rejects duplicate resource env names in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-duplicate-resource");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `resources:
-  values:
-    DISCORD_CHANNEL: one
-    DISCORD_CHANNEL: two
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Map keys must be unique|duplicate key/iu
-    );
   });
 });

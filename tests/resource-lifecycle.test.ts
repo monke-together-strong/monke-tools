@@ -186,7 +186,8 @@ describe("checkout resources", () => {
     const cwd = createRepo(path.join(sandbox, "repo"), {
       "current.ts": 'export function acquire() { return {SLOT: "current"}; }',
       "monke.yml": config("old"),
-      "old.ts": 'export function acquire() { return {SLOT: "old"}; }'
+      "old.ts":
+        'export function acquire() { return {SLOT: "old"}; } export async function release({outputs}) { await Bun.write("released-old", outputs.SLOT); }'
     });
 
     const run = (...args: string[]) => runMonke({ args, cwd, monkeHome: home });
@@ -194,6 +195,8 @@ describe("checkout resources", () => {
     write(cwd, "monke.yml", config("current"));
     run("resources", "acquire");
     expect(run("resources", "exec", "--", "printenv", "SLOT").stdout.trim()).toBe("current");
+    run("resources", "release");
+    expect(read(cwd, "released-old")).toBe("old");
   });
 
   it.each(["wrapper", "group"])(
