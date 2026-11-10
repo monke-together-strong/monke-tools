@@ -149,7 +149,10 @@ export interface ResourceCommandConfig {
 export interface RepoConfig {
   appsInOrder: AppConfig[];
   bootstrapCommand?: string;
-  /** Repo-owned shell command run from the Session worktree during Session finalization. */
+  /**
+   * Repo-owned shell command that satisfies the repo's Cleanup obligation; runs from the Session
+   * worktree before worktree removal.
+   */
   cleanupCommand?: string;
   configPath: string;
   externalInOrder: ExternalRepoConfig[];

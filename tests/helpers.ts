@@ -40,7 +40,7 @@ const NEUTRALIZED_WORKER_ENV = {
   VISUAL: undefined
 };
 
-// Allow about 20 seconds: a loaded CI runner can take seconds to start the second worker.
+// Wait for the second `git worktree add` process; the test timeout bounds the wait.
 const WORKTREE_ADD_BARRIER_ATTEMPTS = 2000;
 const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
 const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;

@@ -1,6 +1,6 @@
 # Separate Diff comparison selection from viewer delivery
 
-`mt diff` remains as the stable review entry point and selects a machine-local Diff adapter through `mt diff configure`, rather than becoming synonymous with desktop Codiff. Monke owns comparison selection and presentation orchestration; the selected viewer owns rendering and the review lifecycle.
+`mt diff` remains the stable review entry point and selects a machine-local Diff adapter through `mt diff configure`, rather than becoming synonymous with desktop Codiff. Monke owns comparison selection and presentation orchestration; the selected viewer owns rendering and the review lifecycle.
 
 The initial adapters use desktop Codiff and Monke See. Monke See owns its review CLI and canonical review URL; the Monke adapter passes the requested comparison to that CLI and prints the returned URL unchanged to stdout so callers and agents can relay it. Diagnostics remain on stderr. Monke does not reconstruct Monke See URLs, embed a second web viewer, or take over Monke See repository authorization and runtime configuration.
 

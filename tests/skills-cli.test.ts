@@ -185,7 +185,7 @@ describe("skills CLI", () => {
           onStdout() {}
         })
       )
-    ).rejects.toThrow("does not match the Active Local install");
+    ).rejects.toThrow("does not match the Installed source checkout");
   });
 
   it("keeps failed deselected-target cleanup repairable with mt skills configure", async () => {

@@ -669,7 +669,7 @@ export async function acquireManagedSkillSource(options: {
 
   if (!/^[a-z\d][a-z\d_-]*$/u.test(name)) {
     throw new MonkeError(
-      `Invalid Skill source name ${name}: use a lowercase Skill source name containing letters, digits, hyphens, or underscores`
+      `Invalid Skill source name ${name}: use lowercase letters, digits, hyphens, or underscores, starting with a letter or digit`
     );
   }
 

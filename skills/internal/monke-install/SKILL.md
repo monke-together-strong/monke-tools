@@ -16,7 +16,7 @@ For the latest stable release on macOS arm64 or Linux x64:
 curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh | sh
 ```
 
-The installer prompts for Codex, Claude, Cursor, or one custom skill root, then saves the selection. Later installs reuse it. `mt skills configure` changes targets or retries skill/instruction reconciliation. Noninteractive release installs without saved or explicit targets activate the core and recommend that command.
+The installer prompts for Codex, Claude, Cursor, or one custom skill root, then saves the selection. Later installs reuse it. `mt skills configure` changes targets or retries skill/instruction reconciliation. Noninteractive release installs without saved or explicit targets activate the install without distributing skills and recommend that command.
 
 For automation, add `--targets codex claude cursor` and/or `--custom-target /absolute/path/to/agent/skills` to the local installer command. For the release installer, replace the trailing `sh` with `sh -s --` followed by those options. Explicit selections replace saved preferences.
 
@@ -26,7 +26,7 @@ For automation, add `--targets codex claude cursor` and/or `--custom-target /abs
 
 Modified, added, or removed installed release skills/references block both update forms before network access. Preserve every listed edit first. To stay on releases, restore those paths from the bundle identified by `releaseTag` in the active `install-manifest.json`, then retry. To keep authoring, copy edits into the source checkout and activate a local install. Local refresh does not migrate release edits automatically.
 
-Failures before activation leave the previous install selected: correct the reported cause and retry. Skill/instruction or dependency failures after activation leave the new core active: retry `mt skills configure` or `mt install-dependencies` as reported. Report unresolved reconciliation separately from core activation.
+Failures before activation leave the previous install selected: correct the reported cause and retry. Skill/instruction or dependency failures after activation leave the new install active: retry `mt skills configure` or `mt install-dependencies` as reported. Report unresolved reconciliation separately from install activation.
 
 ## Shell and dependencies
 

@@ -60,8 +60,9 @@ rendering, Refresh, and link expiry. PR/MR shorthand requires authenticated `gh`
 `glab` to resolve a full review URL; full URLs need no Monke provider lookup. Diff never
 installs Monke See, changes its exposure, or falls back to another adapter on failure.
 
-Bare `mt diff` retains its remembered-base selection, and `mt diff --pick` chooses
-another base or local changes only. Explicit sources bypass both automatic selection
+Bare `mt diff` infers its base from default-branch history in any checkout, and a
+Session remembers the selected base. On the default branch or at its tip, it shows
+local changes only. `mt diff --pick` chooses another base or local changes only. Explicit sources bypass both automatic selection
 and the picker, and never replace the remembered base:
 
 ```sh
@@ -156,12 +157,9 @@ To use skills from a local checkout in one project, run this inside the consumer
 mt skills add ../local-file-viewer --project
 ```
 
-Local sources stay linked, so source edits and Git updates appear through the
-project's links. Project registrations stay in shared Git metadata, and generated
-links are locally ignored. Spawn, materialize, and setup recreate links in each
-checkout. After a selection change or removal, run `mt setup` in other existing
-worktrees. See [project installs](skills/internal/monke-skills/SKILL.md#project-installs)
-for skill selection and agent targets.
+Local sources stay linked, so source edits appear without reinstalling. See
+[project installs](skills/internal/monke-skills/SKILL.md#project-installs) for skill
+selection, agent targets, and syncing other worktrees.
 
 Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
 

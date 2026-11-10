@@ -24,6 +24,6 @@ Prefer a repo-local script such as `pnpm betterstack` when the wrapper skill or 
 1. Read the repo-local Better Stack wrapper skill, if present.
 2. Read [REFERENCE.md](./REFERENCE.md) before custom telemetry debugging.
 3. Resolve source id, table name, service tag, and data region before writing custom SQL.
-4. Prefer explicit time windows, `LIMIT`, and machine-readable output such as `FORMAT JSONEachRow`. Adapt [query-shapes.sql](./references/query-shapes.sql) with the repo-local source and table details.
+4. Use explicit time windows and `LIMIT`, and prefer machine-readable output such as `FORMAT JSONEachRow`. Adapt [query-shapes.sql](./references/query-shapes.sql) with the repo-local source and table details.
 5. Query hot and cold storage when older retained logs or spans matter.
 6. End with one verdict per requested entity, as defined in [Investigation Closure](./REFERENCE.md#investigation-closure).

@@ -151,8 +151,9 @@ interface RepositoryInspection {
 }
 
 /**
- * Every proof except an exact merged-PR head waits this long, so a just-spawned Session is not
- * removed before work starts. Processes younger than this also block removal.
+ * Proofs wait this long after worktree creation, so a just-spawned Session is not removed before
+ * work starts. Only a clean branch whose HEAD equals its own merged PR's head skips the wait.
+ * Process trees younger than this also block removal.
  */
 export const RECENT_WORKTREE_MS = 24 * 60 * 60 * 1000;
 
