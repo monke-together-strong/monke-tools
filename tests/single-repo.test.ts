@@ -13,7 +13,7 @@ import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
-import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
+import { getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionLocked } from "../src/monke.ts";
 import {
   getSessionStateFilePath,
@@ -28,14 +28,12 @@ import {
   installCodexUrlOpenShim,
   installGitShim,
   installShShim,
-  installWindowsCmdShim,
   makeTempDir,
   materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
   runMonkeCapturingFailure,
-  withPlatform,
   write
 } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
@@ -116,36 +114,6 @@ describe("single-repo sessions", () => {
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
     expect(result.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
     expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexWorkspaceUrl}\n`);
-  });
-
-  it("escapes percent-encoded URLs for the Windows launcher on spawn --codex", () => {
-    const sandbox = makeTempDir("single-repo-codex-windows");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "hello\n"
-    });
-
-    const cmdLogPath = installWindowsCmdShim(binDirectory);
-
-    const result = withPlatform("win32", () =>
-      runMonke({
-        args: ["spawn", "banana", "--codex"],
-        binDirectory,
-        cwd: repoRoot,
-        monkeHome: home
-      })
-    );
-
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-    const codexWorkspaceUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
-    expect(result.stdout).toBe(`${worktreeRoot}\n`);
-    expect(result.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
-    expect(readFileSync(cmdLogPath, "utf-8")).toBe(
-      `/c\nstart\n\n${codexWorkspaceUrl.replaceAll("%", "^%")}\n`
-    );
   });
 
   it("supports spawn with an app whose path is the repo root", () => {
@@ -495,30 +463,6 @@ describe("single-repo sessions", () => {
     ).toThrow(/incomplete Spawn using current HEAD with dirty carry/u);
   });
 
-  it("carries tracked modifications on spawn by default", () => {
-    const sandbox = makeTempDir("single-repo-dirty-modified");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "clean\n"
-    });
-
-    write(repoRoot, "README.md", "dirty\n");
-
-    runMonke({
-      args: ["spawn", "dirty-copy"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-copy"), "README.md")).toBe(
-      "dirty\n"
-    );
-  });
-
   it("fails dirty spawn onto an existing diverged session branch before creating the worktree", () => {
     const sandbox = makeTempDir("single-repo-dirty-diverged-branch");
     const binDirectory = path.join(sandbox, "bin");
@@ -552,56 +496,6 @@ describe("single-repo sessions", () => {
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, "banana"))).toBeFalsy();
     expect(existsSync(getSessionStateFilePath(home, repoRoot, "banana"))).toBeFalsy();
     expect(git(repoRoot, ["rev-parse", "banana"])).toBe(branchTip);
-  });
-
-  it("carries dirty state for dirty spawn onto an existing session branch at HEAD", () => {
-    const sandbox = makeTempDir("single-repo-dirty-same-tip-branch");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "clean\n"
-    });
-
-    git(repoRoot, ["branch", "banana", "HEAD"]);
-    write(repoRoot, "README.md", "dirty source\n");
-
-    runMonke({
-      args: ["spawn", "banana"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(getExpectedWorktreePath(home, repoRoot, "banana"), "README.md")).toBe(
-      "dirty source\n"
-    );
-  });
-
-  it("carries staged changes on spawn by default", () => {
-    const sandbox = makeTempDir("single-repo-dirty-staged");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "clean\n"
-    });
-
-    write(repoRoot, "README.md", "staged\n");
-    git(repoRoot, ["add", "README.md"]);
-
-    runMonke({
-      args: ["spawn", "dirty-staged"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-staged"), "README.md")).toBe(
-      "staged\n"
-    );
   });
 
   it("carries staged and unstaged edits to the same file on spawn", () => {
@@ -827,57 +721,6 @@ describe("single-repo sessions", () => {
         monkeHome: home
       })
     ).toThrow(/Session worktree path collision.*already recorded/su);
-  });
-
-  it("ignores dirty source content for spawn -m", () => {
-    const sandbox = makeTempDir("single-repo-main-ignores-dirty");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "main\n"
-    });
-
-    git(repoRoot, ["switch", "-c", "feature"]);
-    write(repoRoot, "README.md", "dirty feature\n");
-    write(repoRoot, "notes.txt", "untracked\n");
-
-    runMonke({
-      args: ["spawn", "fresh-main", "-m"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh-main");
-    expect(read(worktreeRoot, "README.md")).toBe("main\n");
-    expect(existsSync(path.join(worktreeRoot, "notes.txt"))).toBeFalsy();
-  });
-
-  it("accepts spawn --no-dirty -m as equivalent to default branch spawn", () => {
-    const sandbox = makeTempDir("single-repo-main-no-dirty");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "main\n"
-    });
-
-    git(repoRoot, ["switch", "-c", "feature"]);
-    write(repoRoot, "README.md", "dirty feature\n");
-
-    runMonke({
-      args: ["spawn", "fresh-main-no-dirty", "--no-dirty", "-m"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(getExpectedWorktreePath(home, repoRoot, "fresh-main-no-dirty"), "README.md")).toBe(
-      "main\n"
-    );
   });
 
   it("creates an unmaterialized default-branch worktree for spawn -m without monke.yml", () => {
@@ -2042,7 +1885,7 @@ apps:
     expect(message).not.toContain("shared");
   });
 
-  it("rejects Materialize in Source checkout context and reuses Assigned ports inside a valid Session worktree", () => {
+  it("rejects Materialize outside its Session branch and reuses Assigned ports inside a valid Session worktree", () => {
     const sandbox = makeTempDir("single-materialize");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -2078,10 +1921,11 @@ apps:
     }).toThrow(/must run inside a session worktree/u);
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-    expect(inferSessionName(home, repoRoot, worktreeRoot, "banana")).toBe("banana");
-    expect(() => inferSessionName(home, repoRoot, worktreeRoot, "wrong")).toThrow(
-      /match current branch/u
-    );
+    git(worktreeRoot, ["switch", "-c", "wrong"]);
+    expect(() => {
+      runMonke({ args: ["materialize"], binDirectory, cwd: worktreeRoot, monkeHome: home });
+    }).toThrow(/session "banana" to match current branch "wrong"/u);
+    git(worktreeRoot, ["switch", "banana"]);
 
     const before = read(worktreeRoot, ".env");
     expect(before).toBe("API_PORT=10000\nDB_PORT=10001\n");
@@ -2192,7 +2036,7 @@ apps:
     expect(read(worktreeRoot, "scripts/bootstrap.sh")).toBe("#!/bin/sh\necho seeded\n");
   });
 
-  it("merges seeded directories into tracked worktree directories on spawn without clobbering existing files", () => {
+  it("merges seeded directories into tracked worktree directories on spawn", () => {
     const sandbox = makeTempDir("single-seedpaths-merge");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

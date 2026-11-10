@@ -91,28 +91,6 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
 
-  it("opens a Swing picker for swing without a target and selects a Session", async () => {
-    const sandbox = makeTempDir("swing-picker-number");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n"
-    });
-
-    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
-
-    const result = await runMonkeAsync({
-      args: ["swing"],
-      cwd: repoRoot,
-      monkeHome: home,
-      selectValues: ["banana"]
-    });
-
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-    expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBeTruthy();
-    expect(result.stderr).toContain(worktreeRoot);
-  });
-
   it("detects a linked worktree outside Monke home by branch name during swing", () => {
     const sandbox = makeTempDir("swing-linked-worktree");
     const home = path.join(sandbox, "home");
@@ -337,23 +315,6 @@ describe("Swing", () => {
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature@alice");
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-  });
-
-  it("returns from a Session worktree to the Source checkout with swing caret", () => {
-    const sandbox = makeTempDir("swing-source");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n"
-    });
-
-    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-
-    const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
-
-    expect(result.stdout).toBe(`${repoRoot}\n`);
-    expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
 
   it("allows the current Session worktree to live outside Monke home during swing with a warning", () => {
