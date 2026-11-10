@@ -122,8 +122,10 @@ On a failed gate or check, investigate with `$diagnosing-bugs`. For a repo-owned
 defect, open a root-cause fix PR with `$pr`, linking the merged PR.
 
 ## Report
+
 Report the base update, removals, skipped cleanup, contract sources, each check's
-result and evidence, any fix PR or release PR handoff, and any skip reason, any pending items.
+result and evidence, any fix PR or release PR handoff, skip reasons, and pending
+items.
 
 When no user decision or agreed work remains, settle the current thread with
 `t3_thread_organize` (`action: "settle"`).

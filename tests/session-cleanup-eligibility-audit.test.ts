@@ -60,8 +60,7 @@ const SnapshotSchema = z.object({
 // All 16 live positives were cross-checked with individual GitHub PR/compare requests.
 // A seventeenth case is verified partial recovery, independently checked with
 // its retained Root branch/merged PR and remaining dependency comparison.
-// A corrected capture replaced the first audit's accidentally truncated PR cache;
-// expectations were not copied from this method's boolean results. Identifiers
+// Expectations were not copied from this method's boolean results. Identifiers
 // are anonymized while preserving all equality and Session/member relationships.
 const inventory = z
   .array(z.object({ expected: z.boolean(), id: z.string(), snapshot: SnapshotSchema }))

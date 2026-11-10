@@ -955,7 +955,7 @@ apps:
       })
     ).toThrow(/Cross-repo PR URLs are not supported/u);
     expect(() => runMonke({ args: ["swing", "mr:12"], cwd: repoRoot, monkeHome: home })).toThrow(
-      /Merge request Swing targets are out of scope/u
+      /Merge request Swing targets are not supported/u
     );
     expect(() => runMonke({ args: ["swing", "@"], cwd: repoRoot, monkeHome: home })).toThrow(
       /@ Swing targets are not supported/u

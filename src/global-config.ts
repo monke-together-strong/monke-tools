@@ -86,7 +86,6 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
   writeFileSync(configPath, stringify(parsed), "utf-8");
 }
 
-/** Return the path of the Global monke config file for a monke home directory. */
 function getGlobalConfigPath(home: string) {
   return path.join(home, "config.yml");
 }

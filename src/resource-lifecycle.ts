@@ -254,7 +254,7 @@ export async function runResourcesExec(runtime: Runtime, command: string, args: 
 
       if (missing.length || missingValues.length) {
         throw new MonkeError(
-          `Missing resources: ${[...missing.map((entry) => entry.name), ...missingValues.map((entry) => entry.env)].join(", ")}. Run mt resources acquire (or your repository's e2e:setup) first.`
+          `Missing resources: ${[...missing.map((entry) => entry.name), ...missingValues.map((entry) => entry.env)].join(", ")}. Run mt resources acquire first.`
         );
       }
 

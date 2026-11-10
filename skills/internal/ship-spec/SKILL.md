@@ -1,17 +1,17 @@
 ---
 name: ship-spec
-description: Ship an agreed Spec from a supplied thread through implementation, independent review, PR creation, and shepherding. Use when asked to ship the work agreed in a thread.
+description: Ship an agreed Spec, given as its URL or the thread that agreed it, through implementation, independent review, PR creation, and shepherding. Use when asked to ship a Spec or the work agreed in a thread.
 ---
 
 # Ship Spec
 
 ## Workflow
 
-1. Read the supplied source thread and any linked Spec. Use its agreed
-   requirements and acceptance criteria as the Spec.
+1. Read the supplied Spec or source thread, and any Spec it links. Use the
+   agreed requirements and acceptance criteria as the Spec.
 2. Spawn the implementation checkout with `$monke-worktrees`:
    `mt spawn <repo-conforming-branch-name>`. Use the returned checkout path.
-3. Run `$implement <source thread reference>` directly.
+3. Run `$implement <Spec URL or source thread reference>` directly.
    - If `$implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
      blocker.

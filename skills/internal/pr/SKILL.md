@@ -102,8 +102,8 @@ mt prs create --thread <owning-thread-id> --checkout <PR-checkout> -- \
   --base <base> --head <branch> --title <title> --body-file <body-file>
 ```
 
-The command succeeds after tracking is saved and the poller is scheduled. If
-registration fails after creation, follow its recovery command for the existing PR.
+If registration fails after creation, follow its recovery command for the
+existing PR.
 Outside T3 Code, use `gh pr create`. Update existing PRs with `gh pr edit`.
 Use draft only when requested. If the user requests CodeRabbit ignore the PR,
 post exactly `@coderabbitai ignore` as a PR comment.

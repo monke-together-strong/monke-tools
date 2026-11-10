@@ -58,7 +58,7 @@ export interface CleanupOptions {
   targets?: string[];
 }
 
-/** Both modes use the same eligibility policy. Only execution acquires the operation lock. */
+/** Dry runs share execution's eligibility policy; only execution acquires the operation lock. */
 export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
   const { home, inspectionOptions, knownSources, ordinary, validateInputs } = prepareCleanup(
     runtime,
@@ -276,10 +276,8 @@ async function executeInventory(
   options: CleanupOptions
 ) {
   for (const original of inventory.sessions) {
-    // Earlier Cleanup commands may change later Sessions, Git refs, or provider evidence.
-    // Sessions execute serially because Cleanup commands can affect later candidates.
     // Reuse the global unowned-worktree discovery; revalidateMember rechecks overlaps live.
-    // oxlint-disable-next-line no-await-in-loop
+    // oxlint-disable-next-line no-await-in-loop -- Earlier Cleanup commands may change later Sessions, Git refs, or provider evidence.
     const fresh = await inspectSessionCleanup(runtime, home, [], {
       archiveUntracked: options.archiveUntracked,
       discovered: {

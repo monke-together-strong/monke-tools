@@ -59,9 +59,9 @@ export function inspectMatchingMergeDiff(
         "--"
       ]);
 
-    // Raw tree deltas include every path, mode and full before/after object ID.
+    // Raw tree deltas include every path, mode and full before/after object ID, so they keep
+    // binary and whitespace distinctions without text diff drivers or patch normalization.
     // Quoted paths preserve arbitrary filename bytes through Runtime's UTF-8 text output.
-    // They preserve binary/whitespace distinctions without text diff drivers or patch normalization.
     const branchChanges = changes(mergeBase, head);
 
     if (branchChanges === "" || branchChanges !== changes(mergeParent, merge)) {

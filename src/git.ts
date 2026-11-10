@@ -23,9 +23,8 @@ export function describeSessionBranchMismatch(session: string, branch: string | 
 
 /** A resolved default branch candidate for one source repo. */
 export interface DefaultBranchRef {
-  /** Branch name selected as the repo's default branch candidate. */
   branch: "main" | "master";
-  /** Full git ref used as the Session branch start point. */
+  /** Full Git ref, such as `refs/remotes/origin/main`. */
   ref: string;
   /** Whether the selected ref is remote-tracking or local. */
   source: "origin" | "local";
@@ -247,7 +246,10 @@ export function branchExists(runtime: Runtime, sourceRoot: string, branch: strin
   return result.exitCode === 0;
 }
 
-/** Resolve the default branch ref for one source repo, optionally refreshing origin first. */
+/**
+ * Resolve main or master for one source repo, preferring origin's refs. With refresh, a failed
+ * fetch falls back to local branches only.
+ */
 export function resolveDefaultBranchRef(
   runtime: Runtime,
   sourceRoot: string,
@@ -613,7 +615,6 @@ export function validateWorktreeForSession(
   return context;
 }
 
-/** Run one Git command and return its stdout. */
 export function runGit(runtime: Runtime, cwd: string, args: string[]) {
   return runtime.exec("git", args, { cwd }).stdout;
 }

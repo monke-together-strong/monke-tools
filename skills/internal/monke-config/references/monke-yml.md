@@ -111,9 +111,8 @@ the modules' `release` functions. A failure retains state and remaining worktree
 Commands must be safe to retry.
 
 Legacy default-export modules retain their recorded aggregate cleanup contract,
-including `MONKE_RESOURCE_OUTPUTS` (JSON of recorded dynamic outputs). Their
-cleanup may still tear down infrastructure during `mt resources release` until
-they are migrated to named exports.
+including `MONKE_RESOURCE_OUTPUTS` (JSON of recorded dynamic outputs). Before
+migrating them, follow [resource commands](../../../references/internal/RESOURCES.md).
 
 A missing worktree blocks required cleanup before any repo cleanup begins.
 Restore it, or deliberately use `mt chop <session> --cleanup-from-source` after

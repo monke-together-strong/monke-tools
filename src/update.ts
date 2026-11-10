@@ -115,7 +115,7 @@ function assertReleaseInstallNotCustomized(
 
   if (changedPaths.length > 0) {
     throw new MonkeError(
-      `Customized release install cannot be updated. Changed guidance paths:\n${changedPaths.map((filePath) => `- ${filePath}`).join("\n")}\nNo files were changed. V1 does not automatically back up, migrate, reset, or discard customized guidance.`
+      `Customized release install cannot be updated. Changed guidance paths:\n${changedPaths.map((filePath) => `- ${filePath}`).join("\n")}\nNo files were changed. mt update does not back up, migrate, reset, or discard customized guidance. Preserve the listed edits, restore those paths from the release bundle named by releaseTag in install-manifest.json, then rerun mt update.`
     );
   }
 }

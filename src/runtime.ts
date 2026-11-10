@@ -480,7 +480,7 @@ class AsyncCommandExecution {
     detachParentTerminationHandlersIfIdle();
   }
 
-  private handleExit(code: number | null, signal: NodeJS.Signals | null) {
+  private handleExit(code: number | null, signal: NodeJS.Signals | number | null) {
     try {
       if (this.#timedOut) {
         return;
@@ -721,7 +721,7 @@ function handleCompletedCommand(
 ) {
   const stdout = result.stdout.toString();
   const stderr = result.stderr.toString();
-  // Bun 1.4.1 returns null at runtime after a timeout or signal, despite the numeric type.
+  // Bun (through 1.4.4) returns null after a timeout or signal, despite the numeric type.
   const exitCode = result.exitCode ?? -1;
 
   if (result.exitedDueToTimeout === true) {
@@ -783,7 +783,6 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
-/** Run asynchronous Session work while holding the machine-wide Monke lock. */
 export interface OperationLock {
   assertHeld: () => void;
   isHeld: () => boolean;
@@ -795,6 +794,7 @@ type LockRelease = (() => void) & {
   protectProcessGroup: (pid: number) => void;
 };
 
+/** Run asynchronous Session work while holding the machine-wide Monke lock. */
 export async function withGlobalLockAsync<T>(
   home: string,
   callback: (lock: OperationLock) => Promise<T>

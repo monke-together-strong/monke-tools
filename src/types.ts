@@ -2,11 +2,8 @@ import type { ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 import type { SessionRepoState } from "./state-schema.ts";
 
 export interface Runtime {
-  /** Architecture of the machine running this command. */
   readonly architecture: string;
-  /** Current working directory used by monke-tools operations. */
   readonly cwd: string;
-  /** Process environment used by monke-tools operations. */
   readonly env: Record<string, string | undefined>;
   /** Run a command with the runtime environment. */
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
@@ -14,15 +11,12 @@ export interface Runtime {
   execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
   /** Optional injected activation boundary used to prove atomic failure behavior. */
   readonly installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
-  /** Select multiple values from an interactive terminal picker. */
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
-  /** Operating system of the machine running this command. */
   readonly platform: NodeJS.Platform;
   /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
   /** Official Release catalog and asset download boundary. */
   readonly releaseDistribution: ReleaseDistribution;
-  /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
   /** Optional injected boundary invoked immediately after a Session checkpoint is persisted. */
   readonly sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
@@ -32,9 +26,7 @@ export interface Runtime {
   readonly toolBuildIdentity: string;
   /** Root of the versioned tool install resolved once when the command starts. */
   readonly toolInstallRoot: string;
-  /** Write CLI output to stderr. */
   writeStderr: (text: string) => void;
-  /** Write CLI output to stdout. */
   writeStdout: (text: string) => void;
 }
 
@@ -63,7 +55,6 @@ export interface ExecOptions {
   env?: Record<string, string | undefined>;
   inheritStdio?: boolean;
   protectProcessGroup?: (pid: number) => void;
-  /** Text passed to the child process on stdin. */
   stdin?: string;
   /** Positive timeout in seconds before the child process is terminated. */
   timeoutSeconds?: number;
@@ -136,9 +127,9 @@ export interface ExternalRepoConfig {
 
 /** A deterministic Resource value declared by one repo in monke.yml. */
 export interface ResourceValueConfig {
-  /** Uppercase environment variable name written to the session root .env. */
+  /** Uppercase environment variable name written to the owning checkout's root .env. */
   env: string;
-  /** Literal value template supporting ${session} and ${user}. */
+  /** Literal value template supporting ${session}, ${user}, and ${id}. */
   literal: string;
 }
 
@@ -149,7 +140,7 @@ export interface ResourceCommandConfig {
   name: string;
   /** Uppercase environment variable names the function must return. */
   outputs: string[];
-  /** Repo-relative JS/TS module path run from the target session worktree. */
+  /** Repo-relative JS/TS module path run from the owning checkout. */
   run: string;
   /** Positive timeout in seconds for the Resource command. */
   timeoutSeconds: number;
@@ -158,7 +149,10 @@ export interface ResourceCommandConfig {
 export interface RepoConfig {
   appsInOrder: AppConfig[];
   bootstrapCommand?: string;
-  /** Repo-owned command run during Cleanup for dead session worktrees. */
+  /**
+   * Repo-owned shell command that satisfies the repo's Cleanup obligation; runs from the Session
+   * worktree before worktree removal.
+   */
   cleanupCommand?: string;
   configPath: string;
   externalInOrder: ExternalRepoConfig[];

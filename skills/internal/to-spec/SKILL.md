@@ -10,6 +10,6 @@ Before presenting a spec for approval, compare it against earlier agreements and
 
 Before publishing, commit the session's documentation changes that aren't on the default branch, such as Glossary and ADR edits, to a work branch and push it. Start the spec with `Working branch: <branch URL>`, so the implementation builds on it.
 
-The spec is meant to ship as 1 PR. Anything that should be done post PR merge, should be called out separately in the spec.
+Scope the spec to ship as one PR. List work that must happen after the PR merges in its own section.
 
-When user says "ship it", create a new chat/thread with "$ship-spec <spec URL>" (this can happen after to-spec directly or after to-tickets)
+When the user says "ship it", after to-spec or to-tickets, start a new thread with `$ship-spec <spec URL>`.

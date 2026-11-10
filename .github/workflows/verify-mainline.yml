@@ -21,7 +21,7 @@ jobs:
         uses: ./.github/actions/setup-mainline
 
       - name: Check
-        # Issue #130 keeps the full unit suite in PR CI and deliberately avoids repeating it here.
+        # PR CI owns the full unit suite; see docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md.
         run: vp check
 
       - name: Check packaged skill links

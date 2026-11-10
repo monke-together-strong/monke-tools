@@ -20,15 +20,15 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Removal
 
-**Cleanup eligibility**: A repo's retained obligation to run its **Cleanup command** before its **Session state** can be removed. _Avoid_: Prepared state, worktree existence
+**Cleanup obligation**: A repo's retained requirement to run its **Cleanup command** before its **Session state** can be removed. _Avoid_: Cleanup eligibility, prepared state, worktree existence
 
-**Session finalization**: Completion of Session removal after its cleanup obligations are satisfied and all recorded worktrees are gone.
+**Session finalization**: Completion of Session removal after its **Cleanup obligations** are satisfied and all recorded worktrees are gone.
 
-**Dead worktree**: A recorded **Session worktree** whose directory no longer exists.
+**Missing Session worktree**: A recorded **Session worktree** whose directory no longer exists. _Avoid_: Dead worktree
 
 **Merged PR**: A pull request accepted into its base branch through a recorded merge.
 
-**Merge-cleanable Session**: A **Session** whose committed and local work is proven preserved and whose members all satisfy removal safety checks.
+**Cleanup-eligible Session**: A retained **Session** whose committed and local work is proven preserved and whose members all satisfy removal safety checks, so **Cleanup** may remove it. _Avoid_: Merge-cleanable Session
 
 **Chop target**: The **Session** or **Ordinary worktree** selected for one **Chop** operation.
 
@@ -68,7 +68,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 - Each **Session** has one participating worktree per repo. **Worktree preparation** can complete independently; **Repo materialization** depends on that repo's preparation and its dependencies' materialization.
 - An incomplete **Materialization generation** retains completed work for resumption. A completed generation may be followed by another.
-- A **Prepared worktree** alone creates no cleanup obligation. **Cleanup eligibility** records obligations incurred during materialization.
+- A **Prepared worktree** alone creates no **Cleanup obligation**. Repos incur Cleanup obligations during materialization.
 - **Chop** selects a whole Session or one Ordinary worktree. Only Session removal includes **Session finalization**.
-- A **Dead worktree** can still have cleanup obligations. Missing directories do not imply finalization.
+- A **Missing Session worktree** can still have a **Cleanup obligation**. Missing directories do not imply finalization.
 - **Swing** changes the working location; **Diff** changes neither the checkout nor its branch. A **Shell adapter** connects navigation to the user's shell.

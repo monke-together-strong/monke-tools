@@ -54,7 +54,7 @@ export async function cleanupOrdinaryWorktrees(
 
       validateRegisteredWorktreeForRemoval(runtime, worktree.sourceRoot, worktree.worktreePath);
 
-      // oxlint-disable-next-line no-await-in-loop
+      // oxlint-disable-next-line no-await-in-loop -- Each worktree is removed before the next is inspected; recovery commands can change later candidates.
       const evidence = await collectCleanupEvidence(
         runtime,
         {

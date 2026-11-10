@@ -8,7 +8,6 @@ import type { Runtime } from "../src/types.ts";
 export const SKILLS_CLI_VERSION = "1.7.0";
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
 
-/** Options for building an upstream staged Skill install command. */
 export interface BuildSkillsInstallArgsOptions {
   importerVersion?: string;
   /** Upstream Skill import selectors to install. */
@@ -17,7 +16,6 @@ export interface BuildSkillsInstallArgsOptions {
   source: string;
 }
 
-/** Builds arguments for listing skills from an upstream source. */
 export function buildSkillsListArgs(source: string) {
   return [
     "--yes",
@@ -29,7 +27,6 @@ export function buildSkillsListArgs(source: string) {
   ];
 }
 
-/** Builds arguments for installing selected skills from an upstream source into staging. */
 export function buildSkillsInstallArgs(options: BuildSkillsInstallArgsOptions) {
   return [
     "--yes",

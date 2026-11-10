@@ -9,9 +9,13 @@ import { sha256 } from "./sha256.ts";
 import type { Runtime } from "./types.ts";
 import { assertCanonicalSourceCheckout, assertWorktreeUnlocked } from "./worktree-safety.ts";
 
-/** Missing directories can still have unique staged work in their registration's index. */
+/**
+ * Fingerprint a missing worktree's registration for safe removal, or return null when the path
+ * exists. Missing directories can still have unique staged work in their registration's index, so
+ * any state that could hold work throws.
+ */
 export function inspectStaleRegistration(runtime: Runtime, source: string, target: string) {
-  // lstat also preserves broken symlinks; errors other than absence must fail closed.
+  // lstat counts a broken symlink as present; errors other than absence throw to fail closed.
   if (lstatSync(target, { throwIfNoEntry: false })) {
     return null;
   }

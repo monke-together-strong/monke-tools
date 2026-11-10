@@ -102,7 +102,7 @@ function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
 
   if (resolveActiveInstallRoot(monkeHome) !== fixedRoot) {
     throw new MonkeError(
-      "The Active tool install changed while Skills Configure was waiting; rerun mt skills configure"
+      "The Active tool install changed while mt skills configure was waiting; rerun mt skills configure"
     );
   }
 
@@ -122,7 +122,7 @@ export function runLocalInstallSkills(
 
     if (activeInstall?.manifest.installKind !== "local") {
       throw new MonkeError(
-        "Skills Local Install requires an Active Local tool install; run vpr install:local from the source checkout"
+        "mt skills local-install requires an Active Local tool install; run vpr install:local from the source checkout"
       );
     }
 
@@ -130,7 +130,7 @@ export function runLocalInstallSkills(
 
     if (activeInstall.manifest.sourceCheckout !== requestedCheckout) {
       throw new MonkeError(
-        `Skills Local Install checkout does not match the Active Local install: ${activeInstall.manifest.sourceCheckout}`
+        `${requestedCheckout} does not match the Installed source checkout ${activeInstall.manifest.sourceCheckout}; run vpr install:local from ${requestedCheckout} first`
       );
     }
 

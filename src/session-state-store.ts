@@ -266,7 +266,7 @@ function parseSupportedSessionState(filePath: string) {
 
     if (version !== 2) {
       throw new MonkeError(
-        `Unsupported Session state version ${version} in ${filePath}; monke-tools requires strict v2 Session state`
+        `Unsupported Session state version ${version} in ${filePath}; mt cannot migrate it. Move the file out of the sessions directory to treat its worktrees as Ordinary worktrees; its Cleanup commands and resource releases will not run.`
       );
     }
 

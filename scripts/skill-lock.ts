@@ -375,7 +375,7 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
   };
 }
 
-/** Remote imports use skills.sh's SHA URL; local Git fixtures receive an immutable checkout. */
+/** Remote imports use skills.sh's SHA URL; local Git sources receive an immutable checkout. */
 export async function pinnedSkillSource(
   lock: { commit: string; repository: string; subpath: string },
   stagingDirectory: string
