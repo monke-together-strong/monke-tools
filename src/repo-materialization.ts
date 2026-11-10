@@ -62,13 +62,13 @@ interface RepoMaterializationAssignments {
 
 interface RepoMaterializationCheckpoint {
   assignedPorts: AssignedPort[];
-  cleanupEligible: boolean;
+  cleanupObligated: boolean;
 }
 
 /** The Session checkpoints one Repo materialization may persist, including its terminal result. */
 type RepoMaterializationCheckpointName = Extract<
   SessionMaterializationCheckpoint,
-  "cleanup-eligibility" | "repo-progress" | "repo-result" | "resource-command-output"
+  "cleanup-obligation" | "repo-progress" | "repo-result" | "resource-command-output"
 >;
 
 /** The subset a repo persists while still materializing. */
@@ -98,8 +98,8 @@ async function materializeRepoLocked(options: MaterializeRepoOptions) {
     localAssignments: assignments.localAssignments,
     state: createRepoMaterializationState(context, {
       assignedPorts: assignments.localAssignedPorts,
-      cleanupEligible:
-        context.existingState?.cleanupEligible === true || crossedExternalEffectCheckpoint,
+      cleanupObligated:
+        context.existingState?.cleanupObligated === true || crossedExternalEffectCheckpoint,
       materializationStatus: "materialized"
     })
   };
@@ -122,7 +122,7 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
       existingRepoState: resources,
       preserveValues: Boolean(
         resources.legacyCleanupCommand ||
-        (options.existingState?.cleanupEligible && options.existingState.cleanupCommand)
+        (options.existingState?.cleanupObligated && options.existingState.cleanupCommand)
       ),
       repoConfig: options.repoConfig,
       rootSourceRoot: options.rootSourceRoot,
@@ -140,7 +140,7 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
     context,
     {
       assignedPorts: options.existingState?.assignedPorts ?? [],
-      cleanupEligible: options.existingState?.cleanupEligible ?? false
+      cleanupObligated: options.existingState?.cleanupObligated ?? false
     },
     "repo-progress"
   );
@@ -278,7 +278,7 @@ function resolveRepoResourceCommands(
         context,
         {
           assignedPorts,
-          cleanupEligible: true
+          cleanupObligated: true
         },
         "resource-command-output"
       );
@@ -306,9 +306,9 @@ function establishReplacementCleanupAuthority(
     context,
     {
       assignedPorts,
-      cleanupEligible: true
+      cleanupObligated: true
     },
-    "cleanup-eligibility"
+    "cleanup-obligation"
   );
 }
 
@@ -351,26 +351,26 @@ function resolveCleanupAuthority(
   }
 ) {
   const retainExistingAuthority =
-    context.existingState?.cleanupEligible === true &&
+    context.existingState?.cleanupObligated === true &&
     context.existingState.cleanupCommand !== undefined &&
     !context.replacementCleanupAuthorityEstablished;
 
   if (retainExistingAuthority) {
     return {
       cleanupCommand: context.existingState?.cleanupCommand,
-      cleanupEligible: true
+      cleanupObligated: true
     };
   }
 
   const retainExistingCleanupCommand =
-    context.existingState?.cleanupEligible === true &&
+    context.existingState?.cleanupObligated === true &&
     !context.replacementCleanupAuthorityEstablished;
 
   return {
     cleanupCommand: retainExistingCleanupCommand
       ? context.existingState?.cleanupCommand
       : (context.repoConfig.cleanupCommand ?? context.existingState?.cleanupCommand),
-    cleanupEligible: state.cleanupEligible
+    cleanupObligated: state.cleanupObligated
   };
 }
 
@@ -463,7 +463,7 @@ function toResourceCommandEnvNames(commands: ResourceCommandState[]) {
 function buildSessionRepoState(options: {
   assignedPorts: AssignedPort[];
   cleanupCommand?: string;
-  cleanupEligible: boolean;
+  cleanupObligated: boolean;
   diffBaseRef?: string;
   existingState?: SessionRepoState;
   materializationStatus: SessionRepoState["materializationStatus"];
@@ -473,7 +473,7 @@ function buildSessionRepoState(options: {
   const state: SessionRepoState = {
     ...options.existingState,
     assignedPorts: options.assignedPorts,
-    cleanupEligible: options.cleanupEligible,
+    cleanupObligated: options.cleanupObligated,
     materializationStatus: options.materializationStatus,
     preparationStatus: options.existingState?.preparationStatus ?? "prepared",
     sourceRoot: options.sourceRoot,
@@ -507,10 +507,10 @@ export function createInitialRepoLifecycleState(
   return {
     ...existingState,
     assignedPorts: existingState?.assignedPorts ?? [],
-    cleanupCommand: existingState?.cleanupEligible
+    cleanupCommand: existingState?.cleanupObligated
       ? existingState.cleanupCommand
       : repoConfig.cleanupCommand,
-    cleanupEligible: existingState?.cleanupEligible ?? false,
+    cleanupObligated: existingState?.cleanupObligated ?? false,
     materializationStatus: existingState?.materializationStatus ?? "pending",
     preparationStatus: existingState?.preparationStatus ?? "pending",
     sourceRoot: repoConfig.sourceRoot,

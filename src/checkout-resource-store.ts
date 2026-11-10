@@ -73,7 +73,7 @@ export class CheckoutResourceStore {
             resourceCommandOutputs: repo.resourceCommandOutputs ?? [],
             resourceValues: repo.resourceValues ?? [],
             version: 1 as const,
-            ...(repo.cleanupEligible && repo.cleanupCommand
+            ...(repo.cleanupObligated && repo.cleanupCommand
               ? { legacyCleanupCommand: repo.cleanupCommand }
               : {})
           }

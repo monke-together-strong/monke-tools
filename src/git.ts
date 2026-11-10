@@ -481,7 +481,7 @@ function prepareSessionWorktree(
 
   if (sourceContext.currentBranch === session && !branchMatch) {
     throw new MonkeError(
-      `Cannot spawn session "${session}" because the source checkout is already on that branch`
+      `Cannot create the Session worktree for "${session}" because the Source checkout ${sourceRoot} is already on that branch. Switch the Source checkout to another branch, then retry.`
     );
   }
 

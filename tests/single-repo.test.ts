@@ -214,7 +214,7 @@ describe("single-repo sessions", () => {
     expect(sessionState.repos).toStrictEqual([
       {
         assignedPorts: [],
-        cleanupEligible: false,
+        cleanupObligated: false,
         diffBaseRef: "refs/heads/main",
         materializationStatus: "pending",
         preparationStatus: "prepared",
@@ -1784,8 +1784,8 @@ apps: {}
     ).toThrow(/completed Session.*current HEAD.*use a new Session/u);
   });
 
-  it("rejects v1 Session state in Spawn through the production loader", () => {
-    const sandbox = makeTempDir("single-repo-v1-session-state");
+  it("rejects v2 Session state in Spawn through the production loader", () => {
+    const sandbox = makeTempDir("single-repo-v2-session-state");
     const home = path.join(sandbox, "home");
 
     const repoRoot = createRepo(path.join(sandbox, "root"), {
@@ -1796,7 +1796,7 @@ apps: {}
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${repoRoot}
 session: legacy
 repos: []
@@ -1804,7 +1804,7 @@ repos: []
     );
 
     expect(() => runMonke({ args: ["spawn", "legacy"], cwd: repoRoot, monkeHome: home })).toThrow(
-      /Unsupported Session state version 1.*cannot migrate it/su
+      /Unsupported Session state version 2.*cannot migrate it/su
     );
   });
 

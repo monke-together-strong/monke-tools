@@ -89,8 +89,8 @@ function inspectRepoFinalization(
   let cleanupCommand: string | undefined;
 
   if (recoveryCommand) {
-    cleanupCommand = repo.cleanupEligible || hasRetainedResources ? recoveryCommand : undefined;
-  } else if (repo.cleanupEligible && !cleanupOwnedByRelease) {
+    cleanupCommand = repo.cleanupObligated || hasRetainedResources ? recoveryCommand : undefined;
+  } else if (repo.cleanupObligated && !cleanupOwnedByRelease) {
     cleanupCommand = savedCleanupCommand;
   }
 

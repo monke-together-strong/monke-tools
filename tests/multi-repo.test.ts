@@ -157,7 +157,7 @@ external:
     runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
     const before = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(before.repos).toHaveLength(2);
-    expect(before.repos.every((repo) => repo.cleanupEligible)).toBeTruthy();
+    expect(before.repos.every((repo) => repo.cleanupObligated)).toBeTruthy();
     rmSync(path.join(root, "monke.yml"));
 
     const result = runMonkeCapturingFailure({
@@ -1369,7 +1369,7 @@ external:
     expect(existsSync(codexOpenLog)).toBeFalsy();
 
     const failedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(failedState.version).toBe(2);
+    expect(failedState.version).toBe(3);
     expect(failedState.generation).toStrictEqual({ number: 1, status: "incomplete" });
     expect(
       Object.fromEntries(

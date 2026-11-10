@@ -384,6 +384,8 @@ async function tryLoadSourceMetadata(token: string, sourceId: number) {
       throw cause;
     }
 
+    warnSkippedCheck("table and source endpoint checks", "source metadata", cause);
+
     return null;
   }
 }
@@ -396,8 +398,23 @@ async function tryLoadConnections(token: string) {
       throw cause;
     }
 
+    warnSkippedCheck("connection endpoint check", "connections", cause);
+
     return [];
   }
+}
+
+function warnSkippedCheck(check: string, metadata: string, cause: unknown) {
+  const reason =
+    cause instanceof BetterStackApiError
+      ? `${cause.status} ${cause.statusText}`
+      : cause instanceof Error
+        ? cause.message
+        : String(cause);
+
+  process.stderr.write(
+    `Warning: skipped Better Stack ${check}; could not load ${metadata}: ${reason}\n`
+  );
 }
 
 function validateQueryEndpointMatchesSource(

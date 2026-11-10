@@ -114,17 +114,31 @@ export function inspectStaleRegistration(runtime: Runtime, source: string, targe
     throw new MonkeError(`Stale registration has hidden index entries: ${target}`);
   }
 
-  git([
-    ...args,
-    "diff",
-    "--cached",
-    "--quiet",
-    "--no-ext-diff",
-    "--ita-visible-in-index",
-    "--ignore-submodules=none",
-    head,
-    "--"
-  ]);
+  const stagedDiff = readOnly.exec(
+    "git",
+    [
+      ...args,
+      "diff",
+      "--cached",
+      "--quiet",
+      "--no-ext-diff",
+      "--ita-visible-in-index",
+      "--ignore-submodules=none",
+      head,
+      "--"
+    ],
+    { allowFailure: true, cwd: source }
+  );
+
+  if (stagedDiff.exitCode === 1) {
+    throw new MonkeError(`Stale registration has staged changes: ${target}`);
+  }
+
+  if (stagedDiff.exitCode !== 0) {
+    throw new MonkeError(
+      `Cannot inspect staged changes in stale registration ${target}: ${stagedDiff.stderr.trim()}`
+    );
+  }
 
   if (lstatSync(target, { throwIfNoEntry: false })) {
     throw new MonkeError(`Stale worktree path reappeared: ${target}`);

@@ -88,7 +88,7 @@ export function materializedRepoState(
 ): SessionRepoState {
   return {
     assignedPorts: [],
-    cleanupEligible: false,
+    cleanupObligated: false,
     materializationStatus: "materialized",
     preparationStatus: "prepared",
     ...options
@@ -100,7 +100,7 @@ export function completeSessionState(
 ): SessionState {
   return {
     generation: { number: 1, status: "complete" },
-    version: 2,
+    version: 3,
     ...options
   };
 }

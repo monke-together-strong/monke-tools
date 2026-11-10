@@ -72,15 +72,15 @@ describe("Session state store", () => {
     expect(store.get("/repo", "atomic")?.copyDirty).toBeFalsy();
   });
 
-  it("accepts strict v2 repo lifecycle state without an optional Diff base in loadSessionState", () => {
-    const sandbox = makeTempDir("session-state-store-v2-diff-base");
+  it("accepts strict v3 repo lifecycle state without an optional Diff base in loadSessionState", () => {
+    const sandbox = makeTempDir("session-state-store-v3-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: 3
 rootSourceRoot: ${sourceRoot}
 session: banana
 generation:
@@ -90,7 +90,7 @@ repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
-    cleanupEligible: false
+    cleanupObligated: false
     preparationStatus: prepared
     materializationStatus: materialized
 `
@@ -107,7 +107,7 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: 3
 rootSourceRoot: ${sourceRoot}
 session: banana
 generation:
@@ -117,7 +117,7 @@ repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
-    cleanupEligible: false
+    cleanupObligated: false
     preparationStatus: prepared
     materializationStatus: materialized
     diffBaseRef: ""
@@ -135,7 +135,7 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: 3
 rootSourceRoot: ${sourceRoot}
 session: banana
 generation:
@@ -158,7 +158,7 @@ repos: wrong
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: 3
 rootSourceRoot: ${sourceRoot}
 session: invalid-port-key
 generation:
@@ -170,7 +170,7 @@ repos:
     assignedPorts:
       - key: api-port
         value: 10000
-    cleanupEligible: false
+    cleanupObligated: false
     preparationStatus: prepared
     materializationStatus: materialized
 `
@@ -187,7 +187,7 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: 3
 rootSourceRoot: ${sourceRoot}
 session: different
 generation:
@@ -197,7 +197,7 @@ repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
-    cleanupEligible: false
+    cleanupObligated: false
     preparationStatus: prepared
     materializationStatus: materialized
 `
@@ -214,7 +214,7 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: 3
 rootSourceRoot: ${sourceRoot}
 session: banana
 generation:
@@ -224,7 +224,7 @@ repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
-    cleanupEligible: false
+    cleanupObligated: false
     preparationStatus: prepared
     materializationStatus: materialized
 typo: true
@@ -245,7 +245,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "pending",
             preparationStatus: "pending",
             sourceRoot: "/repo",
@@ -254,7 +254,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -265,7 +265,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             failure: { message: "missing worktree", phase: "worktree-preparation" },
             materializationStatus: "materialized",
             preparationStatus: "failed",
@@ -275,7 +275,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -286,7 +286,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "pending",
             preparationStatus: "failed",
             sourceRoot: "/repo",
@@ -295,7 +295,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -307,7 +307,7 @@ typo: true
           {
             assignedPorts: [],
             blockedBy: "/dependency",
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "blocked",
             preparationStatus: "pending",
             sourceRoot: "/repo",
@@ -316,7 +316,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -327,7 +327,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -337,7 +337,7 @@ typo: true
         rootSourceRoot: "/repo",
         session: "invalid",
         spawnSource: "default-branch",
-        version: 2
+        version: 3
       }
     },
     {
@@ -348,7 +348,7 @@ typo: true
         repos: [],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -359,7 +359,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/dependency",
@@ -368,7 +368,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -379,7 +379,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -387,7 +387,7 @@ typo: true
           },
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -396,7 +396,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -407,7 +407,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -415,7 +415,7 @@ typo: true
           },
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/dependency",
@@ -424,19 +424,19 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
-      expected: /not-started generation cannot be cleanup-eligible/u,
-      name: "cleanup eligibility before a generation starts",
+      expected: /not-started generation cannot carry a Cleanup obligation/u,
+      name: "Cleanup obligation before a generation starts",
       state: {
         generation: { number: 0, status: "not-started" },
         repos: [
           {
             assignedPorts: [],
             cleanupCommand: "cleanup",
-            cleanupEligible: true,
+            cleanupObligated: true,
             materializationStatus: "pending",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -445,18 +445,18 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
-      expected: /Resource command outputs require Cleanup eligibility/u,
-      name: "Resource command outputs without Cleanup eligibility",
+      expected: /Resource command outputs require a Cleanup obligation/u,
+      name: "Resource command outputs without a Cleanup obligation",
       state: {
         generation: { number: 1, status: "complete" },
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             resourceCommandOutputs: [
@@ -471,7 +471,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -482,7 +482,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             pinnedRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             preparationStatus: "prepared",
@@ -493,7 +493,7 @@ typo: true
         rootSourceRoot: "/repo",
         session: "invalid",
         spawnSource: "default-branch",
-        version: 2
+        version: 3
       }
     },
     {
@@ -504,7 +504,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -514,7 +514,7 @@ typo: true
         rootSourceRoot: "/repo",
         session: "invalid",
         spawnSource: "session-branch",
-        version: 2
+        version: 3
       }
     },
     {
@@ -526,7 +526,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             dirtyCarryStatus: "pending",
             materializationStatus: "pending",
             pinnedRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -538,7 +538,7 @@ typo: true
         rootSourceRoot: "/repo",
         session: "invalid",
         spawnSource: "default-branch",
-        version: 2
+        version: 3
       }
     },
     {
@@ -550,7 +550,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             dirtyCarryStatus: "pending",
             materializationStatus: "pending",
             preparationStatus: "pending",
@@ -560,7 +560,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -572,7 +572,7 @@ typo: true
           {
             assignedPorts: [],
             blockedBy: "/repo",
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "blocked",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -581,7 +581,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -593,7 +593,7 @@ typo: true
           {
             assignedPorts: [],
             blockedBy: "/missing",
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "blocked",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -602,7 +602,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -613,7 +613,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "pending",
             preparationStatus: "pending",
             sourceRoot: "/repo",
@@ -623,7 +623,7 @@ typo: true
         rootSourceRoot: "/repo",
         session: "invalid",
         spawnSource: "default-branch",
-        version: 2
+        version: 3
       }
     },
     {
@@ -634,7 +634,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -642,7 +642,7 @@ typo: true
           },
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo/.",
@@ -651,7 +651,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -662,7 +662,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/dependency",
@@ -670,7 +670,7 @@ typo: true
           },
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -679,7 +679,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -690,7 +690,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -698,7 +698,7 @@ typo: true
           },
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/dependency",
@@ -707,7 +707,7 @@ typo: true
         ],
         rootSourceRoot: "/repo",
         session: "invalid",
-        version: 2
+        version: 3
       }
     },
     {
@@ -718,7 +718,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             pinnedRef: "refs/heads/main",
             preparationStatus: "prepared",
@@ -729,7 +729,7 @@ typo: true
         rootSourceRoot: "/repo",
         session: "invalid",
         spawnSource: "default-branch",
-        version: 2
+        version: 3
       }
     },
     {
@@ -740,7 +740,7 @@ typo: true
         repos: [
           {
             assignedPorts: [],
-            cleanupEligible: false,
+            cleanupObligated: false,
             materializationStatus: "materialized",
             preparationStatus: "prepared",
             sourceRoot: "/repo",
@@ -749,7 +749,7 @@ typo: true
         ],
         rootSourceRoot: "/repo/.",
         session: "invalid",
-        version: 2
+        version: 3
       }
     }
   ])("rejects $name in loadSessionState", ({ expected, state }) => {
@@ -762,7 +762,7 @@ typo: true
     expect(() => loadSessionState(home, state.rootSourceRoot, state.session)).toThrow(expected);
   });
 
-  it.each([1, 3])("rejects unsupported version %i in loadSessionState", (version) => {
+  it.each([2, 4])("rejects unsupported version %i in loadSessionState", (version) => {
     const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -789,7 +789,7 @@ repos: []
     write(
       home,
       "sessions/corrupt.yml",
-      `version: 2
+      `version: 3
 rootSourceRoot: root
 session: banana
 repos:
@@ -818,7 +818,7 @@ repos:
         repos: "wrong",
         rootSourceRoot: sourceRoot,
         session: "banana",
-        version: 2
+        version: 3
       })
     );
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
@@ -985,7 +985,7 @@ size: 1000
       repos: [
         {
           assignedPorts: [{ key: "API_PORT", value: firstSession.get("API_PORT") ?? -1 }],
-          cleanupEligible: false,
+          cleanupObligated: false,
           materializationStatus: "materialized",
           preparationStatus: "prepared",
           sourceRoot,
@@ -994,7 +994,7 @@ size: 1000
       ],
       rootSourceRoot: sourceRoot,
       session: "one",
-      version: 2
+      version: 3
     });
 
     const secondSession = allocateLocalPorts({

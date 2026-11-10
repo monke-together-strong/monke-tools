@@ -96,6 +96,60 @@ describe("Better Stack content I/O", () => {
     }
   );
 
+  it("warns when unavailable source metadata skips the table and source endpoint checks", async () => {
+    const directory = makeTempDir("betterstack-metadata-unavailable");
+    const preloadFile = path.join(directory, "fail-metadata.ts");
+    await Bun.write(
+      preloadFile,
+      `globalThis.fetch = async (url) => String(url).startsWith("https://telemetry.betterstack.com/")
+        ? new Response("unavailable", { status: 503, statusText: "Service Unavailable" })
+        : new Response("ok");`
+    );
+
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--preload",
+        preloadFile,
+        cliPath,
+        "query",
+        "run",
+        "--source-id",
+        "1",
+        "--table",
+        "logs",
+        "--sql",
+        "SELECT 1",
+        "--url",
+        "https://test-connect.betterstackdata.com",
+        "--username",
+        "user",
+        "--password",
+        "password",
+        "--token",
+        "metadata-token"
+      ],
+      {
+        cwd: directory,
+        env: { ...process.env, BETTERSTACK_ENV_FILE: undefined },
+        stderr: "pipe",
+        stdout: "pipe"
+      }
+    );
+
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text()
+    ]);
+
+    expect(stderr).toBe(
+      "Warning: skipped Better Stack table and source endpoint checks; could not load source metadata: 503 Service Unavailable\n"
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe("ok\n");
+  });
+
   it("ignores missing Better Stack env files and propagates other read errors", async () => {
     const directory = makeTempDir("betterstack-env-read-errors");
     await expect(

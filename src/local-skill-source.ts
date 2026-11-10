@@ -358,9 +358,15 @@ function validateDeclaredSlugs(
     const isOwnSkill =
       ownPath !== undefined && !containsPath(path.join(publisher, "skills/imported"), ownPath);
 
-    if (isOwnSkill || declaredSlugs.has(item.slug)) {
+    if (isOwnSkill) {
       throw new MonkeError(
         `Imported ${item.kind} slug ${item.slug} collides with publishing source ${source}`
+      );
+    }
+
+    if (declaredSlugs.has(item.slug)) {
+      throw new MonkeError(
+        `Duplicate imported slug ${item.slug} across recipes in ${publisher}. Declare it in only one recipe.`
       );
     }
 

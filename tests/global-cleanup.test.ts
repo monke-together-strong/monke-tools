@@ -177,7 +177,7 @@ describe("global Session cleanup", () => {
 
             return {
               assignedPorts: [],
-              cleanupEligible: true,
+              cleanupObligated: true,
               materializationStatus: "materialized",
               preparationStatus: "prepared",
               sourceRoot,
@@ -186,7 +186,7 @@ describe("global Session cleanup", () => {
           }),
         rootSourceRoot,
         session,
-        version: 2
+        version: 3
       };
 
       saveSessionState(home, state);
@@ -745,9 +745,18 @@ export function release({owner, outputs}) {
         };
       }
 
-      await f.run(false, f.root, [selected, "--include-unowned"]);
+      const result = await f.run(false, f.root, [selected, "--include-unowned"]);
       expect(git(f.root, ["worktree", "list", "--porcelain"])).toContain(selected);
       expect(existsSync(admin)).toBeTruthy();
+      expect(result.report.unownedWorktrees).toContainEqual(
+        expect.objectContaining({
+          outcome: "skipped",
+          worktreePath: selected,
+          ...(kind === "staged" || kind === "intent-to-add"
+            ? { reason: `Stale registration has staged changes: ${selected}` }
+            : {})
+        })
+      );
 
       const staged =
         kind === "staged" ? git(f.root, [`--git-dir=${admin}`, "show", ":tracked.txt"]) : null;
