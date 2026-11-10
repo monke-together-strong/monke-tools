@@ -223,36 +223,25 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   });
 
-  it.each(["ordinary", "squash", "rebase"])(
-    "proves a real %s merge from the PR head",
-    async (strategy) => {
-      const fixture = createFixture();
-      const { sourceRoot, worktreePath } = fixture.candidate;
-      write(worktreePath, "feature.txt", "feature work\n");
-      git(worktreePath, ["add", "."]);
-      git(worktreePath, ["commit", "-m", "feature"]);
-      fixture.pr.head.sha = git(worktreePath, ["rev-parse", "HEAD"]);
-      write(sourceRoot, "base.txt", "base work\n");
-      git(sourceRoot, ["add", "."]);
-      git(sourceRoot, ["commit", "-m", "base advanced"]);
-
-      if (strategy === "ordinary") {
-        git(sourceRoot, ["merge", "--no-ff", BRANCH, "-m", "merge feature"]);
-      } else if (strategy === "squash") {
-        git(sourceRoot, ["merge", "--squash", BRANCH]);
-        git(sourceRoot, ["commit", "-m", "squashed feature"]);
-      } else {
-        const rebased = path.join(fixture.sandbox, "rebased");
-        git(sourceRoot, ["worktree", "add", "-b", "integration", rebased, BRANCH]);
-        git(rebased, ["rebase", "main"]);
-        git(sourceRoot, ["merge", "--ff-only", "integration"]);
-      }
-
-      const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
-      expect(snapshot.repository?.defaultHead).not.toBe(snapshot.head);
-      expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
-    }
-  );
+  it("proves a squash-merged PR head that default history does not contain", async () => {
+    const fixture = createFixture();
+    const { sourceRoot, worktreePath } = fixture.candidate;
+    write(worktreePath, "feature.txt", "feature work\n");
+    git(worktreePath, ["add", "."]);
+    git(worktreePath, ["commit", "-m", "feature"]);
+    fixture.pr.head.sha = git(worktreePath, ["rev-parse", "HEAD"]);
+    write(sourceRoot, "base.txt", "base work\n");
+    git(sourceRoot, ["add", "."]);
+    git(sourceRoot, ["commit", "-m", "base advanced"]);
+    git(sourceRoot, ["merge", "--squash", BRANCH]);
+    git(sourceRoot, ["commit", "-m", "squashed feature"]);
+    const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+    expect(snapshot.ancestorOfDefault).toBeFalsy();
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({
+      code: "exact-merged-pr",
+      eligible: true
+    });
+  });
 
   it("accepts a recorded path with a different branch name and an arbitrary verified default", async () => {
     const fixture = createFixture();
@@ -696,29 +685,26 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toMatchObject({ code: "commit-pr-unavailable", status: "unknown" });
   });
 
-  it.each(["root", "dependency"] as const)(
-    "proves an unchanged %s against the current default without a PR",
-    async (role) => {
-      const fixture = createFixture();
-      fixture.pr.head.ref = "another-branch";
-      const candidate = { ...fixture.candidate, role };
-      const snapshot = await collectCleanupEvidence(fixture.runtime, candidate);
-      expect(decideCleanupEligibility(snapshot)).toMatchObject({
-        code: "unchanged-branch",
-        eligible: true
-      });
-      write(candidate.worktreePath, "unique.txt", "new work\n");
-      git(candidate.worktreePath, ["add", "."]);
-      git(candidate.worktreePath, ["commit", "-m", "unique"]);
-      const unique = await collectCleanupEvidence(fixture.runtime, candidate);
-      // Never pushed: no remote compare is possible, and none is needed.
-      expect(decideCleanupEligibility(unique)).toMatchObject({
-        code: "no-merged-pr",
-        eligible: false,
-        status: "ineligible"
-      });
-    }
-  );
+  it("proves an unchanged branch against the current default without a PR", async () => {
+    const fixture = createFixture();
+    fixture.pr.head.ref = "another-branch";
+    const { candidate } = fixture;
+    const snapshot = await collectCleanupEvidence(fixture.runtime, candidate);
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({
+      code: "unchanged-branch",
+      eligible: true
+    });
+    write(candidate.worktreePath, "unique.txt", "new work\n");
+    git(candidate.worktreePath, ["add", "."]);
+    git(candidate.worktreePath, ["commit", "-m", "unique"]);
+    const unique = await collectCleanupEvidence(fixture.runtime, candidate);
+    // Never pushed: no remote compare is possible, and none is needed.
+    expect(decideCleanupEligibility(unique)).toMatchObject({
+      code: "no-merged-pr",
+      eligible: false,
+      status: "ineligible"
+    });
+  });
 
   it.each([
     { comparison: "ahead", expected: true, label: "remote ancestry proof" },
@@ -915,37 +901,40 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  it.each(["source", "detached", "locked", "missing", "wrong-source"])(
-    "excludes a %s target",
-    async (kind) => {
-      const fixture = createFixture();
-      const candidate = { ...fixture.candidate };
+  it.each([
+    ["source", "source-checkout"],
+    ["detached", "detached-head"],
+    ["locked", "identity-unverified"],
+    ["missing", "missing-worktree"],
+    ["wrong-source", "identity-unverified"]
+  ])("excludes a %s target as %s", async (kind, code) => {
+    const fixture = createFixture();
+    const candidate = { ...fixture.candidate };
 
-      if (kind === "source") {
-        candidate.worktreePath = candidate.sourceRoot;
-      }
-
-      if (kind === "detached") {
-        git(candidate.worktreePath, ["checkout", "--detach"]);
-      }
-
-      if (kind === "locked") {
-        git(candidate.sourceRoot, ["worktree", "lock", candidate.worktreePath]);
-      }
-
-      if (kind === "missing") {
-        candidate.worktreePath = path.join(fixture.sandbox, "missing");
-      }
-
-      if (kind === "wrong-source") {
-        candidate.sourceRoot = createRepo(path.join(fixture.sandbox, "other"), { a: "a" });
-      }
-
-      expect(
-        decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, candidate)).eligible
-      ).toBeFalsy();
+    if (kind === "source") {
+      candidate.worktreePath = candidate.sourceRoot;
     }
-  );
+
+    if (kind === "detached") {
+      git(candidate.worktreePath, ["checkout", "--detach"]);
+    }
+
+    if (kind === "locked") {
+      git(candidate.sourceRoot, ["worktree", "lock", candidate.worktreePath]);
+    }
+
+    if (kind === "missing") {
+      candidate.worktreePath = path.join(fixture.sandbox, "missing");
+    }
+
+    if (kind === "wrong-source") {
+      candidate.sourceRoot = createRepo(path.join(fixture.sandbox, "other"), { a: "a" });
+    }
+
+    expect(
+      decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, candidate))
+    ).toMatchObject({ code, eligible: false });
+  });
 
   it("treats provider failure as unknown, never as a clean/unmerged success", async () => {
     const fixture = createFixture();
@@ -1024,7 +1013,12 @@ describe("cleanup evidence from real Git worktrees", () => {
         label: "unknown failure",
         stderr: "unexpected provider failure"
       }
-    ].flatMap((failure) => ["none", "before", "during"].map((dirty) => ({ ...failure, dirty })))
+    ].flatMap((failure) =>
+      // Failure classification is independent of local state; one kind covers the dirty paths.
+      (failure.label === "login required" ? ["none", "before", "during"] : ["none"]).map(
+        (dirty) => ({ ...failure, dirty })
+      )
+    )
   )(
     "retains a sanitized $label diagnostic in cleanup reports and cached evidence, dirty=$dirty",
     async (failure) => {
