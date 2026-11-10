@@ -188,6 +188,42 @@ describe("whole-Session read-only eligibility", () => {
     expect(existsSync(f.dependencyPath)).toBeTruthy();
   });
 
+  it("reports the open Session-branch PR that retains a detached dependency", async () => {
+    const f = fixture();
+    git(f.dependencyPath, ["checkout", "--detach"]);
+    const { execAsync } = f.runtime;
+
+    f.runtime.execAsync = async (command, args, options) => {
+      const endpoint = args?.[1] ?? "";
+
+      if (!endpoint.includes("repos/owner/dependency/pulls?")) {
+        return await execAsync(command, args, options);
+      }
+
+      const open = {
+        base: { ref: "main", repo: { full_name: "owner/dependency" } },
+        head: {
+          ref: f.state.session,
+          repo: { full_name: "owner/dependency" },
+          sha: "f".repeat(40)
+        },
+        html_url: "https://github.com/owner/dependency/pull/7",
+        merged_at: null,
+        number: 7,
+        state: "open"
+      };
+
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify([[open]]) };
+    };
+
+    const result = await decisionFor(f);
+    expect(result.decision).toMatchObject({ eligible: false, reasons: ["open-pr"] });
+    expect(createSessionCleanupReport(result)).toMatchObject({
+      outcome: "skipped",
+      readiness: "blocked"
+    });
+  });
+
   it("blocks both owners when two Session records claim one dependency", async () => {
     const f = fixture();
     const [dependencyRepo] = f.state.repos;
@@ -383,7 +419,7 @@ describe("whole-Session read-only eligibility", () => {
 
     const result = await decisionFor(f);
     expect(result.decision.reasons).toContain("member-changed-during-inspection");
-    const report = createSessionCleanupReport(result.snapshot);
+    const report = createSessionCleanupReport(result);
     expect(report.members[0]?.checks.local.status).toBe("unknown");
     expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
   });

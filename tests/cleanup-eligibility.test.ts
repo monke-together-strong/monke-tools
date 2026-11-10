@@ -11,6 +11,8 @@ import {
   RECENT_WORKTREE_MS
 } from "../src/cleanup-eligibility.ts";
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
+import { decideSessionCleanupEligibility } from "../src/session-cleanup-eligibility.ts";
+import type { SessionCleanupEvidence } from "../src/session-cleanup-eligibility.ts";
 import {
   createSessionCleanupReport,
   formatSessionCleanupReport
@@ -1062,7 +1064,7 @@ describe("cleanup evidence from real Git worktrees", () => {
       expect(decideCleanupEligibility(cached)).toStrictEqual(decision);
 
       for (const invalidated of [false, true]) {
-        const report = createSessionCleanupReport({
+        const sessionEvidence: SessionCleanupEvidence = {
           blockers: invalidated ? ["member-changed-during-inspection"] : [],
           filePath: "/fixture/session.yml",
           members: [{ ...candidate, evidence: snapshot, mode: "live" }],
@@ -1077,6 +1079,11 @@ describe("cleanup evidence from real Git worktrees", () => {
             : [],
           rootSourceRoot: candidate.sourceRoot,
           session: BRANCH
+        };
+
+        const report = createSessionCleanupReport({
+          decision: decideSessionCleanupEligibility(sessionEvidence),
+          snapshot: sessionEvidence
         });
 
         expect(report.eligibility.eligible).toBeFalsy();

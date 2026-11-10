@@ -198,7 +198,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("hello\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
     );
     expect(result.error?.message).toContain(
       "Session materialization failed after all runnable work settled."
@@ -278,37 +278,8 @@ describe("single-repo sessions", () => {
   });
 
   it("retries dirty carry in configured Spawn after interruption immediately after worktree creation", () => {
-    const sandbox = makeTempDir("single-repo-dirty-carry-interruption");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": "apps: {}\n",
-      "README.md": "clean\n"
-    });
-
-    write(repoRoot, "README.md", "dirty\n");
-    write(repoRoot, "notes.txt", "untracked\n");
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
-    installGitShim(binDirectory, {
-      afterCommand: {
-        args: `worktree add ${worktreeRoot} interrupted-carry`,
-        cwd: repoRoot,
-        script: 'kill -KILL "$PPID"'
-      }
-    });
-
-    const interrupted = runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(interrupted.error).not.toBeNull();
-    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
-      dirtyCarryStatus: "pending",
-      preparationStatus: "pending"
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+      name: "single-repo-dirty-carry-interruption"
     });
 
     runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home });
@@ -323,7 +294,6 @@ describe("single-repo sessions", () => {
 
   it("preserves Session-local edits after interrupted dirty carry in configured Spawn", () => {
     const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: true,
       name: "single-repo-dirty-carry-local-edit"
     });
 
@@ -346,7 +316,6 @@ describe("single-repo sessions", () => {
 
   it("preserves ignored Session-local files while resuming dirty carry in configured Spawn", () => {
     const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: true,
       name: "single-repo-dirty-carry-ignored-local"
     });
 
@@ -359,23 +328,35 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
   });
 
-  it("refuses to overwrite a conflicting Session-local tracked edit in configured Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: true,
-      name: "single-repo-dirty-carry-tracked-conflict"
-    });
+  it.each([
+    {
+      conflict: "tracked edit",
+      error: /without overwriting Session-local tracked changes/u,
+      file: "README.md"
+    },
+    {
+      conflict: "untracked file",
+      error: /Refusing to overwrite Session-local path during dirty carry/u,
+      file: "notes.txt"
+    }
+  ])(
+    "refuses to overwrite a conflicting Session-local $conflict in configured Spawn",
+    ({ error, file }) => {
+      const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+        name: "single-repo-dirty-carry-conflict"
+      });
 
-    write(worktreeRoot, "README.md", "Session-local README\n");
+      write(worktreeRoot, file, "Session-local content\n");
 
-    expect(() =>
-      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/without overwriting Session-local tracked changes/u);
-    expect(read(worktreeRoot, "README.md")).toBe("Session-local README\n");
-  });
+      expect(() =>
+        runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
+      ).toThrow(error);
+      expect(read(worktreeRoot, file)).toBe("Session-local content\n");
+    }
+  );
 
   it("preserves a branch-switched worktree after interrupted dirty carry in configured Spawn", () => {
     const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: true,
       name: "single-repo-dirty-carry-branch-switch"
     });
 
@@ -395,10 +376,9 @@ describe("single-repo sessions", () => {
   });
 
   it("resumes configured Spawn after interruption between tracked and untracked dirty carry", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterTrackedPatch({
-      configured: true,
-      name: "single-repo-dirty-carry-partial"
-    });
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterTrackedPatch(
+      "single-repo-dirty-carry-partial"
+    );
 
     runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home });
 
@@ -407,10 +387,9 @@ describe("single-repo sessions", () => {
   });
 
   it("resumes a partially copied untracked dirty carry in configured Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterPartialUntrackedCopy({
-      configured: true,
-      name: "single-repo-dirty-carry-partial-untracked"
-    });
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterPartialUntrackedCopy(
+      "single-repo-dirty-carry-partial-untracked"
+    );
 
     runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home });
 
@@ -418,38 +397,18 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "z-last.txt")).toBe("last\n");
   });
 
-  it("retries dirty carry in config-less Spawn after interruption immediately after worktree creation", () => {
-    const sandbox = makeTempDir("single-repo-configless-dirty-carry-interruption");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n"
+  it("resumes an interrupted config-less dirty carry only from its retained content checkout HEAD", () => {
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+      configless: true,
+      name: "single-repo-configless-dirty-carry-interruption"
     });
 
-    write(repoRoot, "README.md", "dirty\n");
-    write(repoRoot, "notes.txt", "untracked\n");
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
-    installGitShim(binDirectory, {
-      afterCommand: {
-        args: `worktree add ${worktreeRoot} interrupted-carry`,
-        cwd: repoRoot,
-        script: 'kill -KILL "$PPID"'
-      }
-    });
-
-    const interrupted = runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(interrupted.error).not.toBeNull();
-    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
-      dirtyCarryStatus: "pending",
-      preparationStatus: "pending"
-    });
+    const pinnedHead = git(repoRoot, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["commit", "--allow-empty", "-m", "Move content checkout HEAD"]);
+    expect(() =>
+      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/Cannot resume dirty carry.*HEAD changed/u);
+    git(repoRoot, ["reset", "--soft", pinnedHead]);
 
     const retried = runMonkeCapturingFailure({
       args: ["spawn", "interrupted-carry"],
@@ -462,134 +421,6 @@ describe("single-repo sessions", () => {
     );
     expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
-    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
-      dirtyCarryStatus: "complete",
-      preparationStatus: "prepared"
-    });
-  });
-
-  it("preserves Session-local edits after interrupted dirty carry in config-less Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: false,
-      name: "single-repo-configless-dirty-carry-local-edit"
-    });
-
-    write(worktreeRoot, "session-tracked.txt", "Session-local tracked\n");
-    write(worktreeRoot, "session-only.txt", "keep me\n");
-    write(worktreeRoot, "ignored.local", "ignored but important\n");
-
-    const retried = runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(retried.error?.message).toContain(
-      "Session materialization failed after all runnable work settled"
-    );
-    expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
-    expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
-    expect(read(worktreeRoot, "session-tracked.txt")).toBe("Session-local tracked\n");
-    expect(read(worktreeRoot, "session-only.txt")).toBe("keep me\n");
-    expect(read(worktreeRoot, "ignored.local")).toBe("ignored but important\n");
-    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
-      dirtyCarryStatus: "complete",
-      preparationStatus: "prepared"
-    });
-  });
-
-  it("preserves ignored Session-local files while resuming dirty carry in config-less Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: false,
-      name: "single-repo-configless-dirty-carry-ignored-local"
-    });
-
-    write(worktreeRoot, "ignored.local", "ignored but important\n");
-
-    runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(worktreeRoot, "ignored.local")).toBe("ignored but important\n");
-    expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
-    expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
-  });
-
-  it("refuses to overwrite a conflicting Session-local untracked file in config-less Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: false,
-      name: "single-repo-configless-dirty-carry-untracked-conflict"
-    });
-
-    write(worktreeRoot, "notes.txt", "Session-local notes\n");
-
-    expect(() =>
-      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/Refusing to overwrite Session-local path during dirty carry/u);
-    expect(read(worktreeRoot, "notes.txt")).toBe("Session-local notes\n");
-  });
-
-  it("preserves a branch-switched worktree after interrupted dirty carry in config-less Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
-      configured: false,
-      name: "single-repo-configless-dirty-carry-branch-switch"
-    });
-
-    git(worktreeRoot, ["switch", "-c", "session-local"]);
-
-    expect(() =>
-      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/to be on branch interrupted-carry, found session-local/u);
-    expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("session-local");
-
-    git(worktreeRoot, ["switch", "interrupted-carry"]);
-    runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
-    expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
-    expect(git(repoRoot, ["branch", "--list", "session-local"])).not.toBe("");
-  });
-
-  it("resumes config-less Spawn after interruption between tracked and untracked dirty carry", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterTrackedPatch({
-      configured: false,
-      name: "single-repo-configless-dirty-carry-partial"
-    });
-
-    runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
-    expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
-    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
-      dirtyCarryStatus: "complete",
-      preparationStatus: "prepared"
-    });
-  });
-
-  it("resumes a partially copied untracked dirty carry in config-less Spawn", () => {
-    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterPartialUntrackedCopy({
-      configured: false,
-      name: "single-repo-configless-dirty-carry-partial-untracked"
-    });
-
-    runMonkeCapturingFailure({
-      args: ["spawn", "interrupted-carry"],
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    expect(read(worktreeRoot, "a-first.txt")).toBe("first\n");
-    expect(read(worktreeRoot, "z-last.txt")).toBe("last\n");
     expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
       dirtyCarryStatus: "complete",
       preparationStatus: "prepared"
@@ -1031,7 +862,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("main\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("fresh");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -1845,14 +1676,18 @@ apps:
     ).toThrow(/incomplete Spawn using current HEAD with dirty carry/u);
   });
 
-  it("fails spawn -m when the session branch already exists", () => {
-    const sandbox = makeTempDir("single-repo-main-existing-branch");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
+  it.each([true, false])(
+    "fails spawn -m before writing state when the session branch already exists (monke.yml: %s)",
+    (configured) => {
+      const sandbox = makeTempDir("single-repo-main-existing-branch");
+      const binDirectory = path.join(sandbox, "bin");
+      const home = path.join(sandbox, "home");
 
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `apps:
+      const repoRoot = createRepo(path.join(sandbox, "root"), {
+        "apps/api/.env.local": "PORT=3000\n",
+        ...(configured
+          ? {
+              "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -1860,19 +1695,26 @@ apps:
       - port: API_PORT
         env: PORT
 `
-    });
+            }
+          : {})
+      });
 
-    git(repoRoot, ["branch", "fresh"]);
+      git(repoRoot, ["branch", "fresh"]);
 
-    expect(() =>
-      runMonke({
-        args: ["spawn", "fresh", "-m"],
-        binDirectory,
-        cwd: repoRoot,
-        monkeHome: home
-      })
-    ).toThrow(/Session branch "fresh" already exists/u);
-  });
+      // A retry must refuse too, rather than resuming onto the existing branch.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        expect(() =>
+          runMonke({
+            args: ["spawn", "fresh", "-m"],
+            binDirectory,
+            cwd: repoRoot,
+            monkeHome: home
+          })
+        ).toThrow(/Session branch "fresh" already exists/u);
+        expect(existsSync(getSessionStateFilePath(home, repoRoot, "fresh"))).toBeFalsy();
+      }
+    }
+  );
 
   it("treats spawn --main and --master as aliases for default branch mode", () => {
     const sandbox = makeTempDir("single-repo-main-aliases");
@@ -1938,7 +1780,7 @@ apps:
     });
 
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared the Session worktree without materializing it.`
     );
   });
 
@@ -2763,26 +2605,17 @@ apps:
   });
 });
 
-function interruptDirtyCarryAfterWorktreeCreation(options: { configured: boolean; name: string }) {
+function interruptDirtyCarryAfterWorktreeCreation(options: { configless?: boolean; name: string }) {
   const sandbox = makeTempDir(options.name);
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
 
-  const repoRoot = createRepo(
-    path.join(sandbox, "root"),
-    options.configured
-      ? {
-          ".gitignore": "ignored.local\n",
-          "monke.yml": "apps: {}\n",
-          "README.md": "clean\n",
-          "session-tracked.txt": "clean Session content\n"
-        }
-      : {
-          ".gitignore": "ignored.local\n",
-          "README.md": "clean\n",
-          "session-tracked.txt": "clean Session content\n"
-        }
-  );
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": "ignored.local\n",
+    ...(options.configless === true ? {} : { "monke.yml": "apps: {}\n" }),
+    "README.md": "clean\n",
+    "session-tracked.txt": "clean Session content\n"
+  });
 
   write(repoRoot, "README.md", "dirty\n");
   write(repoRoot, "notes.txt", "untracked\n");
@@ -2811,17 +2644,15 @@ function interruptDirtyCarryAfterWorktreeCreation(options: { configured: boolean
   return { home, repoRoot, worktreeRoot };
 }
 
-function interruptDirtyCarryAfterTrackedPatch(options: { configured: boolean; name: string }) {
-  const sandbox = makeTempDir(options.name);
+function interruptDirtyCarryAfterTrackedPatch(name: string) {
+  const sandbox = makeTempDir(name);
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
 
-  const repoRoot = createRepo(
-    path.join(sandbox, "root"),
-    options.configured
-      ? { "monke.yml": "apps: {}\n", "README.md": "clean\n" }
-      : { "README.md": "clean\n" }
-  );
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "monke.yml": "apps: {}\n",
+    "README.md": "clean\n"
+  });
 
   write(repoRoot, "README.md", "dirty\n");
   write(repoRoot, "notes.txt", "untracked\n");
@@ -2852,20 +2683,15 @@ function interruptDirtyCarryAfterTrackedPatch(options: { configured: boolean; na
   return { home, repoRoot, worktreeRoot };
 }
 
-function interruptDirtyCarryAfterPartialUntrackedCopy(options: {
-  configured: boolean;
-  name: string;
-}) {
-  const sandbox = makeTempDir(options.name);
+function interruptDirtyCarryAfterPartialUntrackedCopy(name: string) {
+  const sandbox = makeTempDir(name);
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
 
-  const repoRoot = createRepo(
-    path.join(sandbox, "root"),
-    options.configured
-      ? { "monke.yml": "apps: {}\n", "README.md": "clean\n" }
-      : { "README.md": "clean\n" }
-  );
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "monke.yml": "apps: {}\n",
+    "README.md": "clean\n"
+  });
 
   write(repoRoot, "README.md", "dirty\n");
   write(repoRoot, "a-first.txt", "first\n");

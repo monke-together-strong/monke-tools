@@ -2,11 +2,13 @@ import { ok } from "node:assert/strict";
 
 import { describe, expect, it } from "vite-plus/test";
 
+import { decideSessionCleanupEligibility } from "../src/session-cleanup-eligibility.ts";
 import type { SessionCleanupEvidence } from "../src/session-cleanup-eligibility.ts";
 import {
   createSessionCleanupReport,
   formatSessionCleanupReport
 } from "../src/session-cleanup-report.ts";
+import type { SessionCleanupExecution } from "../src/session-cleanup-report.ts";
 
 const head = "a".repeat(40);
 
@@ -52,6 +54,13 @@ function fixture(): SessionCleanupEvidence {
   };
 }
 
+function reportFor(snapshot: SessionCleanupEvidence, execution?: SessionCleanupExecution) {
+  return createSessionCleanupReport(
+    { decision: decideSessionCleanupEligibility(snapshot), snapshot },
+    execution
+  );
+}
+
 describe("Session cleanup explanations", () => {
   it("does not let archive readiness hide a blocking sibling or hold", () => {
     const snapshot = fixture();
@@ -64,9 +73,9 @@ describe("Session cleanup explanations", () => {
       witness: null
     };
     root.evidence.pendingWork = root.evidence.archiveCandidate;
-    expect(createSessionCleanupReport(snapshot).readiness).toBe("archive-required");
+    expect(decideSessionCleanupEligibility(snapshot).readiness).toBe("archive-required");
     snapshot.blockers.push("held");
-    expect(createSessionCleanupReport(snapshot).readiness).toBe("blocked");
+    expect(decideSessionCleanupEligibility(snapshot).readiness).toBe("blocked");
     snapshot.blockers = [];
     dependency.evidence.localBlock = {
       code: "dirty-worktree",
@@ -74,7 +83,7 @@ describe("Session cleanup explanations", () => {
       evidence: ["tracked.ts"],
       status: "ineligible"
     };
-    expect(createSessionCleanupReport(snapshot).readiness).toBe("blocked");
+    expect(decideSessionCleanupEligibility(snapshot).readiness).toBe("blocked");
   });
 
   it.each(["merged-pr-head", "matching-merged-diff"] as const)(
@@ -117,7 +126,7 @@ describe("Session cleanup explanations", () => {
         evidence: [" M work.txt"],
         status: "ineligible"
       };
-      const report = createSessionCleanupReport(snapshot);
+      const report = reportFor(snapshot);
       expect(report.eligibility.eligible).toBeFalsy();
       expect(report.members[1]?.checks.committedWork).toMatchObject({
         code,
@@ -125,7 +134,7 @@ describe("Session cleanup explanations", () => {
       });
       expect(formatSessionCleanupReport(report)).toContain("feature/merged-name -> main");
       root.evidence.commitPullRequests = null;
-      expect(createSessionCleanupReport(snapshot).members[1]?.checks.committedWork).toMatchObject({
+      expect(reportFor(snapshot).members[1]?.checks.committedWork).toMatchObject({
         code: "commit-pr-unavailable",
         status: "unknown"
       });
@@ -144,7 +153,7 @@ describe("Session cleanup explanations", () => {
     };
     dependency.evidence.committedWorkAttempted = false;
     dependency.evidence.repository = null;
-    const report = createSessionCleanupReport(snapshot);
+    const report = reportFor(snapshot);
     expect(report.outcome).toBe("skipped");
     expect(report.members[0]?.checks.committedWork.status).toBe("not-checked");
     expect(report.members[1]?.checks.committedWork).toMatchObject({
@@ -170,7 +179,7 @@ describe("Session cleanup explanations", () => {
         status: "ineligible"
       };
       dependency.evidence.committedWorkAttempted = attempted;
-      const report = createSessionCleanupReport(snapshot);
+      const report = reportFor(snapshot);
       expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
     }
   );
@@ -184,7 +193,7 @@ describe("Session cleanup explanations", () => {
         message: "Worktree /worktrees/dependency is also recorded by Session other"
       }
     ];
-    const report = createSessionCleanupReport(snapshot);
+    const report = reportFor(snapshot);
     expect(report.outcome).toBe("skipped");
     expect(formatSessionCleanupReport(report)).toContain("also recorded by Session other");
   });
@@ -199,7 +208,7 @@ describe("Session cleanup explanations", () => {
         worktreePath: "/worktrees/dependency"
       }
     ];
-    const report = createSessionCleanupReport(snapshot);
+    const report = reportFor(snapshot);
     expect(report.members[0]?.checks.local.status).toBe("unknown");
     expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
   });
@@ -217,7 +226,7 @@ describe("Session cleanup explanations", () => {
         worktreePath: member.worktreePath
       }
     ];
-    const report = createSessionCleanupReport(snapshot);
+    const report = reportFor(snapshot);
     expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
     expect(formatSessionCleanupReport(report)).not.toContain("Committed work [not-checked]");
   });
@@ -228,31 +237,31 @@ describe("Session cleanup explanations", () => {
     ok(dependency, "Missing fixture member");
     dependency.mode = "gone";
     dependency.evidence = null;
-    const report = createSessionCleanupReport(snapshot);
+    const report = reportFor(snapshot);
     expect(report.outcome).toBe("eligible");
     expect(report.eligibility.kind).toBe("recovery");
     expect(report.members[0]?.checks.committedWork.status).toBe("not-needed");
     expect(formatSessionCleanupReport(report)).toContain("Eligible (not attempted)");
   });
 
-  it("reports a failed teardown's step and repo without claiming the whole Session was retained", () => {
-    const report = createSessionCleanupReport(fixture(), {
+  it("reports a failed Session removal's step and repo without claiming the whole Session was retained", () => {
+    const report = reportFor(fixture(), {
       message: "Channel deletion failed",
       outcome: "failed",
       sourceRoot: "/sources/root",
-      step: "teardown"
+      step: "cleanup-command"
     });
 
     expect(report.outcome).toBe("failed");
     const text = formatSessionCleanupReport(report);
-    expect(text).toContain("teardown failed in /sources/root: Channel deletion failed");
+    expect(text).toContain("cleanup-command failed in /sources/root: Channel deletion failed");
     expect(text).toContain("earlier steps may have succeeded");
     expect(text).not.toContain("Entire Session retained");
   });
 
   it("labels a Session cleaned only from an execution result", () => {
     const snapshot = fixture();
-    expect(createSessionCleanupReport(snapshot).outcome).toBe("eligible");
-    expect(createSessionCleanupReport(snapshot, { outcome: "cleaned" }).outcome).toBe("cleaned");
+    expect(reportFor(snapshot).outcome).toBe("eligible");
+    expect(reportFor(snapshot, { outcome: "cleaned" }).outcome).toBe("cleaned");
   });
 });

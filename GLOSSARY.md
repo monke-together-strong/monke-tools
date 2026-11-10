@@ -73,9 +73,9 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Setup**: Preparation of a Source checkout or Session worktree's static configuration, separate from live resource acquisition. _Avoid_: Materialize, bootstrap
 
-**Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
+**Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target performs **Session removal**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
-**Cleanup**: The operation that inspects retained Sessions across all Root repos and removes **Cleanup-eligible Sessions** through worktree removal and Session finalization. _Avoid_: Delete session, prune repos
+**Cleanup**: The operation that inspects retained Sessions across all Root repos and removes **Cleanup-eligible Sessions** through **Session removal**. _Avoid_: Delete session, prune repos
 
 **Swing**: The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
 
@@ -92,7 +92,7 @@ Historical decisions live in [docs/adr](docs/adr).
   has one owner across the session graph. Local mappings consume that repo's
   keys; External mappings consume dependency-owned keys.
 - Each Assigned port belongs to one Port key in a Session. A repo's Port
-  reservation survives Session cleanup for future allocations.
+  reservation survives **Session removal** for future allocations.
 - Setup prepares static checkout wiring; Materialize also prepares Session
   worktrees and runs bootstrap. Consumer repo describes tool usage, while Root repo and
   Dependency repo describe membership in a particular Session.

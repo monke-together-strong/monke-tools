@@ -409,7 +409,7 @@ apps: {}
         cwd: fixture.sourceRoot,
         monkeHome: fixture.home
       })
-    ).toThrow(/Cannot Chop Session feature.*registered at unexpected path/su);
+    ).toThrow(/Cannot remove Session feature.*registered at unexpected path/su);
 
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
     expect(
@@ -896,8 +896,8 @@ apps: {}
 
       expect(result.stderr).toContain(
         mismatchKind === "detached"
-          ? `Session banana worktree ${fixture.rootWorktree} is detached; chopping it anyway`
-          : `Session banana worktree ${fixture.rootWorktree} is on branch unexpected instead of banana; chopping it anyway`
+          ? `Session banana worktree ${fixture.rootWorktree} is detached; removing it anyway`
+          : `Session banana worktree ${fixture.rootWorktree} is on branch unexpected instead of banana; removing it anyway`
       );
       expect(existsSync(fixture.depWorktree)).toBeFalsy();
       expect(existsSync(fixture.rootWorktree)).toBeFalsy();
@@ -924,7 +924,7 @@ apps: {}
     });
 
     expect(result.stderr).toContain(
-      `Session banana worktree ${worktree} is on branch unexpected instead of banana; chopping it anyway`
+      `Session banana worktree ${worktree} is on branch unexpected instead of banana; removing it anyway`
     );
     expect(result.stdout).toBe(`${root}\n`);
     expect(existsSync(worktree)).toBeFalsy();

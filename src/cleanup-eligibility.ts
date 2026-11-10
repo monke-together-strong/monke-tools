@@ -201,13 +201,10 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return decision("ineligible", "default-branch");
   }
 
-  const branchPrs = repository.pullRequests.filter(
-    (pr) =>
-      pr.head.ref === (branch ?? snapshot.candidate.sessionBranch) &&
-      pr.head.repo?.full_name === repository.name
-  );
+  // The merged-PR checks below run only with a branch, where the detached-HEAD match never applies.
+  const branchPrs = relevantPullRequests(snapshot, repository);
 
-  if (hasOpenPullRequest(snapshot, repository)) {
+  if (branchPrs.some((pr) => pr.state === "open")) {
     return decision("ineligible", "open-pr");
   }
 
@@ -300,10 +297,16 @@ function decideAlternateCommittedWork(
   );
 }
 
-function hasOpenPullRequest(snapshot: CleanupEvidence, repository: CleanupRepositoryEvidence) {
-  return repository.pullRequests.some(
+/**
+ * The repository pull requests a member decision can depend on. Reports keep only these, so a
+ * decision replayed from a reported snapshot matches the original.
+ */
+export function relevantPullRequests(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence
+) {
+  return repository.pullRequests.filter(
     (pr) =>
-      pr.state === "open" &&
       pr.head.repo?.full_name === repository.name &&
       (pr.head.ref === (snapshot.branch ?? snapshot.candidate.sessionBranch) ||
         (snapshot.branch === null && pr.head.sha === snapshot.head))
@@ -520,7 +523,7 @@ function worktreeAge(worktreePath: string): number | null {
   }
 }
 
-/** Read-only collection: no fetch, optional Git writes, write lock, or teardown. */
+/** Read-only collection: no fetch, optional Git writes, write lock, or Session removal. */
 export async function collectCleanupEvidence(
   runtime: Runtime,
   candidate: CleanupCandidate,

@@ -1,30 +1,21 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { teardownSession } from "./chop.ts";
-import { archiveCleanupFiles, assertCleanupArchive } from "./cleanup-archive.ts";
 import { RECENT_WORKTREE_MS, readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
 import { cleanupOrdinaryWorktrees } from "./cleanup-ordinary.ts";
-import {
-  assertRetainedHead,
-  preserveDetachedHead,
-  retainedHeadAction
-} from "./cleanup-retained-head.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { resolveRepoContext } from "./git.ts";
 import { containsPath, samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import type { OperationLock } from "./runtime.ts";
 import { inspectSessionCleanup, revalidateSessionMember } from "./session-cleanup-eligibility.ts";
-import type { SessionCleanupMember } from "./session-cleanup-eligibility.ts";
 import {
   createSessionCleanupReport,
   formatSessionCleanupReport
 } from "./session-cleanup-report.ts";
 import type { SessionCleanupExecution } from "./session-cleanup-report.ts";
-import { inspectSessionFinalization } from "./session-finalization.ts";
-import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
-import type { SessionAction } from "./session-lifecycle-progress.ts";
+import { planSessionRemoval, removeSession } from "./session-removal.ts";
+import type { SessionAction, SessionRemovalProgress } from "./session-removal.ts";
 import { inspectSessionRepoRegistration } from "./session-safety.ts";
 import { scanSessionStates } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
@@ -99,7 +90,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
   for (const row of inventory?.sessions ?? []) {
     if (!sessions.some((session) => session.stateFile === row.snapshot.filePath)) {
       sessions.push(
-        createSessionCleanupReport(row.snapshot, {
+        createSessionCleanupReport(row, {
           message: globalFailure ?? "Execution stopped",
           outcome: "skipped",
           sourceRoot: row.snapshot.rootSourceRoot ?? home,
@@ -450,10 +441,6 @@ function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {
   }
 }
 
-function detachedMemberHead(member: SessionCleanupMember | undefined): string | null {
-  return member?.mode === "live" && member.evidence?.branch === null ? member.evidence.head : null;
-}
-
 function reportSession(
   row: Inventory["sessions"][number],
   execution: SessionCleanupExecution,
@@ -463,50 +450,20 @@ function reportSession(
   const { snapshot } = row;
   const state = row.decision.eligible ? row.state : null;
 
-  const plannedActions: SessionAction[] = state
-    ? [
-        ...snapshot.members
-          .filter((member) => member.evidence?.pendingWork?.kind === "untracked-archive")
-          .map((member) => ({
-            sourceRoot: member.sourceRoot,
-            step: "file-archive" as const,
-            worktreePath: member.worktreePath
-          })),
-        ...snapshot.members
-          .toSorted(
-            (left, right) =>
-              sessionRemovalRank(left, cwd, state.rootSourceRoot) -
-              sessionRemovalRank(right, cwd, state.rootSourceRoot)
-          )
-          .flatMap((member) => {
-            const head = detachedMemberHead(member);
-
-            return head ? [retainedHeadAction(member.sourceRoot, member.worktreePath, head)] : [];
-          }),
-        ...(snapshot.finalization?.actions ?? []),
-        ...state.repos
-          .filter((repo) =>
-            snapshot.members.some(
-              (member) =>
-                samePath(member.worktreePath, repo.worktreePath) &&
-                (member.mode === "live" || member.mode === "stale")
-            )
-          )
-          .toSorted(
-            (left, right) =>
-              sessionRemovalRank(left, cwd, state.rootSourceRoot) -
-              sessionRemovalRank(right, cwd, state.rootSourceRoot)
-          )
-          .map((member) => ({
-            sourceRoot: member.sourceRoot,
-            step: "worktree-removal" as const,
-            worktreePath: member.worktreePath
-          })),
-        { sourceRoot: state.rootSourceRoot, step: "state-removal" }
-      ]
+  const plannedActions = state
+    ? planSessionRemoval(
+        state,
+        snapshot.members,
+        snapshot.obligations?.actions ?? [],
+        invocationPath(state, cwd)
+      )
     : [];
 
-  return createSessionCleanupReport(snapshot, execution, { dryRun, plannedActions });
+  return createSessionCleanupReport(row, execution, { dryRun, plannedActions });
+}
+
+function invocationPath(state: SessionState, cwd: string) {
+  return state.repos.find((repo) => containsPath(repo.worktreePath, cwd))?.worktreePath ?? cwd;
 }
 
 function executeSession(
@@ -525,16 +482,11 @@ function executeSession(
   }
 
   const planned = reportSession(row, { outcome: "not-attempted" }, false, runtime.cwd);
-
-  const completedActions: SessionAction[] = [];
-  const archives = new Map<string, string>();
-  let current: SessionAction = { sourceRoot: state.rootSourceRoot, step: "revalidation" };
-  let attemptedAction: SessionAction | undefined;
-  let started = false;
   const readOnly = readOnlyCleanupRuntime(runtime);
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
   const sources = [...inventory.sourceRoots, ...inventory.unavailableSources];
+  let processes: ReturnType<typeof scanWorktreeProcesses> | undefined;
 
   function guard() {
     assertGlobalSafety(lock, inventory);
@@ -544,283 +496,184 @@ function executeSession(
     }
   }
 
-  const revalidateMember = (repo: SessionState["repos"][number]) => {
-    const member = snapshot.members.find((candidate) =>
-      samePath(candidate.worktreePath, repo.worktreePath)
-    );
-
-    if (!member) {
-      throw new MonkeError(`Missing member evidence: ${repo.worktreePath}`);
-    }
-
-    revalidateSessionMember(runtime, readOnly, home, state, repo, member);
-    assertNoOverlappingCheckouts(readOnly, sources, repo.worktreePath);
-  };
-
-  const inspectProcesses = (afterCleanup = false) => {
-    const processes = scanWorktreeProcesses(
+  const inspectProcesses = (progress: SessionRemovalProgress, afterCleanup = false) => {
+    const scanned = scanWorktreeProcesses(
       runtime,
       state.repos.map((repo) => repo.worktreePath)
     );
 
     for (const repo of state.repos) {
-      const active = processes
+      const active = scanned
         .treesUnder(repo.worktreePath)
         .filter((tree) => tree.ageMs < RECENT_WORKTREE_MS || (afterCleanup && tree.attached));
 
       if (active.length > 0) {
-        current = {
-          sourceRoot: repo.sourceRoot,
-          step: "process-stop",
-          worktreePath: repo.worktreePath
-        };
+        progress.step(processStop(repo));
         throw new MonkeError(
           `Worktree ${repo.worktreePath} is in use: ${active.map(describeTree).join("; ")}`
         );
       }
     }
 
-    return processes;
+    return scanned;
   };
 
-  try {
-    guard();
-    // Check every member before archives, process shutdown, or resource effects.
-    const processes = inspectProcesses();
-
-    for (const member of snapshot.members) {
-      if (member.evidence?.pendingWork?.kind === "untracked-archive") {
+  const result = removeSession(
+    { ...runtime, writeStdout: runtime.writeStderr },
+    home,
+    { allStates: states, state },
+    {
+      force: false,
+      invocationPath: invocationPath(state, runtime.cwd),
+      members: snapshot.members,
+      recoveryCommand: options.recoveryCommand
+    },
+    {
+      beforeEffect(action, progress) {
         guard();
 
-        const repo = state.repos.find((candidate) =>
-          samePath(candidate.worktreePath, member.worktreePath)
-        );
-
-        if (!repo) {
-          throw new MonkeError("Missing archive member");
+        if (
+          action.step === "resource-release" ||
+          action.step === "cleanup-command" ||
+          action.step === "worktree-removal"
+        ) {
+          // Commands may activate any sibling; refresh before the next destructive effect.
+          inspectProcesses(progress, true);
         }
 
-        revalidateMember(repo);
-        current = {
-          sourceRoot: member.sourceRoot,
-          step: "file-archive",
-          worktreePath: member.worktreePath
-        };
-        attemptedAction = current;
-        started = true;
-        const archivePath = archiveCleanupFiles(runtime, home, member.evidence);
-        archives.set(member.worktreePath, archivePath);
-        attemptedAction = undefined;
-        completedActions.push({
-          archivePath,
-          sourceRoot: member.sourceRoot,
-          step: "file-archive",
-          worktreePath: member.worktreePath
+        if (action.step === "state-removal") {
+          assertFinalizationReady(readOnly, home, state);
+        }
+      },
+      beforeStart(progress) {
+        guard();
+        // Check every member before archives, process stops, or resource effects.
+        processes = inspectProcesses(progress);
+      },
+      prepareMember(repo, progress) {
+        const action = processStop(repo);
+        progress.step(action);
+
+        if (!processes || processes.treesUnder(repo.worktreePath).length === 0) {
+          return;
+        }
+
+        guard();
+
+        const outcome = stopStaleWorktreeProcesses(runtime, processes, repo.worktreePath, {
+          beforeKill() {
+            progress.attempt(action);
+          }
         });
+
+        for (const tree of outcome.killed) {
+          runtime.writeStderr(
+            `Stopped stale process in ${repo.worktreePath}: ${describeTree(tree)}\n`
+          );
+        }
+
+        for (const tree of outcome.bystanders) {
+          runtime.writeStderr(
+            `Left running; not attached to ${repo.worktreePath}: ${describeTree(tree)}\n`
+          );
+        }
+
+        if (outcome.killed.length > 0) {
+          progress.complete({ ...action, command: outcome.killed.map(describeTree).join("; ") });
+        }
+
+        if (outcome.recent.length > 0) {
+          throw new MonkeError(
+            `Worktree ${repo.worktreePath} is in use: ${outcome.recent.map(describeTree).join("; ")}. Processes under a day old are never stopped.`
+          );
+        }
+      },
+      revalidateMember(repo) {
+        const member = snapshot.members.find((candidate) =>
+          samePath(candidate.worktreePath, repo.worktreePath)
+        );
+
+        if (!member) {
+          throw new MonkeError(`Missing member evidence: ${repo.worktreePath}`);
+        }
+
+        revalidateSessionMember(runtime, readOnly, home, state, repo, member);
+        assertNoOverlappingCheckouts(readOnly, sources, repo.worktreePath);
       }
     }
+  );
 
-    const invocation = state.repos.find((repo) => containsPath(repo.worktreePath, runtime.cwd));
-    teardownSession(
-      { ...runtime, writeStdout: runtime.writeStderr },
-      home,
-      invocation?.worktreePath ?? runtime.cwd,
-      { allStates: states, kind: "session", state },
-      { force: false, recoveryCommand: options.recoveryCommand },
-      {
-        authorizePreservedWork(repo) {
-          revalidateMember(repo);
-
-          return snapshot.members.some(
-            (member) =>
-              samePath(member.worktreePath, repo.worktreePath) &&
-              member.evidence?.pendingWork !== undefined
-          );
-        },
-        beforeEffect(action) {
-          guard();
-
-          if (
-            action.step === "resource-release" ||
-            action.step === "cleanup-command" ||
-            action.step === "worktree-removal"
-          ) {
-            // Commands may activate any sibling; refresh before the next destructive effect.
-            inspectProcesses(true);
-          }
-
-          if (action.step === "worktree-removal") {
-            const repo = state.repos.find((candidate) =>
-              samePath(candidate.worktreePath, action.worktreePath ?? "")
-            );
-
-            if (!repo) {
-              throw new MonkeError("Missing removal member");
-            }
-
-            revalidateMember(repo);
-
-            const member = snapshot.members.find((candidate) =>
-              samePath(candidate.worktreePath, repo.worktreePath)
-            );
-
-            const archive = archives.get(repo.worktreePath);
-
-            if (member?.evidence?.pendingWork?.kind === "untracked-archive") {
-              if (!archive) {
-                throw new MonkeError("Missing required file archive");
-              }
-
-              assertCleanupArchive(runtime, archive, member.evidence);
-            }
-
-            const head = detachedMemberHead(member);
-
-            if (head) {
-              assertRetainedHead(runtime, repo.sourceRoot, repo.worktreePath, head);
-            }
-          }
-
-          if (action.step === "state-removal") {
-            assertFinalizationReady(readOnly, home, state);
-          }
-
-          started = true;
-          attemptedAction = action;
-        },
-        beforeRemoval(repo) {
-          const member = snapshot.members.find((candidate) =>
-            samePath(candidate.worktreePath, repo.worktreePath)
-          );
-
-          const head = detachedMemberHead(member);
-
-          if (head) {
-            const preservation = retainedHeadAction(repo.sourceRoot, repo.worktreePath, head);
-            current = preservation;
-            guard();
-            revalidateMember(repo);
-            started = true;
-            attemptedAction = preservation;
-            preserveDetachedHead(runtime, repo.sourceRoot, repo.worktreePath, head);
-            completedActions.push(preservation);
-            attemptedAction = undefined;
-          }
-
-          const action: SessionAction = {
-            sourceRoot: repo.sourceRoot,
-            step: "process-stop",
-            worktreePath: repo.worktreePath
-          };
-
-          current = action;
-          attemptedAction = undefined;
-
-          if (processes.treesUnder(repo.worktreePath).length === 0) {
-            return;
-          }
-
-          guard();
-
-          const outcome = stopStaleWorktreeProcesses(runtime, processes, repo.worktreePath, {
-            beforeKill() {
-              started = true;
-              attemptedAction = action;
-            }
-          });
-
-          for (const tree of outcome.killed) {
-            runtime.writeStderr(
-              `Stopped stale process in ${repo.worktreePath}: ${describeTree(tree)}\n`
-            );
-          }
-
-          for (const tree of outcome.bystanders) {
-            runtime.writeStderr(
-              `Left running; not attached to ${repo.worktreePath}: ${describeTree(tree)}\n`
-            );
-          }
-
-          if (outcome.killed.length > 0) {
-            completedActions.push({
-              ...action,
-              command: outcome.killed.map(describeTree).join("; ")
-            });
-          }
-
-          attemptedAction = undefined;
-
-          if (outcome.recent.length > 0) {
-            throw new MonkeError(
-              `Worktree ${repo.worktreePath} is in use: ${outcome.recent.map(describeTree).join("; ")}. Processes under a day old are never stopped.`
-            );
-          }
-        },
-        beforeStep(action) {
-          current = action;
-          attemptedAction = undefined;
-          guard();
-        },
-        completed(action) {
-          completedActions.push(action);
-          attemptedAction = undefined;
-        },
-        revalidateMember
-      }
-    );
-    assertGlobalSafety(lock, inventory);
+  if (result.outcome === "removed") {
+    try {
+      assertGlobalSafety(lock, inventory);
+    } catch (cause) {
+      return failedReport(row, planned, result.completed, cause);
+    }
 
     return {
       globalFailure: null,
       report: createSessionCleanupReport(
-        snapshot,
-        { completedActions, outcome: "cleaned", remainingActions: [] },
+        row,
+        { completedActions: result.completed, outcome: "cleaned", remainingActions: [] },
         { plannedActions: planned.plannedActions }
       )
     };
-  } catch (cause) {
-    let message = errorMessage(ThrownValueSchema.parse(cause));
-    let retryCleanupActions: SessionAction[] | undefined;
-    let remainingActions: SessionAction[] | undefined;
-
-    try {
-      const pending = inspectSessionFinalization(home, state, options);
-      retryCleanupActions = pending.actions;
-      remainingActions = planned.plannedActions.flatMap((action) => {
-        if (action.step === "resource-release" || action.step === "cleanup-command") {
-          return pending.actions.filter(
-            (next) => next.step === action.step && next.sourceRoot === action.sourceRoot
-          );
-        }
-
-        return completedActions.some(
-          (done) => done.step === action.step && done.sourceRoot === action.sourceRoot
-        )
-          ? []
-          : [action];
-      });
-    } catch (inspectionCause) {
-      message += `\nRetry cleanup inspection failed: ${errorMessage(ThrownValueSchema.parse(inspectionCause))}`;
-    }
-
-    const execution: SessionCleanupExecution = {
-      attemptedAction,
-      completedActions,
-      message,
-      outcome: started ? "failed" : "skipped",
-      remainingActions,
-      retryCleanupActions,
-      sourceRoot: current.sourceRoot,
-      step: current.step
-    };
-
-    return {
-      globalFailure: cause instanceof GlobalCleanupError ? message : null,
-      report: createSessionCleanupReport(snapshot, execution, {
-        plannedActions: planned.plannedActions
-      })
-    };
   }
+
+  const message = [
+    errorMessage(ThrownValueSchema.parse(result.cause)),
+    ...(result.retryInspectionFailure
+      ? [`Retry cleanup inspection failed: ${result.retryInspectionFailure}`]
+      : [])
+  ].join("\n");
+
+  const execution: SessionCleanupExecution = {
+    attemptedAction: result.attempted,
+    completedActions: result.completed,
+    message,
+    outcome: result.outcome === "failed" ? "failed" : "skipped",
+    // Nothing took effect before removal planned, so the preview is still what remains.
+    remainingActions:
+      result.remaining ?? (result.retryObligations ? planned.plannedActions : undefined),
+    retryCleanupActions: result.retryObligations,
+    sourceRoot: result.current.sourceRoot,
+    step: result.current.step
+  };
+
+  return {
+    globalFailure: result.cause instanceof GlobalCleanupError ? message : null,
+    report: createSessionCleanupReport(row, execution, { plannedActions: planned.plannedActions })
+  };
+}
+
+/** Removal completed, but the global lock or retained state no longer allows continuing. */
+function failedReport(
+  row: Inventory["sessions"][number],
+  planned: SessionReport,
+  completedActions: SessionAction[],
+  cause: unknown
+) {
+  const message = errorMessage(ThrownValueSchema.parse(cause));
+
+  return {
+    globalFailure: cause instanceof GlobalCleanupError ? message : null,
+    report: createSessionCleanupReport(
+      row,
+      {
+        completedActions,
+        message,
+        outcome: "failed",
+        remainingActions: [],
+        sourceRoot: row.snapshot.rootSourceRoot ?? "",
+        step: "revalidation"
+      },
+      { plannedActions: planned.plannedActions }
+    )
+  };
+}
+
+function processStop(repo: SessionState["repos"][number]): SessionAction {
+  return { sourceRoot: repo.sourceRoot, step: "process-stop", worktreePath: repo.worktreePath };
 }
 
 function assertFinalizationReady(runtime: Runtime, home: string, state: SessionState) {
