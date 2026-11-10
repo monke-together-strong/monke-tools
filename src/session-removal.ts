@@ -586,8 +586,9 @@ function assertCleanupWorktree(pending: ReturnType<typeof inspectRepoCleanupObli
   if (pending.recoveryRequired) {
     throw new MonkeError(
       `Cannot satisfy Cleanup obligations: Session worktree is missing: ${pending.record.owner.checkoutPath}. ` +
-        `Restore the worktree and retry. Only if the recorded commands are safe from source checkouts, ` +
-        `use mt chop <session> --cleanup-from-source for explicit recovery. Session state is retained.`
+        `Restore the worktree and retry. To recover without it, run mt chop <session> --cleanup-from-source ` +
+        `when the recorded commands are safe from the Source checkout, or mt cleanup <worktree> ` +
+        `--recover-with <command>. Session state is retained.`
     );
   }
 }
