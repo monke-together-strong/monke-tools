@@ -393,7 +393,7 @@ async function updateSkills(
   const pendingMarkers: SkillImportRecipe[] = [];
 
   if (!repo) {
-    validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
+    validateImportedGuidanceDirectoriesAreTracked(repoRoot, store, collection.kind === "project");
   } else {
     ignoreRepoImports(repoRoot, runtime);
   }
@@ -851,7 +851,8 @@ async function prepareGitSkillUpdate(
 
 function validateImportedGuidanceDirectoriesAreTracked(
   repoRoot: string,
-  store: SkillImportRecipeStore
+  store: SkillImportRecipeStore,
+  project: boolean
 ) {
   const ownedGuidance = new Set(
     store.recipes.flatMap((recipe) => recipe.skills.map((skill) => `${skill.kind}:${skill.slug}`))
@@ -866,7 +867,7 @@ function validateImportedGuidanceDirectoriesAreTracked(
 
     if (untrackedSlugs.length > 0) {
       throw new MonkeError(
-        `Untracked imported ${kind} directories in ${path.join(repoRoot, root)}: ${untrackedSlugs.join(", ")}. Declare them with mt skills add <source> --skill <slug>, or remove those directories.`
+        `Untracked imported ${kind} directories in ${path.join(repoRoot, root)}: ${untrackedSlugs.join(", ")}. Declare them with mt skills add <source>${project ? " --project" : ""} --skill <slug>, or remove those directories.`
       );
     }
   }
