@@ -925,22 +925,20 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
-    saveGlobalMonkeConfig(monkeHome, {
-      skillInstallPreference: {
-        targets: [{ kind: "cursor" }]
-      },
-      version: 1
-    });
     selectActiveLocalInstall(monkeHome, sourceCheckout);
 
+    const runtime = createTestRuntime({
+      cwd: sandbox,
+      env: skillsEnvironment(osHome, monkeHome),
+      onStderr() {},
+      onStdout() {}
+    });
+
+    await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "cursor"], runtime);
+    expect(existsSync(path.join(osHome, ".cursor", "skills", "monke-tools"))).toBeTruthy();
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
-      createTestRuntime({
-        cwd: sandbox,
-        env: skillsEnvironment(osHome, monkeHome),
-        onStderr() {},
-        onStdout() {}
-      })
+      runtime
     );
 
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({

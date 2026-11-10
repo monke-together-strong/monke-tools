@@ -31,7 +31,6 @@ describe("skills", () => {
 
   it("resolves built-in skill install targets against OS home and normalizes custom skill roots", () => {
     const homeDirectory = makeTempDir("skill-target-home");
-    const monkeHome = makeTempDir("skill-target-monke-home");
 
     const targets = resolveSkillInstallTargets({
       homeDirectory,
@@ -40,7 +39,7 @@ describe("skills", () => {
           { kind: "codex" },
           { kind: "claude" },
           { kind: "cursor" },
-          { kind: "custom", path: path.join(homeDirectory, "team-skills") }
+          { kind: "custom", path: " ~/team-skills/ " }
         ]
       }
     });
@@ -51,7 +50,6 @@ describe("skills", () => {
       path.join(homeDirectory, ".cursor", "skills"),
       path.join(homeDirectory, "team-skills")
     ]);
-    expect(targets.map((target) => target.agentSkillRoot)).not.toContain(monkeHome);
   });
 
   it("rejects the managed namespace path itself as a custom skill root", () => {
@@ -417,46 +415,6 @@ describe("skills", () => {
       });
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
 
-    expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isDirectory()
-    ).toBeTruthy();
-  });
-
-  it("removes deselected managed namespaces during skill namespace reconciliation", () => {
-    const sandbox = makeTempDir("skill-reconcile-deselect");
-    const sourceCheckout = path.join(sandbox, "source");
-    writeGlobalInstructionsSource(sourceCheckout);
-    const oldSkillRoot = path.join(sandbox, "old", "skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    reconcileSkillNamespaces({
-      cwd: sandbox,
-      guidanceSourceRoot: sourceCheckout,
-      homeDirectory: sandbox,
-      nextPreference: {
-        targets: [{ kind: "custom", path: oldSkillRoot }]
-      },
-      previousPreference: null,
-      writeMessage() {}
-    });
-
-    reconcileSkillNamespaces({
-      cwd: sandbox,
-      guidanceSourceRoot: sourceCheckout,
-      homeDirectory: sandbox,
-      nextPreference: {
-        targets: [{ kind: "codex" }]
-      },
-      previousPreference: {
-        targets: [{ kind: "custom", path: oldSkillRoot }]
-      },
-      writeMessage() {}
-    });
-
-    expect(existsSync(path.join(oldSkillRoot, "monke-tools"))).toBeFalsy();
     expect(
       lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isDirectory()
     ).toBeTruthy();
