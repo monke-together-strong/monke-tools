@@ -1,33 +1,20 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
-import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
-import {
-  branchExists,
-  describeSessionBranchMismatch,
-  getExpectedWorktreePath,
-  listWorktrees,
-  resolveRepoContext
-} from "./git.ts";
+import { MonkeError } from "./errors.ts";
+import { branchExists, getExpectedWorktreePath, listWorktrees, resolveRepoContext } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { containsPath, samePath } from "./path-identity.ts";
-import { acquireCheckoutResourceLock, getMonkeHome, withGlobalLock } from "./runtime.ts";
-import { cleanupSessionResources, finalizeSession } from "./session-finalization.ts";
-import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
-import type { SessionAction, SessionLifecycleObserver } from "./session-lifecycle-progress.ts";
-import {
-  assertNoOtherStateOwnsSessionRepos,
-  inspectSessionRepoRegistration
-} from "./session-safety.ts";
+import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { assertSessionIdentity, removeSession } from "./session-removal.ts";
 import {
   getSessionStateFilePath,
   listSessionStates,
   listSessionStatesRelevantToWorktrees,
-  loadSessionState,
-  SessionStateStore
+  loadSessionState
 } from "./session-state-store.ts";
 import { requestShellDirectoryAfterRemoval } from "./shell.ts";
-import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
+import type { Runtime, SessionState } from "./types.ts";
 import {
   assertCanonicalSourceCheckout,
   assertWorktreeUnlocked,
@@ -53,18 +40,6 @@ interface ChopOptions {
   recoveryCommand?: string;
 }
 
-interface SessionRepoPreflight {
-  forceGitRemoval: boolean;
-  mode: "gone" | "live" | "stale";
-  registeredBranch: string | null | undefined;
-  repo: SessionRepoState;
-}
-
-interface SessionChopResult {
-  kind: "session";
-  session: string;
-}
-
 /** Remove one selected Session or Ordinary worktree while preserving local branches. */
 export function runChop(runtime: Runtime, target: string | undefined, options: ChopOptions) {
   const home = getMonkeHome(runtime);
@@ -77,7 +52,16 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
     const selected = resolveChopTarget(runtime, home, invocation, target);
 
     if (selected.kind === "session") {
-      return teardownSession(runtime, home, invocation.worktreeRoot, selected, options);
+      const result = removeSession(runtime, home, selected, {
+        ...options,
+        invocationPath: invocation.worktreeRoot
+      });
+
+      if (result.outcome !== "removed") {
+        throw result.cause;
+      }
+
+      return { kind: "session" as const, session: selected.state.session };
     }
 
     const preflight = inspectOrdinaryWorktree(
@@ -269,325 +253,6 @@ function validateSessionChopTarget(home: string, state: SessionState): SessionCh
   };
 }
 
-export function teardownSession(
-  runtime: Runtime,
-  home: string,
-  invocationWorktreePath: string,
-  target: SessionChopTarget,
-  options: ChopOptions,
-  observer: SessionLifecycleObserver = {}
-): SessionChopResult {
-  const unlocks: (() => void)[] = [];
-
-  try {
-    for (const repo of target.state.repos) {
-      unlocks.push(acquireCheckoutResourceLock(home, repo.worktreePath));
-    }
-
-    return teardownSessionLocked(runtime, home, invocationWorktreePath, target, options, observer);
-  } finally {
-    for (const unlock of unlocks.toReversed()) {
-      unlock();
-    }
-  }
-}
-
-function teardownSessionLocked(
-  runtime: Runtime,
-  home: string,
-  invocationWorktreePath: string,
-  target: SessionChopTarget,
-  options: ChopOptions,
-  observer: SessionLifecycleObserver
-): SessionChopResult {
-  observer.beforeStep?.({ sourceRoot: target.state.rootSourceRoot, step: "revalidation" });
-
-  const preflight = preflightSession(
-    runtime,
-    home,
-    target.state,
-    target.allStates,
-    options,
-    observer
-  );
-
-  for (const candidate of preflight) {
-    warnSessionBranchMismatch(runtime, target.state, candidate);
-  }
-
-  const ordered = orderSessionRemovals(
-    preflight,
-    invocationWorktreePath,
-    target.state.rootSourceRoot
-  );
-
-  for (const candidate of ordered) {
-    observer.revalidateMember?.(candidate.repo);
-
-    if (candidate.mode !== "gone") {
-      observer.beforeRemoval?.(candidate.repo);
-    }
-  }
-
-  const revalidateAll = () => {
-    for (const candidate of preflight) {
-      observer.beforeStep?.({
-        sourceRoot: candidate.repo.sourceRoot,
-        step: "revalidation",
-        worktreePath: candidate.repo.worktreePath
-      });
-
-      const current = inspectSessionRepo(
-        runtime,
-        home,
-        target.state,
-        candidate.repo,
-        options,
-        observer
-      );
-
-      assertSessionMemberUnchanged(candidate, current);
-
-      if (candidate.mode !== current.mode) {
-        throw new MonkeError(
-          `Session worktree presence changed after preflight at ${current.repo.worktreePath}; retry teardown`
-        );
-      }
-
-      observer.revalidateMember?.(candidate.repo);
-    }
-  };
-
-  cleanupSessionResources(
-    runtime,
-    target.state,
-    {
-      ...observer,
-      beforeEffect(action) {
-        revalidateAll();
-        observer.beforeStep?.(action);
-        observer.beforeEffect?.(action);
-      }
-    },
-    options.cleanupFromSource === true,
-    options.recoveryCommand
-  );
-  // Shutdown and cleanup commands can modify any sibling. Recheck the whole Session
-  // before removing its first worktree, then recheck each member at removal.
-  revalidateAll();
-
-  for (const candidate of ordered) {
-    observer.beforeStep?.({
-      sourceRoot: candidate.repo.sourceRoot,
-      step: "revalidation",
-      worktreePath: candidate.repo.worktreePath
-    });
-
-    const current = inspectSessionRepo(
-      runtime,
-      home,
-      target.state,
-      candidate.repo,
-      options,
-      observer
-    );
-
-    assertSessionMemberUnchanged(candidate, current);
-    observer.revalidateMember?.(candidate.repo);
-
-    if (current.mode !== "gone") {
-      const action: SessionAction = {
-        sourceRoot: current.repo.sourceRoot,
-        step: "worktree-removal",
-        worktreePath: current.repo.worktreePath
-      };
-
-      observer.beforeStep?.(action);
-      observer.beforeEffect?.(action);
-      removeWorktree(runtime, current.repo.sourceRoot, current.repo.worktreePath, {
-        force: current.mode === "stale" || current.forceGitRemoval
-      });
-      observer.completed?.(action);
-    }
-
-    if (samePath(current.repo.worktreePath, invocationWorktreePath)) {
-      requestShellDirectoryAfterRemoval(runtime, current.repo.sourceRoot);
-    }
-  }
-
-  // Reuse the targeted ownership scan; unrelated invalid state must not block this removal.
-  finalizeSession(new SessionStateStore(home, target.allStates), target.state, observer);
-
-  return {
-    kind: "session",
-    session: target.state.session
-  };
-}
-
-function assertSessionMemberUnchanged(
-  candidate: SessionRepoPreflight,
-  current: SessionRepoPreflight
-) {
-  if (candidate.mode === "gone" && current.mode !== "gone") {
-    throw new MonkeError(
-      `Session worktree reappeared after preflight at ${current.repo.worktreePath}; retry teardown to inspect it before cleanup`
-    );
-  }
-
-  if (
-    candidate.registeredBranch !== undefined &&
-    current.registeredBranch !== undefined &&
-    current.registeredBranch !== candidate.registeredBranch
-  ) {
-    throw new MonkeError(
-      `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
-    );
-  }
-}
-
-function preflightSession(
-  runtime: Runtime,
-  home: string,
-  state: SessionState,
-  allStates: SessionState[],
-  options: ChopOptions,
-  observer: SessionLifecycleObserver
-) {
-  const failures: { message: string; sourceRoot: string }[] = [];
-
-  const sessionChecks = [
-    () => {
-      assertSessionIdentity(home, state);
-    },
-    () => {
-      assertCanonicalSourceCheckout(runtime, state.rootSourceRoot);
-    },
-    () => {
-      assertUniqueSessionRecords(state);
-    },
-    () => {
-      assertSessionMaterializationOrder(state);
-    },
-    () => {
-      assertNoOtherStateOwnsSessionRepos(state, allStates);
-    }
-  ];
-
-  for (const check of sessionChecks) {
-    try {
-      check();
-    } catch (cause) {
-      failures.push({
-        message: errorMessage(ThrownValueSchema.parse(cause)),
-        sourceRoot: state.rootSourceRoot
-      });
-    }
-  }
-
-  const repos: SessionRepoPreflight[] = [];
-
-  for (const repo of state.repos) {
-    try {
-      repos.push(inspectSessionRepo(runtime, home, state, repo, options, observer));
-    } catch (cause) {
-      failures.push({
-        message: `${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(cause))}`,
-        sourceRoot: repo.sourceRoot
-      });
-    }
-  }
-
-  const [failure] = failures;
-
-  if (failure) {
-    observer.beforeStep?.({ sourceRoot: failure.sourceRoot, step: "revalidation" });
-    throw new MonkeError(
-      `Cannot Chop Session ${state.session}; preflight failed:\n${failures
-        .map((problem) => `- ${problem.message}`)
-        .join("\n")}`
-    );
-  }
-
-  return repos;
-}
-
-function inspectSessionRepo(
-  runtime: Runtime,
-  home: string,
-  state: SessionState,
-  repo: SessionRepoState,
-  options: ChopOptions,
-  observer: SessionLifecycleObserver
-): SessionRepoPreflight {
-  const identity = inspectSessionRepoRegistration(runtime, home, state, repo);
-
-  if (identity.mode !== "live") {
-    return identity;
-  }
-
-  const checked = preflightWorktreeRemoval(
-    runtime,
-    repo.sourceRoot,
-    repo.worktreePath,
-    options,
-    observer.authorizePreservedWork
-      ? () => observer.authorizePreservedWork?.(repo) === true
-      : undefined
-  );
-
-  return { ...identity, forceGitRemoval: checked.forceGitRemoval };
-}
-
-function warnSessionBranchMismatch(
-  runtime: Runtime,
-  state: SessionState,
-  candidate: SessionRepoPreflight
-) {
-  if (candidate.registeredBranch === undefined) {
-    return;
-  }
-
-  const mismatch = describeSessionBranchMismatch(state.session, candidate.registeredBranch);
-
-  if (mismatch === null) {
-    return;
-  }
-
-  createLogger(runtime).warning(
-    `Session ${state.session} worktree ${candidate.repo.worktreePath} ${mismatch}; chopping it anyway`
-  );
-}
-
-function formatWorktreeBranch(branch: string | null) {
-  return branch ?? "detached";
-}
-
-function assertSessionIdentity(
-  home: string,
-  state: SessionState,
-  expected: { rootSourceRoot: string; session: string } = state
-) {
-  if (
-    !samePath(state.rootSourceRoot, expected.rootSourceRoot) ||
-    state.session !== expected.session ||
-    !existsSync(getSessionStateFilePath(home, state.rootSourceRoot, state.session))
-  ) {
-    throw new MonkeError(`Session state identity is inconsistent for ${expected.session}`);
-  }
-}
-
-function assertSessionMaterializationOrder(state: SessionState) {
-  const rootIndex = state.repos.findIndex((repo) =>
-    samePath(repo.sourceRoot, state.rootSourceRoot)
-  );
-
-  if (rootIndex !== -1 && rootIndex !== state.repos.length - 1) {
-    throw new MonkeError(
-      `Session state records Root repo ${state.rootSourceRoot} before its dependencies`
-    );
-  }
-}
-
 function assertInvocationSessionScope(
   runtime: Runtime,
   home: string,
@@ -611,44 +276,6 @@ function assertInvocationSessionScope(
       `Managed worktree ${invocation.worktreeRoot} does not match its recorded Session identity`
     );
   }
-}
-
-function assertUniqueSessionRecords(state: SessionState) {
-  const sourceRoots = new Set<string>();
-  const worktreePaths = new Set<string>();
-
-  for (const repo of state.repos) {
-    const sourceRoot = path.normalize(repo.sourceRoot);
-    const worktreePath = path.normalize(repo.worktreePath);
-
-    if (sourceRoots.has(sourceRoot)) {
-      throw new MonkeError(
-        `Session state records Source checkout ${repo.sourceRoot} more than once`
-      );
-    }
-
-    if (worktreePaths.has(worktreePath)) {
-      throw new MonkeError(
-        `Session state records worktree path ${repo.worktreePath} more than once`
-      );
-    }
-
-    sourceRoots.add(sourceRoot);
-    worktreePaths.add(worktreePath);
-  }
-}
-
-function orderSessionRemovals(
-  repos: SessionRepoPreflight[],
-  invocationWorktreePath: string,
-  rootSourceRoot: string
-) {
-  return [...repos].toSorted((left, right) => {
-    const leftRank = sessionRemovalRank(left.repo, invocationWorktreePath, rootSourceRoot);
-    const rightRank = sessionRemovalRank(right.repo, invocationWorktreePath, rootSourceRoot);
-
-    return leftRank - rightRank;
-  });
 }
 
 function findSessionOwner(states: SessionState[], worktreePath: string, sourceRoot?: string) {

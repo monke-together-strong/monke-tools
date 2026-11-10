@@ -22,7 +22,9 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Cleanup obligation**: A repo's retained requirement to run its **Cleanup command** before its **Session state** can be removed. _Avoid_: Cleanup eligibility, prepared state, worktree existence
 
-**Session finalization**: Completion of Session removal after its **Cleanup obligations** are satisfied and all recorded worktrees are gone.
+**Session removal**: The ordered effects that remove one **Session**: preserving work that **Cleanup** proved, satisfying **Cleanup obligations**, removing each **Session worktree** with the invoking member last (otherwise the **Root repo** last), and **Session finalization**. Both **Chop** and **Cleanup** perform it, and a Cleanup dry run previews it.
+
+**Session finalization**: Completion of **Session removal** after its **Cleanup obligations** are satisfied and all recorded worktrees are gone.
 
 **Missing Session worktree**: A recorded **Session worktree** whose directory no longer exists. _Avoid_: Dead worktree
 

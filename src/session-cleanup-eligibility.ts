@@ -9,6 +9,7 @@ import {
   decideCleanupEligibility,
   memoizeRepoStructure,
   readOnlyCleanupRuntime,
+  relevantPullRequests,
   revalidateCleanupEvidence
 } from "./cleanup-eligibility.ts";
 import type { CleanupCode, CleanupDecision, CleanupEvidence } from "./cleanup-eligibility.ts";
@@ -109,8 +110,18 @@ export interface SessionCleanupDiscovery {
 export interface SessionCleanupDecision {
   eligible: boolean;
   kind: "live" | "recovery" | "finalization" | "blocked";
+  /** One decision per snapshot member, in the same order. */
+  members: SessionCleanupMemberDecision[];
+  /** Whether Cleanup can proceed now, needs archival or resource recovery first, or is blocked. */
+  readiness: "ready" | "archive-required" | "resource-recovery-required" | "blocked";
   reasons: SessionCleanupReason[];
   status: CleanupDecision["status"];
+}
+
+/** A Session snapshot with the verdict decided from exactly that snapshot. */
+export interface SessionCleanupInspection {
+  decision: SessionCleanupDecision;
+  snapshot: SessionCleanupEvidence;
 }
 
 /**
@@ -127,6 +138,52 @@ export const SETTLED_BLOCKERS: ReadonlySet<SessionCleanupBlocker> = new Set([
 export function decideSessionCleanupEligibility(
   snapshot: SessionCleanupEvidence
 ): SessionCleanupDecision {
+  const members = snapshot.members.map((member) =>
+    decideSessionCleanupMember(snapshot.rootSourceRoot, member)
+  );
+
+  const session = decideSession(snapshot, members);
+
+  return { ...session, members, readiness: cleanupReadiness(snapshot, members, session.eligible) };
+}
+
+function cleanupReadiness(
+  snapshot: SessionCleanupEvidence,
+  members: SessionCleanupMemberDecision[],
+  eligible: boolean
+): SessionCleanupDecision["readiness"] {
+  const membersReady = members.every(
+    (decision, index) =>
+      decision.eligible ||
+      (decision.code === "dirty-worktree" &&
+        snapshot.members[index]?.evidence?.archiveReadiness?.eligible === true)
+  );
+
+  if (!membersReady || snapshot.blockers.some((code) => code !== "resource-recovery-required")) {
+    return "blocked";
+  }
+
+  if (snapshot.blockers.includes("resource-recovery-required")) {
+    return "resource-recovery-required";
+  }
+
+  if (
+    snapshot.members.some(
+      (member) =>
+        member.evidence?.pendingWork?.kind === "untracked-archive" ||
+        member.evidence?.archiveReadiness?.eligible === true
+    )
+  ) {
+    return "archive-required";
+  }
+
+  return eligible ? "ready" : "blocked";
+}
+
+function decideSession(
+  snapshot: SessionCleanupEvidence,
+  decisions: SessionCleanupMemberDecision[]
+): Omit<SessionCleanupDecision, "members" | "readiness"> {
   if (snapshot.blockers.length > 0) {
     return {
       eligible: false,
@@ -155,10 +212,6 @@ export function decideSessionCleanupEligibility(
       status: "eligible"
     };
   }
-
-  const decisions = snapshot.members.map((member) =>
-    decideSessionCleanupMember(snapshot.rootSourceRoot, member)
-  );
 
   const blocked = decisions.filter((decision) => !decision.eligible);
 
@@ -215,6 +268,31 @@ export function decideSessionCleanupMember(
       worktreePath: member.worktreePath
     }
   });
+}
+
+/** Repository evidence lists every pull request; keep the ones each member decision reads. */
+function withRelevantPullRequests(snapshot: SessionCleanupEvidence): SessionCleanupEvidence {
+  return {
+    ...snapshot,
+    members: snapshot.members.map((member) => {
+      const { evidence } = member;
+
+      return {
+        ...member,
+        evidence: evidence
+          ? {
+              ...evidence,
+              repository: evidence.repository
+                ? {
+                    ...evidence.repository,
+                    pullRequests: relevantPullRequests(evidence, evidence.repository)
+                  }
+                : null
+            }
+          : null
+      };
+    })
+  };
 }
 
 /** Discover retained Sessions globally without acquiring a lock or changing Git/state. */
@@ -453,33 +531,19 @@ export async function inspectSessionCleanup(
 
   return {
     inspectedAt: new Date().toISOString(),
-    sessions: snapshots.map((snapshot) => ({
-      decision: decideSessionCleanupEligibility(snapshot),
-      snapshot: {
-        ...snapshot,
-        members: snapshot.members.map((member) => ({
-          ...member,
-          evidence: member.evidence
-            ? {
-                ...member.evidence,
-                repository: member.evidence.repository
-                  ? {
-                      ...member.evidence.repository,
-                      pullRequests: member.evidence.repository.pullRequests.filter(
-                        (pr) => pr.head.ref === member.evidence?.branch
-                      )
-                    }
-                  : null
-              }
-            : null
-        }))
-      },
-      state:
-        states.find(
-          (state) =>
-            state.session === snapshot.session && state.rootSourceRoot === snapshot.rootSourceRoot
-        ) ?? null
-    })),
+    sessions: snapshots.map((collected) => {
+      const snapshot = withRelevantPullRequests(collected);
+
+      return {
+        decision: decideSessionCleanupEligibility(snapshot),
+        snapshot,
+        state:
+          states.find(
+            (state) =>
+              state.session === snapshot.session && state.rootSourceRoot === snapshot.rootSourceRoot
+          ) ?? null
+      };
+    }),
     sourceRoots,
     sources,
     stateFingerprint: scan.fingerprint,

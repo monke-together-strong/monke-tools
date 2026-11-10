@@ -63,7 +63,7 @@ const summary = {
   unownedWorktrees: report.unownedWorktrees.length
 };
 
-const explanations = report.sessions.map((result) => createSessionCleanupReport(result.snapshot));
+const explanations = report.sessions.map((result) => createSessionCleanupReport(result));
 
 await Bun.write(
   output,

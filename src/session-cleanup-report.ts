@@ -2,17 +2,15 @@ import path from "node:path";
 
 import { localWorkDescription, repositoryFailureDetails } from "./cleanup-eligibility.ts";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
-import {
-  decideSessionCleanupEligibility,
-  decideSessionCleanupMember,
-  SETTLED_BLOCKERS
-} from "./session-cleanup-eligibility.ts";
+import { SETTLED_BLOCKERS } from "./session-cleanup-eligibility.ts";
 import type {
   SessionCleanupEvidence,
+  SessionCleanupInspection,
   SessionCleanupMember,
+  SessionCleanupMemberDecision,
   SessionCleanupReason
 } from "./session-cleanup-eligibility.ts";
-import type { SessionAction } from "./session-lifecycle-progress.ts";
+import type { SessionAction } from "./session-removal.ts";
 
 const messages: Record<SessionCleanupReason, string> = {
   "ambiguous-pr": "More than one merged pull request matches this commit.",
@@ -107,7 +105,7 @@ function check(status: CheckStatus, code: SessionCleanupReason): CleanupCheckRep
 
 function committedWorkCheck(
   evidence: CleanupEvidence,
-  decision: ReturnType<typeof decideSessionCleanupMember>
+  decision: SessionCleanupMemberDecision
 ): CleanupCheckReport {
   if (!evidence.archiveReadiness && evidence.committedWorkAttempted === false) {
     return {
@@ -142,9 +140,11 @@ function committedWorkCheck(
   return report;
 }
 
-function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMember) {
-  const decision = decideSessionCleanupMember(snapshot.rootSourceRoot, member);
-
+function memberReport(
+  snapshot: SessionCleanupEvidence,
+  member: SessionCleanupMember,
+  decision: SessionCleanupMemberDecision
+) {
   const problems = (snapshot.problems ?? []).filter(
     (problem) => problem.worktreePath === member.worktreePath
   );
@@ -217,45 +217,26 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
   };
 }
 
-function cleanupReadiness(snapshot: SessionCleanupEvidence, eligible: boolean) {
-  const membersReady = snapshot.members.every((member) => {
-    const decision = decideSessionCleanupMember(snapshot.rootSourceRoot, member);
-
-    return (
-      decision.eligible ||
-      (decision.code === "dirty-worktree" && member.evidence?.archiveReadiness?.eligible === true)
-    );
-  });
-
-  if (!membersReady || snapshot.blockers.some((code) => code !== "resource-recovery-required")) {
-    return "blocked";
-  }
-
-  if (snapshot.blockers.includes("resource-recovery-required")) {
-    return "resource-recovery-required";
-  }
-
-  if (
-    snapshot.members.some(
-      (member) =>
-        member.evidence?.pendingWork?.kind === "untracked-archive" ||
-        member.evidence?.archiveReadiness?.eligible === true
-    )
-  ) {
-    return "archive-required";
-  }
-
-  return eligible ? "ready" : "blocked";
-}
-
-/** JSON and text share this projection, including checks skipped by the collector. */
+/**
+ * JSON and text share this projection, including checks skipped by the collector. It formats the
+ * inspection's decision and never decides again.
+ */
 export function createSessionCleanupReport(
-  snapshot: SessionCleanupEvidence,
+  { decision, snapshot }: SessionCleanupInspection,
   execution: SessionCleanupExecution = NOT_ATTEMPTED,
   options: { dryRun?: boolean; plannedActions?: SessionAction[] } = {}
 ) {
-  const eligibility = decideSessionCleanupEligibility(snapshot);
-  const members = snapshot.members.map((member) => memberReport(snapshot, member));
+  const { members: memberDecisions, readiness, ...eligibility } = decision;
+
+  const members = snapshot.members.map((member, index) => {
+    const memberDecision = memberDecisions[index];
+
+    if (!memberDecision) {
+      throw new Error(`Missing decision for Session member ${member.worktreePath}`);
+    }
+
+    return memberReport(snapshot, member, memberDecision);
+  });
 
   // Eligibility can be conclusively false while another check still lacks evidence.
   const inspectionFailed =
@@ -280,7 +261,7 @@ export function createSessionCleanupReport(
         : execution.outcome,
     plannedActions: options.plannedActions ?? [],
     problems: snapshot.problems ?? [],
-    readiness: cleanupReadiness(snapshot, eligibility.eligible),
+    readiness,
     reasons: eligibility.reasons.map((code) => ({ code, message: messages[code] })),
     rootSourceRoot: snapshot.rootSourceRoot,
     session: snapshot.session,

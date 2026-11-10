@@ -1,5 +1,5 @@
 import { MonkeError } from "./errors.ts";
-import type { SessionAction } from "./session-lifecycle-progress.ts";
+import type { SessionAction } from "./session-removal.ts";
 import { shellQuote } from "./shell-quote.ts";
 import type { Runtime } from "./types.ts";
 
