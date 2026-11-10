@@ -3,7 +3,7 @@ import path from "node:path";
 import { CheckoutResourceStore, resourceOwner } from "./checkout-resource-store.ts";
 import type { CheckoutResources } from "./checkout-resource-store.ts";
 import {
-  collectBaselinePortsFromRoot,
+  collectBaselinePorts,
   rewriteManagedEnvFiles,
   syncRootEnvFileWithRemovals
 } from "./env.ts";
@@ -28,7 +28,6 @@ import type {
 } from "./types.ts";
 
 interface MaterializeRepoOptions {
-  baselinePortsRoot: string;
   dependencyResults: Map<string, RepoMaterializationResult>;
   existingState: SessionRepoState | undefined;
   persistRepoState: (
@@ -157,7 +156,7 @@ async function resolveCommandsBeforeAssignments(context: RepoMaterializationCont
 function resolveRepoAssignments(
   context: RepoMaterializationContext
 ): RepoMaterializationAssignments {
-  const { baselinePortsRoot, dependencyResults, existingState, repoConfig, store } = context;
+  const { dependencyResults, existingState, repoConfig, store } = context;
 
   const reservation = getOrCreateReservation(
     store.home,
@@ -165,13 +164,8 @@ function resolveRepoAssignments(
     repoConfig.localPortOrder.length
   );
 
-  const baselinePorts = collectBaselinePortsFromRoot({
-    config: repoConfig,
-    sourceRoot: baselinePortsRoot
-  });
-
   const localAssignments = allocateLocalPorts({
-    baselinePorts,
+    baselinePorts: collectBaselinePorts(repoConfig),
     existingRepoState: existingState,
     repoConfig,
     reservation,

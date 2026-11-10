@@ -338,10 +338,6 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
     }
 
     return createRepoLifecycleNode({
-      baselinePortsFromWorktree:
-        (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "resume") ||
-        (sourcePlan.mode === "session-branch" &&
-          repoConfig.sourceRoot === execution.rootSourceRoot),
       context: {
         home: execution.home,
         retryCommand: formatSpawnRetryCommand(execution.session, sourcePlan),
@@ -366,8 +362,6 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
 }
 
 function createRepoLifecycleNode(options: {
-  /** Read Baseline ports from the prepared Session worktree instead of the Source checkout. */
-  baselinePortsFromWorktree: boolean;
   context: RepoLifecycleNodeContext;
   initialState: SessionRepoState;
   prepare: PrepareRepoLifecycleNode;
@@ -380,9 +374,6 @@ function createRepoLifecycleNode(options: {
     initialState: options.initialState,
     async materialize({ checkpoint, dependencyResults, existingState, prepared }) {
       const result = await materializeRepo({
-        baselinePortsRoot: options.baselinePortsFromWorktree
-          ? prepared.worktreePath
-          : repoConfig.sourceRoot,
         dependencyResults,
         existingState,
         persistRepoState: checkpoint,
@@ -992,7 +983,6 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
       getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session);
 
     return createRepoLifecycleNode({
-      baselinePortsFromWorktree: execution.sessionState.graphSource === "session-branch",
       context: {
         home: execution.home,
         retryCommand: "mt materialize",

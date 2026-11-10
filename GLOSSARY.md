@@ -63,7 +63,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Port reservation**: The persisted numeric block a repo owns so future sessions can allocate stable assigned ports from it. _Avoid_: Port range, sticky ports
 
-**Baseline port**: A numeric port already present in a repo's managed env files that should not be reallocated.
+**Baseline port**: A numeric port already present in the **Source checkout**'s managed env files that a **Session** should not be assigned.
 
 ## Operations
 

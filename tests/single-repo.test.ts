@@ -1032,6 +1032,71 @@ apps:
     expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_ONLY=1\n");
   });
 
+  it.each([
+    { args: ["spawn", "fresh"], from: "source" },
+    { args: ["materialize"], from: "worktree" }
+  ])(
+    "avoids source baseline ports when $args.0 resumes an interrupted spawn -m",
+    ({ args, from }) => {
+      const sandbox = makeTempDir("single-repo-resumed-baseline-ports");
+      const home = path.join(sandbox, "home");
+
+      const repoRoot = createRepo(path.join(sandbox, "root"), {
+        "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
+        "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
+      });
+
+      git(repoRoot, ["switch", "-c", "feature"]);
+      write(repoRoot, "apps/api/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
+
+      const interrupted = runMonkeCapturingFailure({
+        args: ["spawn", "fresh", "-m"],
+        cwd: repoRoot,
+        extraEnv: { MONKE_TEST_INTERRUPT_CHECKPOINT: "preparation" },
+        monkeHome: home
+      });
+
+      expect(interrupted.error).not.toBeNull();
+      const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+
+      runMonke({ args, cwd: from === "source" ? repoRoot : worktreeRoot, monkeHome: home });
+
+      expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
+    }
+  );
+
+  it("ignores a portless Source checkout value when collecting baseline ports for spawn -m", () => {
+    const sandbox = makeTempDir("single-repo-portless-baseline");
+    const home = path.join(sandbox, "home");
+
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "API_URL=http://localhost:3000\n",
+      "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: API_URL
+`
+    });
+
+    git(repoRoot, ["switch", "-c", "feature"]);
+    write(repoRoot, "apps/api/.env.local", "API_URL=https://staging.example.com\n");
+
+    runMonke({ args: ["spawn", "fresh", "-m"], cwd: repoRoot, monkeHome: home });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+    expect(read(worktreeRoot, "apps/api/.env.local")).toBe("API_URL=http://localhost:10000\n");
+  });
+
   it("prefers fetched origin main over stale local main for spawn -m", () => {
     const sandbox = makeTempDir("single-repo-origin-main");
     const binDirectory = path.join(sandbox, "bin");

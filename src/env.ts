@@ -6,14 +6,6 @@ import { copyMissingEntries } from "./non-clobbering-copy.ts";
 import { samePath } from "./path-identity.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
-/** Options for collecting baseline ports from a concrete repo-content root. */
-export interface CollectBaselinePortsFromRootOptions {
-  /** Parsed repo config whose app env files are inspected. */
-  config: RepoConfig;
-  /** Source content root to read app env files from. */
-  sourceRoot: string;
-}
-
 /**
  * Seed local env, agent, PR, and Monke config files and configured seed paths from the source
  * checkout.
@@ -34,20 +26,19 @@ export function seedWorktreeFiles(
   }
 }
 
-/** Collect content-root ports that local session allocations should avoid. */
-export function collectBaselinePortsFromRoot(options: CollectBaselinePortsFromRootOptions) {
+/**
+ * Collect the Baseline ports in the Source checkout's managed env files. The config may come from
+ * another branch, so a value without a port is skipped rather than rejected; it cannot collide.
+ */
+export function collectBaselinePorts(config: RepoConfig) {
   const ports = new Set<number>();
 
-  for (const app of options.config.appsInOrder) {
+  for (const app of config.appsInOrder) {
     if (app.localMappings.length === 0) {
       continue;
     }
 
-    const envPath = path.join(
-      options.sourceRoot,
-      path.relative(options.config.sourceRoot, app.absoluteAppPath),
-      app.relativeEnvFile
-    );
+    const envPath = path.join(app.absoluteAppPath, app.relativeEnvFile);
 
     if (!existsSync(envPath)) {
       continue;
@@ -57,12 +48,24 @@ export function collectBaselinePortsFromRoot(options: CollectBaselinePortsFromRo
 
     for (const mapping of app.localMappings) {
       for (const rawValue of values.get(mapping.targetEnv) ?? []) {
-        ports.add(extractPort(rawValue, `${envPath}:${mapping.targetEnv}`));
+        const port = baselinePort(rawValue, `${envPath}:${mapping.targetEnv}`);
+
+        if (port !== undefined) {
+          ports.add(port);
+        }
       }
     }
   }
 
   return ports;
+}
+
+function baselinePort(rawValue: string, location: string) {
+  try {
+    return extractPort(rawValue, location);
+  } catch {
+    return undefined;
+  }
 }
 
 export function rewriteManagedEnvFiles(
