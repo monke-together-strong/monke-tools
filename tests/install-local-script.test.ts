@@ -231,6 +231,12 @@ describe("Local install refresh script", () => {
       "#!/bin/sh\nprintf '%s\\n' 'codiff v1.14.0'\n"
     );
 
+    const sourceDirty =
+      spawnSync("git", ["status", "--porcelain", "--untracked-files=normal"], {
+        cwd: projectRoot,
+        encoding: "utf-8"
+      }).stdout !== "";
+
     const install = spawnSync(
       "sh",
       [path.join(projectRoot, "scripts", "install-local.sh"), "--targets", "codex"],
@@ -264,9 +270,7 @@ describe("Local install refresh script", () => {
       encoding: "utf-8"
     }).stdout.slice(0, 7);
 
-    expect([`local+${shortCommit}`, `local+${shortCommit}-dirty`]).toContain(
-      manifest.toolBuildIdentity
-    );
+    expect(manifest.toolBuildIdentity).toBe(`local+${shortCommit}${sourceDirty ? "-dirty" : ""}`);
     const version = spawnSync(stableCommand, ["--version"], { encoding: "utf-8" });
     expect(version.status).toBe(0);
     expect(version.stdout.trim()).toBe(manifest.toolBuildIdentity);
