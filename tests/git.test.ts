@@ -11,7 +11,7 @@ import { createRuntime } from "../src/runtime.ts";
 import { createRepo, git, makeTempDir } from "./helpers.ts";
 
 describe("Git operations", () => {
-  it("infers slash-delimited session names from a linked worktree in resolveRepoContext", () => {
+  it("infers slash-delimited Session names from a linked worktree in resolveRepoContext", () => {
     const sandbox = makeTempDir("git-slash-session");
     const sourceRoot = createRepo(path.join(sandbox, "root"), { "note.txt": "base\n" });
     const home = path.join(sandbox, "home");

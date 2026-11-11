@@ -1014,7 +1014,7 @@ describe("cleanup evidence from real Git worktrees", () => {
         stderr: "unexpected provider failure"
       }
     ].flatMap((failure) =>
-      // Failure classification is independent of local state; one kind covers the dirty paths.
+      // Failure classification is independent of local state; one failure covers every dirty state.
       (failure.label === "login required" ? ["none", "before", "during"] : ["none"]).map(
         (dirty) => ({ ...failure, dirty })
       )

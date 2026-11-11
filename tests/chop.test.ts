@@ -280,7 +280,7 @@ apps: {}
     expect(result.stderr).toContain("Chopped Session banana");
   });
 
-  // The Ordinary tables below own the staged, modified, and untracked classification.
+  // The Ordinary worktree tables below cover staged, modified, and untracked files.
   it("discards a current Session with modified files under --force and preserves its branch", () => {
     const sandbox = makeTempDir("chop-force-current-session");
     const home = path.join(sandbox, "home");
@@ -725,7 +725,7 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
-  it("blocks cleanup on a just-in-time modified race and retains all Session worktrees", () => {
+  it("blocks Session removal on a just-in-time modified race and retains all Session worktrees", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-modified-race");
     const targetFile = path.join(fixture.rootWorktree, "README.md");
 

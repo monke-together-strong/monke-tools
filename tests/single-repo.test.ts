@@ -1885,7 +1885,7 @@ apps:
     expect(message).not.toContain("shared");
   });
 
-  it("rejects Materialize outside its Session branch and reuses Assigned ports inside a valid Session worktree", () => {
+  it("rejects Materialize from the Source checkout or a mismatched branch and reuses Assigned ports inside a valid Session worktree", () => {
     const sandbox = makeTempDir("single-materialize");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
