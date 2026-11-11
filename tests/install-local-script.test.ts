@@ -221,31 +221,6 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  it("reports the Tool build identity of compiled Local executables", () => {
-    const sandbox = makeTempDir("install-local-version");
-    const executablePath = path.join(sandbox, "mt");
-
-    const build = spawnSync(
-      "bun",
-      [
-        "build",
-        "--compile",
-        "--define",
-        'process.env.MONKE_TOOLS_BUILD_IDENTITY="local+0123456-dirty"',
-        "--outfile",
-        executablePath,
-        path.join(projectRoot, "src", "index.ts")
-      ],
-      { cwd: projectRoot, encoding: "utf-8" }
-    );
-
-    expect(build.status).toBe(0);
-
-    const version = spawnSync(executablePath, ["--version"], { encoding: "utf-8" });
-    expect(version.status).toBe(0);
-    expect(version.stdout).toBe("local+0123456-dirty\n");
-  });
-
   it("activates the compiled executable through the stable symlink in the real Local refresh", () => {
     const sandbox = makeTempDir("install-local-end-to-end");
     const home = path.join(sandbox, "home");
@@ -255,6 +230,12 @@ describe("Local install refresh script", () => {
       path.join(binDirectory, "codiff"),
       "#!/bin/sh\nprintf '%s\\n' 'codiff v1.14.0'\n"
     );
+
+    const sourceDirty =
+      spawnSync("git", ["status", "--porcelain", "--untracked-files=normal"], {
+        cwd: projectRoot,
+        encoding: "utf-8"
+      }).stdout !== "";
 
     const install = spawnSync(
       "sh",
@@ -284,9 +265,16 @@ describe("Local install refresh script", () => {
       JSON.parse(readFileSync(path.join(activeRoot, "install-manifest.json"), "utf-8"))
     );
 
+    const shortCommit = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: projectRoot,
+      encoding: "utf-8"
+    }).stdout.slice(0, 7);
+
+    expect(manifest.toolBuildIdentity).toBe(`local+${shortCommit}${sourceDirty ? "-dirty" : ""}`);
     const version = spawnSync(stableCommand, ["--version"], { encoding: "utf-8" });
     expect(version.status).toBe(0);
     expect(version.stdout.trim()).toBe(manifest.toolBuildIdentity);
     expect(manifest.sourceCheckout).toBe(path.resolve(projectRoot));
-  });
+    // This test compiles the CLI into a native executable, which can exceed the default 5s budget.
+  }, 60_000);
 });

@@ -1049,14 +1049,14 @@ export function release({owner, outputs}) {
     }
   );
 
-  it.each(
-    [
-      { expected: "authentication", stderr: "gh auth login" },
-      { expected: "HTTP 403", stderr: "gh: Forbidden (HTTP 403)" },
-      { expected: "timed out", stderr: "net/http: TLS handshake timeout" },
-      { expected: "GitHub evidence unavailable", stderr: "unexpected failure" }
-    ].flatMap((failure) => [false, true].map((dirty) => ({ ...failure, dirty })))
-  )(
+  // Failure classification ignores dirty state; one dirty row proves diagnostics survive it.
+  it.each([
+    { dirty: false, expected: "authentication", stderr: "gh auth login" },
+    { dirty: true, expected: "authentication", stderr: "gh auth login" },
+    { dirty: false, expected: "HTTP 403", stderr: "gh: Forbidden (HTTP 403)" },
+    { dirty: false, expected: "timed out", stderr: "net/http: TLS handshake timeout" },
+    { dirty: false, expected: "GitHub evidence unavailable", stderr: "unexpected failure" }
+  ])(
     "retains sanitized $expected diagnostics for ordinary worktrees, dirty=$dirty",
     async (failure) => {
       const f = fixture();

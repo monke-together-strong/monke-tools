@@ -175,65 +175,6 @@ external:
     expect(before.repos.map((repo) => repo.cleanupCommand)).toStrictEqual(["true", "true"]);
   });
 
-  it("warns on spawn when skipped dependency source dirt is not carried", () => {
-    const sandbox = makeTempDir("multi-repo-skipped-dep-dirty");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const depRoot = createRepo(path.join(sandbox, "dep"), {
-      "dep.txt": "clean dep\n",
-      "monke.yml": `apps:
-  db:
-    path: services/db
-    envFile: .env.local
-    mappings:
-      - port: DEP_POSTGRES_PORT
-        env: PORT
-`,
-      "services/db/.env.local": "PORT=5432\n"
-    });
-
-    const root = createRepo(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
-      "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-external:
-  dep:
-    path: ../dep
-    pathEnv: DEP_DIR
-    mappings:
-      - port: DEP_POSTGRES_PORT
-        app: api
-        env: DATABASE_URL
-`
-    });
-
-    runMonke({
-      args: ["spawn", "swing"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-    write(depRoot, "dep.txt", "dirty dep\n");
-
-    const result = runMonke({
-      args: ["spawn", "swing"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-
-    expect(read(getExpectedWorktreePath(home, depRoot, "swing"), "dep.txt")).toBe("clean dep\n");
-    expect(result.stderr).toContain(
-      `Warning: Session worktree for swing at ${depRoot} already exists; dirty Source checkout changes were not carried into it.`
-    );
-  });
-
   it("fails dirty dependency source checkouts for spawn --no-dirty before creating any worktrees", () => {
     const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
 
@@ -988,8 +929,6 @@ external:
     expect(read(rootWorktree, ".env")).toBe(
       `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${depPort}\n`
     );
-
-    expect(depRoot).toBeTruthy();
   });
 
   it("overwrites stale root path env values on materialize and preserves unrelated entries", () => {

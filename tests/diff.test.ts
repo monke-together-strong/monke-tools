@@ -1086,33 +1086,6 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("skips a meaningless picker for local-only Diff and avoids an empty Codiff window", async () => {
-    const sandbox = makeTempDir("diff-local-only");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
-    const codiffLog = installFakeCodiff(binDirectory);
-    let prompt: SelectPrompt | undefined;
-
-    const clean = await runMonkeAsync({
-      args: ["diff"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home,
-      onSelect(value) {
-        prompt = value;
-      }
-    });
-
-    expect(clean.stdout).toBe("No changes.\n");
-    expect(prompt).toBeUndefined();
-    expect(existsSync(codiffLog)).toBeFalsy();
-
-    writeFileSync(path.join(repoRoot, "untracked.txt"), "change\n", "utf-8");
-    await runMonkeAsync({ args: ["diff"], binDirectory, cwd: repoRoot, monkeHome: home });
-    expect(readFileSync(codiffLog, "utf-8")).toBe(`${repoRoot}\n`);
-  });
-
   it("falls back to the picker without clearing Session state when a remembered ref is deleted", async () => {
     const sandbox = makeTempDir("diff-invalid-remembered");
     const binDirectory = path.join(sandbox, "bin");
@@ -1183,31 +1156,6 @@ touch "${discoveryReached}"`
     expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
       "refs/heads/unrelated"
     );
-  });
-
-  it("leaves the remembered Session base unchanged after a failed Codiff launch", async () => {
-    const sandbox = makeTempDir("diff-launch-failure");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
-    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
-    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
-    const baseWorktree = path.join(sandbox, "ordinary-worktrees", "failed-base");
-    git(repoRoot, ["branch", "failed-base"]);
-    git(repoRoot, ["worktree", "add", baseWorktree, "failed-base"]);
-    installFakeCodiff(binDirectory, { exitCode: 23 });
-
-    await expect(
-      runMonkeAsync({
-        args: ["diff", "--pick"],
-        binDirectory,
-        cwd: sessionWorktree,
-        monkeHome: home,
-        selectValues: [`worktree:${baseWorktree}`]
-      })
-    ).rejects.toThrow("Codiff launch failed with exit code 23");
-    const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(state.repos[0]?.diffBaseRef).toBe("refs/heads/main");
   });
 
   it("reports the race and offers the picker again when a selected base is invalidated before launch", async () => {

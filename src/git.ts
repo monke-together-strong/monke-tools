@@ -143,7 +143,7 @@ function inferSessionNameForContext(
 }
 
 /** Infer a Session name from a linked worktree path under Monke home. */
-export function inferSessionName(
+function inferSessionName(
   home: string,
   sourceRoot: string,
   worktreeRoot: string,

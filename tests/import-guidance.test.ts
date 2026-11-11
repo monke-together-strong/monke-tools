@@ -3,10 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  copyStagedGuidanceToManagedRoots,
-  transformPreparedReference
-} from "../scripts/import-guidance.ts";
+import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
 function guidanceFixture() {
@@ -31,17 +28,34 @@ function guidanceFixture() {
 }
 
 describe("reference conversion", () => {
-  it("points supporting links to the renamed entry", () => {
-    const reference = makeTempDir("reference-conversion-");
-    write(reference, "SKILL.md", "---\nname: alpha\n---\n\nSee [UI](UI.md).\n");
-    write(
-      reference,
-      "UI.md",
-      'The [SKILL](SKILL.md "SKILL.md") and [rules](SKILL.md#rules) mention SKILL.md.\n\n[entry]: SKILL.md\n'
-    );
-    write(reference, "nested/LOGIC.md", "Back to [SKILL](../SKILL.md).\n");
+  function convertReference(files: Record<string, string>) {
+    const repoRoot = makeTempDir("reference-conversion-");
+    const stagingDirectory = path.join(repoRoot, "staging");
 
-    transformPreparedReference(reference);
+    for (const [file, contents] of Object.entries(files)) {
+      write(stagingDirectory, path.join(".agents/skills/alpha", file), contents);
+    }
+
+    const convert = () => {
+      copyStagedGuidanceToManagedRoots({
+        guidance: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
+        repoRoot,
+        stagingDirectory
+      });
+    };
+
+    return { convert, reference: path.join(repoRoot, "skills/references/imported/alpha") };
+  }
+
+  it("points supporting links to the renamed entry", () => {
+    const { convert, reference } = convertReference({
+      "nested/LOGIC.md": "Back to [SKILL](../SKILL.md).\n",
+      "SKILL.md": "---\nname: alpha\n---\n\nSee [UI](UI.md).\n",
+      "UI.md":
+        'The [SKILL](SKILL.md "SKILL.md") and [rules](SKILL.md#rules) mention SKILL.md.\n\n[entry]: SKILL.md\n'
+    });
+
+    convert();
 
     expect(read(reference, "MAIN.md")).toBe("\nSee [UI](UI.md).\n");
     expect(read(reference, "UI.md")).toBe(
@@ -51,14 +65,13 @@ describe("reference conversion", () => {
   });
 
   it("rejects an entry link it cannot locate in the source", () => {
-    const reference = makeTempDir("reference-conversion-");
-    write(reference, "SKILL.md", "Entry.\n");
-    write(reference, "UI.md", `${String.raw`See [SKILL](SKILL\.md).`}\n`);
+    const { convert, reference } = convertReference({
+      "SKILL.md": "Entry.\n",
+      "UI.md": `${String.raw`See [SKILL](SKILL\.md).`}\n`
+    });
 
-    expect(() => {
-      transformPreparedReference(reference);
-    }).toThrow("UI.md:1");
-    expect(read(reference, "UI.md")).toBe(`${String.raw`See [SKILL](SKILL\.md).`}\n`);
+    expect(convert).toThrow("UI.md:1");
+    expect(fs.existsSync(reference)).toBeFalsy();
   });
 });
 

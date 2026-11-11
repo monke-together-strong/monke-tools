@@ -3,8 +3,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { rewriteEnvFile, seedWorktreeFiles } from "../src/env.ts";
-import type { RepoConfig } from "../src/types.ts";
+import { rewriteManagedEnvFiles, seedWorktreeFiles } from "../src/env.ts";
+import type { AppConfig, RepoConfig } from "../src/types.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
 describe("environment rewriting", () => {
@@ -24,19 +24,7 @@ describe("environment rewriting", () => {
     write(sourceRoot, "node_modules/example/.env", "DEPENDENCY=1\n");
     symlinkSync(path.join(sourceRoot, "apps"), path.join(sourceRoot, "linked-apps"));
 
-    const config: RepoConfig = {
-      appsInOrder: [],
-      configPath: path.join(sourceRoot, "monke.yml"),
-      externalInOrder: [],
-      externalMappingsInOrder: [],
-      localPortOrder: [],
-      resourceCommandsInOrder: [],
-      resourceValuesInOrder: [],
-      seedPaths: [],
-      sourceRoot
-    };
-
-    seedWorktreeFiles(config, worktreeRoot);
+    seedWorktreeFiles(repoConfig(sourceRoot), worktreeRoot);
 
     expect(read(worktreeRoot, ".env")).toBe("ROOT=1\n");
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("APP=1\n");
@@ -51,7 +39,7 @@ describe("environment rewriting", () => {
     expect(existsSync(path.join(worktreeRoot, "linked-apps/api/.env.local"))).toBeFalsy();
   });
 
-  it("updates numeric values, urls, dsns, and duplicate active assignments with rewriteEnvFile", () => {
+  it("updates numeric values, urls, dsns, and duplicate active assignments with rewriteManagedEnvFiles", () => {
     const sandbox = makeTempDir("env-rewrite");
     write(
       sandbox,
@@ -66,8 +54,8 @@ IGNORED=keep
 `
     );
 
-    rewriteEnvFile(
-      path.join(sandbox, "app/.env.local"),
+    rewriteAppEnv(
+      sandbox,
       new Map([
         ["PORT", 11_000],
         ["DATABASE_URL", 11_001],
@@ -85,16 +73,16 @@ IGNORED=keep
 `);
   });
 
-  it("fails rewriteEnvFile when a mapped target is missing", () => {
+  it("fails rewriteManagedEnvFiles when a mapped target is missing", () => {
     const sandbox = makeTempDir("env-missing");
     write(sandbox, "app/.env.local", "PORT=3000\n");
 
     expect(() => {
-      rewriteEnvFile(path.join(sandbox, "app/.env.local"), new Map([["DATABASE_URL", 12_000]]));
+      rewriteAppEnv(sandbox, new Map([["DATABASE_URL", 12_000]]));
     }).toThrow(/Missing mapped env vars/u);
   });
 
-  it("rejects malformed or portless values in rewriteEnvFile", () => {
+  it("rejects malformed or portless values in rewriteManagedEnvFiles", () => {
     const sandbox = makeTempDir("env-invalid");
     write(
       sandbox,
@@ -103,15 +91,15 @@ IGNORED=keep
     );
 
     expect(() => {
-      rewriteEnvFile(path.join(sandbox, "app/.env.local"), new Map([["DATABASE_URL", 12_000]]));
+      rewriteAppEnv(sandbox, new Map([["DATABASE_URL", 12_000]]));
     }).toThrow(/Expected explicit port/u);
 
     expect(() => {
-      rewriteEnvFile(path.join(sandbox, "app/.env.local"), new Map([["BROKEN", 12_001]]));
+      rewriteAppEnv(sandbox, new Map([["BROKEN", 12_001]]));
     }).toThrow(/Unsupported env value/u);
   });
 
-  it("redacts invalid managed env values in rewriteEnvFile errors", () => {
+  it("redacts invalid managed env values in rewriteManagedEnvFiles errors", () => {
     const sandbox = makeTempDir("env-redacted-invalid");
     const envPath = path.join(sandbox, "app/.env.local");
     const unsupportedValue = "fake_token_without_scheme_123";
@@ -125,7 +113,7 @@ DATABASE_URL=${malformedDsn}
     );
 
     const unsupportedMessage = captureThrowMessage(() => {
-      rewriteEnvFile(envPath, new Map([["API_TOKEN", 12_000]]));
+      rewriteAppEnv(sandbox, new Map([["API_TOKEN", 12_000]]));
     });
 
     expect(unsupportedMessage).toContain(`Unsupported env value at ${envPath}:API_TOKEN`);
@@ -133,7 +121,7 @@ DATABASE_URL=${malformedDsn}
     expect(unsupportedMessage).not.toContain(unsupportedValue);
 
     const malformedMessage = captureThrowMessage(() => {
-      rewriteEnvFile(envPath, new Map([["DATABASE_URL", 12_001]]));
+      rewriteAppEnv(sandbox, new Map([["DATABASE_URL", 12_001]]));
     });
 
     expect(malformedMessage).toContain(`Malformed URL or DSN at ${envPath}:DATABASE_URL`);
@@ -141,6 +129,36 @@ DATABASE_URL=${malformedDsn}
     expect(malformedMessage).not.toContain(malformedDsn);
   });
 });
+
+function repoConfig(sourceRoot: string, appsInOrder: AppConfig[] = []): RepoConfig {
+  return {
+    appsInOrder,
+    configPath: path.join(sourceRoot, "monke.yml"),
+    externalInOrder: [],
+    externalMappingsInOrder: [],
+    localPortOrder: [],
+    resourceCommandsInOrder: [],
+    resourceValuesInOrder: [],
+    seedPaths: [],
+    sourceRoot
+  };
+}
+
+/** Rewrite `app/.env.local` in place, mapping each env name to a same-named port key. */
+function rewriteAppEnv(root: string, ports: Map<string, number>) {
+  const app: AppConfig = {
+    absoluteAppPath: path.join(root, "app"),
+    label: "app",
+    localMappings: [...ports.keys()].map((env) => ({
+      portKey: env,
+      targetApp: "app",
+      targetEnv: env
+    })),
+    relativeEnvFile: ".env.local"
+  };
+
+  rewriteManagedEnvFiles(repoConfig(root, [app]), root, ports, []);
+}
 
 function captureThrowMessage(action: () => void) {
   try {

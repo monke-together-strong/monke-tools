@@ -350,7 +350,7 @@ describe("Desktop Diff", () => {
     expect(readFileSync(path.join(home, "config.yml"), "utf-8")).toContain("diffAdapter: codiff");
   });
 
-  it("persists the desktop preference across invocations and bypasses selection for an explicit commit", async () => {
+  it("saves --adapter configuration and leaves it untouched when launching an explicit commit via --path", async () => {
     const sandbox = makeTempDir("diff-desktop");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");

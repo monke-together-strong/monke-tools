@@ -97,7 +97,7 @@ export default function () {
     });
   });
 
-  it("records Resource outputs during spawn without exporting them to dotenv or Session state", () => {
+  it("records Resource command outputs during spawn in the Checkout resource store without exporting them to dotenv", () => {
     const scenario = createResourceCommandScenario({
       module: `import { writeFileSync } from "node:fs";
 

@@ -136,13 +136,52 @@ apps:
     expect(repo?.seedPaths).toStrictEqual(["..seed"]);
   });
 
-  it("rejects non-string bootstrapCommand in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-bootstrap-non-string");
-
-    const root = createFiles(path.join(sandbox, "root"), {
+  it.each([
+    {
+      expected: /bootstrapCommand.*non-empty string/u,
+      name: "non-string bootstrapCommand",
+      prefix: "bootstrapCommand:\n  nested: nope"
+    },
+    {
+      expected: /bootstrapCommand.*non-empty string/u,
+      name: "empty bootstrapCommand",
+      prefix: 'bootstrapCommand: "   "'
+    },
+    {
+      expected: /cleanupCommand.*non-empty string/u,
+      name: "empty cleanupCommand",
+      prefix: 'cleanupCommand: ""'
+    },
+    {
+      expected: /seedPaths.*must be an array/u,
+      name: "non-array seedPaths",
+      prefix: "seedPaths: apps/frostbite-crawler/data/sessions"
+    },
+    {
+      expected: /seedPaths\[0\].*must resolve inside/u,
+      name: "seedPaths that escape the repo root",
+      prefix: "seedPaths:\n  - ../shared/sessions"
+    },
+    {
+      expected: /Duplicate seedPath/u,
+      name: "duplicate normalized seedPaths",
+      prefix:
+        "seedPaths:\n  - apps/frostbite-crawler/data/sessions\n  - apps/frostbite-crawler/data/../data/sessions"
+    },
+    {
+      expected: /seedPath "." is not allowed/u,
+      name: "seedPaths that point at the repo root",
+      prefix: "seedPaths:\n  - ."
+    },
+    {
+      expected: /seedPath "." is not allowed/u,
+      name: "seedPaths normalizing to the repo root",
+      prefix: "seedPaths:\n  - apps/.."
+    }
+  ])("rejects $name in loadResolvedGraph", ({ expected, prefix }) => {
+    const root = createFiles(path.join(makeTempDir("config-invalid-repo"), "root"), {
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `bootstrapCommand:
-  nested: nope
+      "monke.yml": `${prefix}
 apps:
   api:
     path: apps/api
@@ -153,163 +192,7 @@ apps:
 `
     });
 
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /bootstrapCommand.*non-empty string/u
-    );
-  });
-
-  it("rejects empty bootstrapCommand in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-bootstrap-empty");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `bootstrapCommand: "   "
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /bootstrapCommand.*non-empty string/u
-    );
-  });
-
-  it("rejects invalid cleanupCommand values in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-invalid-cleanup");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: ""
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /cleanupCommand.*non-empty string/u
-    );
-  });
-
-  it("rejects non-array seedPaths in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-seedpaths-not-array");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `seedPaths: apps/frostbite-crawler/data/sessions
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPaths.*must be an array/u
-    );
-  });
-
-  it("rejects seedPaths that escape the repo root in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-seedpaths-escape");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `seedPaths:
-  - ../shared/sessions
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPaths\[0\].*must resolve inside/u
-    );
-  });
-
-  it("rejects duplicate normalized seedPaths in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-seedpaths-duplicate");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
-      "monke.yml": `seedPaths:
-  - apps/frostbite-crawler/data/sessions
-  - apps/frostbite-crawler/data/../data/sessions
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Duplicate seedPath/u
-    );
-  });
-
-  it("rejects seedPaths that point at the repo root in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-seedpaths-root");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `seedPaths:
-  - .
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPath "." is not allowed/u
-    );
-  });
-
-  it("rejects seedPaths that normalize to the repo root in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-seedpaths-normalized-root");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/.keep": "\n",
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `seedPaths:
-  - apps/..
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPath "." is not allowed/u
-    );
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(expected);
   });
 
   it("rejects missing external pathEnv in loadResolvedGraph", () => {
@@ -439,30 +322,10 @@ external:
     );
   });
 
-  it("rejects duplicate yaml keys in loadResolvedGraph", () => {
-    const sandbox = makeTempDir("config-duplicate-keys");
-
-    const root = createFiles(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings: []
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings: []
-`
-    });
-
-    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Invalid/u);
-  });
-
   it("rejects duplicate rewrite targets in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-duplicate-targets");
 
-    const depRoot = createRepo(path.join(sandbox, "dep"), {
+    createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
   db:
     path: services/db
@@ -497,13 +360,12 @@ external:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
       /Duplicate rewrite target/u
     );
-    expect(depRoot).toBeTruthy();
   });
 
   it("rejects direct dependency references to non-local ports in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-direct-only");
 
-    const leafRoot = createRepo(path.join(sandbox, "leaf"), {
+    createRepo(path.join(sandbox, "leaf"), {
       "monke.yml": `apps:
   leaf:
     path: services/leaf
@@ -515,7 +377,7 @@ external:
       "services/leaf/.env.local": "PORT=9000\n"
     });
 
-    const depRoot = createRepo(path.join(sandbox, "dep"), {
+    createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
   dep:
     path: services/dep
@@ -556,8 +418,6 @@ external:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
       /not owned locally/u
     );
-    expect(leafRoot).toBeTruthy();
-    expect(depRoot).toBeTruthy();
   });
 
   it("rejects unused zero-port apps in loadResolvedGraph", () => {

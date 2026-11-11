@@ -260,7 +260,7 @@ function getReusableResourceCommand(
   return existing.legacy === false ? existing : { ...existing, name: command.name, outputs };
 }
 
-export async function runResourceCommand(options: {
+async function runResourceCommand(options: {
   command: ResourceCommandConfig;
   resourceValues: ResourceValueState[];
   runtime: Runtime;

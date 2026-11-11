@@ -40,6 +40,7 @@ function prepareBootstrapFixture(
   const bootstrapOwnerLog = path.join(sandbox, "bootstrap-owner.log");
   const releaseIdentityLog = path.join(sandbox, "release-identity.log");
   const curlLog = path.join(sandbox, "curl.log");
+  const curlConfigLog = path.join(sandbox, "curl-config.log");
   mkdirSync(responses, { recursive: true });
   writeExecutable(
     path.join(bundleRoot, "install.sh"),
@@ -91,6 +92,7 @@ esac
     path.join(bin, "curl"),
     `#!/bin/sh
 set -eu
+arguments="$*"
 output=
 url=
 read_config=false
@@ -102,8 +104,8 @@ while [ "$#" -gt 0 ]; do
     *) shift ;;
   esac
 done
-[ "$read_config" = false ] || cat >/dev/null
-printf '%s\n' "$url" >> ${JSON.stringify(curlLog)}
+[ "$read_config" = false ] || cat >> ${JSON.stringify(curlConfigLog)}
+printf '%s\n' "$arguments" >> ${JSON.stringify(curlLog)}
 ${options.failLookup ? 'case "$url" in *stable.tsv) exit 88 ;; esac' : ""}
 ${options.failDownload ? `case "$url" in *${archiveName}) exit 89 ;; esac` : ""}
 case "$url" in
@@ -121,6 +123,7 @@ if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
     bin,
     bootstrapOwnerLog,
     bundlePathLog,
+    curlConfigLog,
     curlLog,
     installLog,
     releaseIdentityLog,
@@ -170,6 +173,7 @@ describe("public Release bootstrap", () => {
     expect(curlLog).toContain("monke-tools-v1.2.3-linux-x64.tar.gz");
     expect(curlLog).not.toContain("api.github.com");
     expect(curlLog).not.toContain(secret);
+    expect(readFileSync(fixture.curlConfigLog, "utf-8")).toContain(`Bearer ${secret}`);
     expect(readFileSync(fixture.bootstrapOwnerLog, "utf-8")).toMatch(/^\d+\n$/u);
     expect(readFileSync(fixture.releaseIdentityLog, "utf-8").trim().split("\n")).toStrictEqual([
       "1.2.3",
@@ -212,6 +216,7 @@ describe("public Release bootstrap", () => {
 
     expect(result.exitCode).toBe(0);
     expect(readFileSync(fixture.curlLog, "utf-8")).not.toContain(secret);
+    expect(readFileSync(fixture.curlConfigLog, "utf-8")).toContain(`Bearer ${secret}`);
   });
 
   it("fails on unsupported platforms before network access or installation changes", () => {

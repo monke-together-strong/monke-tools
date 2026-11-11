@@ -1,58 +1,94 @@
-import { describe, expect, it } from "vite-plus/test";
+import path from "node:path";
 
-import { waitForGate } from "../src/deployment-gate.ts";
-import type { Gate, GateResult, GhApi } from "../src/deployment-gate.ts";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { runCliAsync } from "../src/index.ts";
+import { makeTempDir, write, writeExecutable } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 type Endpoint = "jobs" | "runs" | "status";
 
-/** Serves each endpoint's responses in order, repeating the last one. */
-function scriptedGh(script: Partial<Record<Endpoint, unknown[]>>): GhApi {
-  return async (endpoint, schema) => {
-    const key: Endpoint = endpoint.includes("/jobs?")
-      ? "jobs"
-      : endpoint.includes("/actions/runs?")
-        ? "runs"
-        : "status";
+// The exit codes `mt prs wait-for-gate --help` documents for each gate status.
+const exitCodes = { failed: 1, passed: 0, skipped: 2, timed_out: 3 };
 
-    const queue = script[key] ?? [];
+interface Expected {
+  detail: string;
+  status: keyof typeof exitCodes;
+}
 
-    if (queue.length === 0) {
-      throw new Error(`unexpected gh api ${endpoint}`);
+/**
+ * Runs `mt prs wait-for-gate` against a fake `gh` that serves each endpoint's responses in order,
+ * repeating the last one, on a virtual clock that advances only while the wait sleeps.
+ */
+async function waitForGate(
+  args: string[],
+  script: Partial<Record<Endpoint, unknown[]>>,
+  timing = ["--interval", "15s", "--timeout", "10m"]
+) {
+  const bin = makeTempDir("wait-for-gate");
+
+  for (const [endpoint, responses] of Object.entries(script)) {
+    for (const [index, response] of responses.entries()) {
+      write(bin, `${endpoint}.${index}.json`, JSON.stringify(response));
     }
+  }
 
-    return schema.parse(queue.length > 1 ? queue.shift() : queue[0]);
-  };
-}
+  writeExecutable(
+    path.join(bin, "gh"),
+    `#!/bin/sh
+case "$2" in
+  */jobs\\?*) key=jobs ;;
+  */actions/runs\\?*) key=runs ;;
+  *) key=status ;;
+esac
+dir=$(dirname "$0")
+n=$(cat "$dir/$key.next" 2>/dev/null || echo 0)
+[ -f "$dir/$key.$n.json" ] || { echo "unexpected gh $*" >&2; exit 1; }
+cat "$dir/$key.$n.json"
+[ ! -f "$dir/$key.$((n + 1)).json" ] || echo $((n + 1)) > "$dir/$key.next"
+`
+  );
 
-function wait(gate: Gate, script: Partial<Record<Endpoint, unknown[]>>): Promise<GateResult> {
   let now = 0;
+  let stdout = "";
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
 
-  return waitForGate(gate, {
-    gh: scriptedGh(script),
-    intervalMs: 15_000,
-    now: () => now,
-    sleep: async (ms) => {
-      now += ms;
-    },
-    timeoutMs: 10 * 60_000
+  const sleep = vi.spyOn(Bun, "sleep").mockImplementation(async (ms) => {
+    now += Number(ms);
   });
+
+  try {
+    await runCliAsync(
+      ["prs", "wait-for-gate", ...timing, ...args],
+      createTestRuntime({
+        env: { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` },
+        onStdout(text) {
+          stdout += text;
+        }
+      })
+    );
+
+    return { exitCode: process.exitCode, now, stdout };
+  } finally {
+    clock.mockRestore();
+    sleep.mockRestore();
+    process.exitCode = undefined;
+  }
 }
 
-describe("waitForGate on a Railway commit status", () => {
-  const context = "Monke Together Strong - true-ice-quant";
+function result({ detail, status }: Expected) {
+  return { exitCode: exitCodes[status], stdout: `${status}: ${detail}\n` };
+}
 
-  const gate: Gate = {
-    context,
-    kind: "status",
-    repo: "monke-together-strong/winters-echo",
-    sha: "1062839"
-  };
+describe("mt prs wait-for-gate on a Railway commit status", () => {
+  const context = "Monke Together Strong - true-ice-quant";
+  const gate = ["--repo", "monke-together-strong/winters-echo", "--sha", "1062839"];
 
   const status = (state: string, description: string) => ({
     statuses: [{ context, description, state }]
   });
 
-  it.each<{ expected: GateResult; name: string; responses: unknown[] }>([
+  it.each<{ expected: Expected; name: string; responses: unknown[] }>([
     {
       expected: {
         detail: `${context}: Success - true-ice-quant-demo.up.railway.app`,
@@ -79,20 +115,15 @@ describe("waitForGate on a Railway commit status", () => {
       responses: [status("pending", "Deploying"), status("failure", "Deployment failed")]
     }
   ])("$name", async ({ expected, responses }) => {
-    await expect(wait(gate, { status: responses })).resolves.toStrictEqual(expected);
+    await expect(
+      waitForGate([...gate, "--status", context], { status: responses })
+    ).resolves.toMatchObject(result(expected));
   });
 });
 
-describe("waitForGate on a deploy job within a pipeline", () => {
+describe("mt prs wait-for-gate on a deploy job within a pipeline", () => {
   const url = "https://github.com/o/r/actions/runs/7";
-
-  const gate: Gate = {
-    job: "Deploy",
-    kind: "workflow",
-    repo: "o/r",
-    sha: "abc123",
-    workflow: "CI"
-  };
+  const gate = ["--repo", "o/r", "--sha", "abc123", "--workflow", "CI", "--job", "Deploy"];
 
   const run = (status: string, conclusion: string | null = null) => ({
     workflow_runs: [
@@ -112,7 +143,7 @@ describe("waitForGate on a deploy job within a pipeline", () => {
     jobs: entries.map(([name, status, conclusion]) => ({ conclusion, name, status }))
   });
 
-  it.each<{ expected: GateResult; jobs: unknown[]; name: string; runs: unknown[] }>([
+  it.each<{ expected: Expected; jobs: unknown[]; name: string; runs: unknown[] }>([
     {
       expected: { detail: `Deploy succeeded: ${url}`, status: "passed" },
       jobs: [
@@ -175,22 +206,18 @@ describe("waitForGate on a deploy job within a pipeline", () => {
       runs: [run("in_progress")]
     }
   ])("$name", async ({ expected, jobs: jobResponses, runs }) => {
-    await expect(wait(gate, { jobs: jobResponses, runs })).resolves.toStrictEqual(expected);
+    await expect(waitForGate(gate, { jobs: jobResponses, runs })).resolves.toMatchObject(
+      result(expected)
+    );
   });
 
   it("stops at the timeout when it is shorter than the interval", async () => {
-    let now = 0;
+    const waited = await waitForGate(
+      gate,
+      { jobs: [jobs(["Test", "in_progress", null])], runs: [run("in_progress")] },
+      ["--interval", "5m", "--timeout", "1m"]
+    );
 
-    const result = await waitForGate(gate, {
-      gh: scriptedGh({ jobs: [jobs(["Test", "in_progress", null])], runs: [run("in_progress")] }),
-      intervalMs: 5 * 60_000,
-      now: () => now,
-      sleep: async (ms) => {
-        now += ms;
-      },
-      timeoutMs: 60_000
-    });
-
-    expect([result.status, now]).toStrictEqual(["timed_out", 60_000]);
+    expect([waited.exitCode, waited.now]).toStrictEqual([exitCodes.timed_out, 60_000]);
   });
 });

@@ -160,9 +160,11 @@ describe("skill update summaries", () => {
     snapshot(before, []);
     snapshot(after, ["alpha"]);
     const runtime = createTestRuntime({ cwd: root });
+    let partial = "";
     runtime.execAsync = async (_command, args = []) => {
       const output = args[args.indexOf("--output-last-message") + 1];
       ok(output);
+      partial = output;
       writeFileSync(output, "Partial output");
 
       return { exitCode: 1, stderr: "Unavailable", stdout: "" };
@@ -178,6 +180,7 @@ describe("skill update summaries", () => {
       }
     });
     expect(messages).toContain("Skill update summary unavailable: Unavailable");
+    expect(existsSync(partial)).toBeFalsy();
     expect(existsSync(path.join(after, SKILL_SUMMARY_FILE))).toBeFalsy();
     expect(read(after, "skills/imported/alpha/SKILL.md")).toBe("Guidance for alpha.");
   });

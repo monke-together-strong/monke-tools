@@ -27,7 +27,7 @@ const SOURCES_PATH = path.join("config", "coderabbit", "sources.yaml");
 const TEMPLATE_PATH = path.join("config", "coderabbit", "template.yaml");
 const MAX_INSTRUCTION_CHARACTERS = 20_000;
 
-export const CODE_RABBIT_SYNC_INPUTS = new Set([
+const CODE_RABBIT_SYNC_INPUTS = new Set([
   ".github/workflows/sync-coderabbit.yaml",
   "bun.lock",
   "config/coderabbit/sources.yaml",
@@ -73,7 +73,7 @@ const SourceManifestSchema = strictObject({
   )
 });
 
-export function isCodeRabbitSyncRelevant(options: output<typeof RelevanceOptionsSchema>) {
+function isCodeRabbitSyncRelevant(options: output<typeof RelevanceOptionsSchema>) {
   const sources = new Set(options.sources);
 
   return options.changedPaths.some(
@@ -81,7 +81,7 @@ export function isCodeRabbitSyncRelevant(options: output<typeof RelevanceOptions
   );
 }
 
-export function listChangedPaths(repoRoot: string, before: string, after: string) {
+function listChangedPaths(repoRoot: string, before: string, after: string) {
   let hasBeforeCommit = false;
 
   if (!/^0+$/u.test(before)) {

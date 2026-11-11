@@ -4,9 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
-import { resolveResourceCommands, runResourceCommand } from "../src/resources.ts";
+import { resolveResourceCommands } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
-import type { RepoConfig, Runtime } from "../src/types.ts";
+import type { RepoConfig, ResourceCommandConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
@@ -24,13 +24,17 @@ describe("resources", () => {
     };
 
     await expect(
-      runResourceCommand({
-        command: { name: "example", outputs: ["VALUE"], run: "example.ts", timeoutSeconds: 60 },
+      resolveResourceCommands({
+        existingRepoState: undefined,
+        onResolvedCommandOutputs() {},
+        repoConfig: resourceRepoConfig(sourceRoot, [
+          { name: "example", outputs: ["VALUE"], run: "example.ts", timeoutSeconds: 60 }
+        ]),
         resourceValues: [],
+        rootSourceRoot: sourceRoot,
         runtime,
         session: "",
-        sourceRoot,
-        stdin: {},
+        store: new CheckoutResourceStore(path.join(sourceRoot, "home")),
         worktreePath: sourceRoot
       })
     ).rejects.toThrow("runner protocol violation");
@@ -58,20 +62,10 @@ describe("resources", () => {
       record.resourceCommandOutputs = [original];
       store.save(record);
 
-      const repoConfig: RepoConfig = {
-        appsInOrder: [],
-        configPath: path.join(sourceRoot, "monke.yml"),
-        externalInOrder: [],
-        externalMappingsInOrder: [],
-        localPortOrder: [],
-        resourceCommandsInOrder: [
-          { name: "retained", outputs: ["KEPT"], run: "retained.ts", timeoutSeconds: 60 },
-          { name: "new", outputs: ["NEW"], run: "new.ts", timeoutSeconds: 60 }
-        ],
-        resourceValuesInOrder: [],
-        seedPaths: [],
-        sourceRoot
-      };
+      const repoConfig = resourceRepoConfig(sourceRoot, [
+        { name: "retained", outputs: ["KEPT"], run: "retained.ts", timeoutSeconds: 60 },
+        { name: "new", outputs: ["NEW"], run: "new.ts", timeoutSeconds: 60 }
+      ]);
 
       const runtime: Runtime = {
         ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
@@ -124,24 +118,14 @@ describe("resources", () => {
     let commandSawLock = false;
     let persistenceSawLock = false;
 
-    const repoConfig: RepoConfig = {
-      appsInOrder: [],
-      configPath: path.join(sourceRoot, "monke.yml"),
-      externalInOrder: [],
-      externalMappingsInOrder: [],
-      localPortOrder: [],
-      resourceCommandsInOrder: [
-        {
-          name: "e2e-symbols",
-          outputs: ["E2E_FLOW1_SYMBOL"],
-          run: "scripts/allocate-symbols.ts",
-          timeoutSeconds: 60
-        }
-      ],
-      resourceValuesInOrder: [],
-      seedPaths: [],
-      sourceRoot
-    };
+    const repoConfig = resourceRepoConfig(sourceRoot, [
+      {
+        name: "e2e-symbols",
+        outputs: ["E2E_FLOW1_SYMBOL"],
+        run: "scripts/allocate-symbols.ts",
+        timeoutSeconds: 60
+      }
+    ]);
 
     const runtime: Runtime = {
       ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
@@ -209,24 +193,14 @@ describe("resources", () => {
     mkdirSync(sourceRoot, { recursive: true });
     writeFileSync(path.join(sourceRoot, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf-8");
 
-    const repoConfig: RepoConfig = {
-      appsInOrder: [],
-      configPath: path.join(sourceRoot, "monke.yml"),
-      externalInOrder: [],
-      externalMappingsInOrder: [],
-      localPortOrder: [],
-      resourceCommandsInOrder: [
-        {
-          name: "e2e-symbols",
-          outputs: ["E2E_FLOW1_SYMBOL"],
-          run: "scripts/allocate-symbols.ts",
-          timeoutSeconds: 60
-        }
-      ],
-      resourceValuesInOrder: [],
-      seedPaths: [],
-      sourceRoot
-    };
+    const repoConfig = resourceRepoConfig(sourceRoot, [
+      {
+        name: "e2e-symbols",
+        outputs: ["E2E_FLOW1_SYMBOL"],
+        run: "scripts/allocate-symbols.ts",
+        timeoutSeconds: 60
+      }
+    ]);
 
     const invocations: { args: string[] | undefined; command: string }[] = [];
 
@@ -273,3 +247,20 @@ describe("resources", () => {
     expect(invocation?.args?.[6]).toBe(path.join(sourceRoot, "scripts/allocate-symbols.ts"));
   });
 });
+
+function resourceRepoConfig(
+  sourceRoot: string,
+  resourceCommandsInOrder: ResourceCommandConfig[]
+): RepoConfig {
+  return {
+    appsInOrder: [],
+    configPath: path.join(sourceRoot, "monke.yml"),
+    externalInOrder: [],
+    externalMappingsInOrder: [],
+    localPortOrder: [],
+    resourceCommandsInOrder,
+    resourceValuesInOrder: [],
+    seedPaths: [],
+    sourceRoot
+  };
+}

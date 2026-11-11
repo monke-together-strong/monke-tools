@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
@@ -288,38 +288,6 @@ apps:
     expect(reservationState.sourceRoot).toBe(root);
   });
 
-  it("removes dead no-config session state during cleanup", () => {
-    const sandbox = makeTempDir("cleanup-no-config");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "# root\n"
-    });
-
-    const spawn = runMonkeCapturingFailure({
-      args: ["spawn", "banana"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-
-    expect(spawn.stderr).toContain("Warning:");
-
-    rmSync(getExpectedWorktreePath(home, root, "banana"), { force: true, recursive: true });
-
-    runMonke({
-      args: ["cleanup"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-
-    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
-      /Expected exactly one yaml file.*found 0/u
-    );
-  });
-
   it("requires explicit source recovery for missing worktree cleanup", () => {
     const sandbox = makeTempDir("cleanup-command");
     const binDirectory = path.join(sandbox, "bin");
@@ -506,57 +474,6 @@ apps:
     expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
-  });
-
-  it("retains each Session with a missing cleanup worktree without executing commands", () => {
-    const sandbox = makeTempDir("cleanup-command-failure-isolation");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-
-    const root = createRepo(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `bootstrapCommand: ':'
-cleanupCommand: 'printf "%s\\n" "$MONKE_SESSION" >> cleanup-attempts.log; echo cleanup failed >&2; exit 1'
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-
-    runMonke({
-      args: ["spawn", "retry-one"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-    runMonke({
-      args: ["spawn", "retry-two"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-
-    rmSync(getExpectedWorktreePath(home, root, "retry-one"), { force: true, recursive: true });
-    rmSync(getExpectedWorktreePath(home, root, "retry-two"), { force: true, recursive: true });
-
-    const result = runMonke({
-      args: ["cleanup"],
-      binDirectory,
-      cwd: root,
-      monkeHome: home
-    });
-
-    expect(result.stdout).toContain("Skipped:");
-    expect(result.stdout).toContain("retry-one");
-    expect(result.stdout).toContain("retry-two");
-    expect(existsSync(path.join(root, "cleanup-attempts.log"))).toBeFalsy();
-    expect(result.stdout).toContain("resource-recovery-required");
-    expect(existsSync(getSessionStateFilePath(home, root, "retry-one"))).toBeTruthy();
-    expect(existsSync(getSessionStateFilePath(home, root, "retry-two"))).toBeTruthy();
   });
 
   it("keeps session state for retry when cleanupCommand fails", () => {

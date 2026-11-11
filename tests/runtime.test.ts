@@ -408,8 +408,15 @@ await runtime.execAsync(
   });
 
   it("exposes the Release asset download response body without buffering it", async () => {
-    const response = new Response("streamed asset");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    let body: ReadableStreamDefaultController<Uint8Array> | undefined;
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        body = controller;
+      }
+    });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(stream));
 
     try {
       const runtime = createRuntime();
@@ -418,8 +425,9 @@ await runtime.execAsync(
         "https://github.com/monke-together-strong/monke-tools/releases/download/monke-tools-v1.2.3/monke-tools-v1.2.3-linux-x64.tar.gz"
       );
 
-      expect(downloaded).toBe(response);
-      expect(downloaded.bodyUsed).toBeFalsy();
+      // The download resolved while the body is still open, so nothing buffered it.
+      body?.enqueue(new TextEncoder().encode("streamed asset"));
+      body?.close();
       await expect(downloaded.text()).resolves.toBe("streamed asset");
     } finally {
       fetchMock.mockRestore();

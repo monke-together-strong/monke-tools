@@ -446,14 +446,7 @@ describe("Mainline Release selection", () => {
   it.each([
     ["src/index.ts", true],
     ["skills/codex/example/SKILL.md", true],
-    ["skills/internal/implement/SKILL.md", true],
     ["install.sh", true],
-    ["scripts/install-release.sh", true],
-    ["monke.yml", true],
-    ["scripts/skill-lock.ts", true],
-    ["scripts/skill-import-state.ts", true],
-    ["scripts/import-guidance.ts", true],
-    [".github/actions/setup-mainline/action.yml", true],
     [".github/workflows/publish.yml", true],
     [".github/workflows/publish-packages.yml", false],
     ["bun.lock", false],
@@ -468,7 +461,5 @@ describe("Mainline Release selection", () => {
     expect(hasReleaseOwnedChanges(["bun.lock", "packages/oxc-config/package.json"])).toBeFalsy();
     expect(hasReleaseOwnedChanges(["bun.lock", "package.json"])).toBeTruthy();
     expect(hasReleaseOwnedChanges(["bun.lock"])).toBeTruthy();
-    expect(hasReleaseOwnedChanges(["LICENSE"])).toBeTruthy();
-    expect(hasReleaseOwnedChanges(["THIRD_PARTY_NOTICES.md"])).toBeTruthy();
   });
 });

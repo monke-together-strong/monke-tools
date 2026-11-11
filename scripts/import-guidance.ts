@@ -338,7 +338,7 @@ export function prepareStagedGuidance(
   }
 }
 
-export function transformPreparedReference(referencePath: string) {
+function transformPreparedReference(referencePath: string) {
   const skillEntryPath = path.join(referencePath, "SKILL.md");
   const referenceEntryPath = path.join(referencePath, "MAIN.md");
 
