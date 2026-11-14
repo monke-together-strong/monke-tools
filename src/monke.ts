@@ -34,10 +34,12 @@ import { runCheckoutSetup } from "./resource-lifecycle.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import { formatFailureReceipt, runSessionMaterialization } from "./session-materialization.ts";
 import type { SessionMaterializationNode } from "./session-materialization.ts";
-import { assertRecordedWorktreePath } from "./session-safety.ts";
+import {
+  assertNoOtherStateOwnsSessionRepos,
+  assertRecordedWorktreePath
+} from "./session-safety.ts";
 import {
   ensureSessionPrefix,
-  findSessionOwner,
   getSessionStateFilePath,
   loadSessionState,
   SessionStateStore
@@ -1008,7 +1010,7 @@ function initializeMaterialization(
     });
 
   if (retainedState === undefined) {
-    assertNewSessionClaim(home, store, sessionState, context.worktreeRoot);
+    assertNewSessionClaim(home, store, sessionState);
     assertSessionWorktreePathsAvailable(
       store,
       session,
@@ -1031,20 +1033,12 @@ function initializeMaterialization(
   };
 }
 
-/** A new Session may claim the invoking worktree only when no other Session records it. */
-function assertNewSessionClaim(
-  home: string,
-  store: SessionStateStore,
-  state: SessionState,
-  worktreePath: string
-) {
-  const owner = findSessionOwner(store.list(), worktreePath);
-
-  if (owner !== null) {
-    throw new MonkeError(
-      `Worktree ${worktreePath} is already recorded by Session ${owner.session} at ${owner.rootSourceRoot}`
-    );
-  }
+/**
+ * A new Session may claim its worktrees only when removal could later run: no other Session records
+ * or nests with any of them, and each path passes removal's placement rules.
+ */
+function assertNewSessionClaim(home: string, store: SessionStateStore, state: SessionState) {
+  assertNoOtherStateOwnsSessionRepos(state, store.list());
 
   for (const repo of state.repos) {
     assertRecordedWorktreePath(home, state, repo);

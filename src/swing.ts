@@ -19,7 +19,11 @@ import { createLogger } from "./logger.ts";
 import { assertSpawnSourcePolicy, spawnSessionLocked } from "./monke.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withGlobalLockAsync } from "./runtime.ts";
-import { getSessionStateFilePath, loadSessionState } from "./session-state-store.ts";
+import {
+  findRecordedSessionOwner,
+  getSessionStateFilePath,
+  loadSessionState
+} from "./session-state-store.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
@@ -319,6 +323,19 @@ async function resolveStoredTarget(
   }
 
   if (target.kind === "ordinary-worktree") {
+    // A worktree remembered before its adoption now resolves as its Session.
+    const owner = findRecordedSessionOwner(home, rootSourceRoot, target.path);
+
+    if (owner !== null) {
+      return await resolveStoredTarget(
+        runtime,
+        home,
+        rootSourceRoot,
+        { kind: "session", session: owner.session },
+        options
+      );
+    }
+
     validateOrdinaryWorktreeTarget(runtime, home, rootSourceRoot, target);
 
     return { path: target.path, target };

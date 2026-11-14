@@ -148,6 +148,21 @@ describe("adopting an Ordinary worktree", () => {
     expect(existsSync(path.join(home, "sessions"))).toBeFalsy();
   });
 
+  it("rejects a worktree nested inside another Session's worktree", () => {
+    const { foreignPath, home, root } = createAdoptionFixture("adopt-overlap");
+    runMonke({ args: ["materialize", "--adopt"], cwd: foreignPath, monkeHome: home });
+    const innerPath = path.join(foreignPath, "inner");
+    git(root, ["worktree", "add", "-b", "feature/inner", innerPath]);
+
+    const inner = runMonkeCapturingFailure({
+      args: ["materialize", "--adopt"],
+      cwd: innerPath,
+      monkeHome: home
+    });
+
+    expect(inner.error?.message).toContain(`overlaps worktree ${foreignPath}`);
+  });
+
   it("rejects a detached worktree and a Session already bound to another worktree", () => {
     const { foreignPath, home, root } = createAdoptionFixture("adopt-rejections");
     const detachedPath = path.join(path.dirname(foreignPath), "detached");
