@@ -241,6 +241,35 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
   return states;
 }
 
+/** Return the matching Session, or null. Throw if multiple Sessions match. */
+export function findSessionOwner(
+  states: SessionState[],
+  worktreePath: string,
+  sourceRoot?: string
+) {
+  const owners = states.filter((state) =>
+    state.repos.some(
+      (repo) =>
+        samePath(repo.worktreePath, worktreePath) &&
+        (sourceRoot === undefined || samePath(repo.sourceRoot, sourceRoot))
+    )
+  );
+
+  if (owners.length > 1) {
+    throw new MonkeError(`Worktree ${worktreePath} is recorded by multiple Sessions`);
+  }
+
+  return owners[0] ?? null;
+}
+
+export function findRecordedSessionOwner(home: string, sourceRoot: string, worktreePath: string) {
+  return findSessionOwner(
+    listSessionStatesRelevantToWorktrees(home, [worktreePath]),
+    worktreePath,
+    sourceRoot
+  );
+}
+
 function parseSessionStateFile(home: string, filePath: string) {
   const state = parseSupportedSessionState(filePath);
   const expectedFilePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);

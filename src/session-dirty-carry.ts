@@ -12,7 +12,7 @@ import {
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
-import { branchExists, getExpectedWorktreePath, runGit } from "./git.ts";
+import { branchExists, runGit } from "./git.ts";
 import type { CheckoutSource } from "./git.ts";
 import { copyMissingEntries } from "./non-clobbering-copy.ts";
 import type { CopyConflict } from "./non-clobbering-copy.ts";
@@ -107,9 +107,9 @@ export function trackDirtyCarry(
 /** Refuse dirty carry when it would apply HEAD-relative patches onto a diverged Session branch. */
 export function assertDirtyCarryBoundary(
   runtime: Runtime,
-  home: string,
   sourceRoot: string,
   session: string,
+  worktreePath: string,
   snapshot: DirtySnapshot,
   resumesDirtyCarry: boolean
 ) {
@@ -117,7 +117,7 @@ export function assertDirtyCarryBoundary(
     return;
   }
 
-  if (!resumesDirtyCarry && existsSync(getExpectedWorktreePath(home, sourceRoot, session))) {
+  if (!resumesDirtyCarry && existsSync(worktreePath)) {
     return;
   }
 

@@ -15,7 +15,13 @@ import {
   runActivateLocalInstall,
   runActivateReleaseInstall
 } from "./installation.ts";
-import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import {
+  ADOPTION_CONSEQUENCES,
+  runSpawn,
+  runInstallDependencies,
+  runMaterialize,
+  runSetup
+} from "./monke.ts";
 import type { SpawnOptions } from "./monke.ts";
 import { runPrsCreate, runPrsList, runPrsPoll, runPrsTrack, runPrsUntrack } from "./pr-tracking.ts";
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
@@ -124,7 +130,14 @@ function createProgram(runtime: Runtime) {
     .option("--adapter <adapter>", "noninteractive selection (codiff or ms)")
     .action((options) => runDiffConfigure(runtime, options));
 
-  program.command("materialize").action(() => runMaterialize(runtime));
+  program
+    .command("materialize")
+    .description("Materialize the current Session worktree and its Dependency repos")
+    .option(
+      "--adopt",
+      `adopt this Ordinary worktree as the Root repo's Session worktree for its current branch. ${ADOPTION_CONSEQUENCES}`
+    )
+    .action((options) => runMaterialize(runtime, { adopt: options.adopt === true }));
 
   program.enablePositionalOptions();
 

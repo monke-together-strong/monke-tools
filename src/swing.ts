@@ -8,8 +8,9 @@ import { openCodexWorkspace } from "./codex.ts";
 import { MonkeError } from "./errors.ts";
 import {
   branchExists,
+  assertAdoptedWorktreePresent,
   describeSessionBranchMismatch,
-  getExpectedWorktreePath,
+  getSessionWorktreePath,
   listWorktrees,
   resolveRepoContext,
   validateWorktreeForSession
@@ -18,6 +19,11 @@ import { createLogger } from "./logger.ts";
 import { assertSpawnSourcePolicy, spawnSessionLocked } from "./monke.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withGlobalLockAsync } from "./runtime.ts";
+import {
+  findRecordedSessionOwner,
+  getSessionStateFilePath,
+  loadSessionState
+} from "./session-state-store.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
@@ -317,12 +323,26 @@ async function resolveStoredTarget(
   }
 
   if (target.kind === "ordinary-worktree") {
+    // A worktree remembered before its adoption now resolves as its Session.
+    const owner = findRecordedSessionOwner(home, rootSourceRoot, target.path);
+
+    if (owner !== null) {
+      return await resolveStoredTarget(
+        runtime,
+        home,
+        rootSourceRoot,
+        { kind: "session", session: owner.session },
+        options
+      );
+    }
+
     validateOrdinaryWorktreeTarget(runtime, home, rootSourceRoot, target);
 
     return { path: target.path, target };
   }
 
-  const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
+  const worktreePath = getRecordedSessionWorktreePath(home, rootSourceRoot, target.session);
+  assertAdoptedWorktreePresent(home, rootSourceRoot, target.session, worktreePath);
 
   if (!existsSync(worktreePath)) {
     const linkedWorktree = listLinkedWorktrees(runtime, rootSourceRoot).find(
@@ -360,7 +380,6 @@ async function resolveStoredTarget(
 
   const context = validateWorktreeForSession(
     runtime,
-    home,
     rootSourceRoot,
     worktreePath,
     target.session,
@@ -533,7 +552,11 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
     throw new MonkeError("Unable to infer the current worktree for Previous Swing target history");
   }
 
-  const expectedPath = getExpectedWorktreePath(home, context.sourceRoot, context.sessionName);
+  const expectedPath = getRecordedSessionWorktreePath(
+    home,
+    context.sourceRoot,
+    context.sessionName
+  );
 
   return samePath(context.worktreeRoot, expectedPath)
     ? {
@@ -545,6 +568,14 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
         kind: "ordinary-worktree",
         path: context.worktreeRoot
       };
+}
+
+function getRecordedSessionWorktreePath(home: string, rootSourceRoot: string, session: string) {
+  const state = existsSync(getSessionStateFilePath(home, rootSourceRoot, session))
+    ? loadSessionState(home, rootSourceRoot, session)
+    : undefined;
+
+  return getSessionWorktreePath(home, rootSourceRoot, session, state);
 }
 
 function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget) {

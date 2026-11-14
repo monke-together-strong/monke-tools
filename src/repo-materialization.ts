@@ -498,7 +498,7 @@ export function createInitialRepoLifecycleState(
     materializationStatus: existingState?.materializationStatus ?? "pending",
     preparationStatus: existingState?.preparationStatus ?? "pending",
     sourceRoot: repoConfig.sourceRoot,
-    worktreePath
+    worktreePath: existingState?.worktreePath ?? worktreePath
   };
 }
 

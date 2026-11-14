@@ -9,6 +9,7 @@ import { MonkeError } from "./errors.ts";
 import {
   branchExists,
   getExpectedWorktreePath,
+  getSessionWorktreePath,
   resolveDefaultBranchRef,
   resolveStartRef,
   resolveRepoContext,
@@ -33,6 +34,10 @@ import { runCheckoutSetup } from "./resource-lifecycle.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import { formatFailureReceipt, runSessionMaterialization } from "./session-materialization.ts";
 import type { SessionMaterializationNode } from "./session-materialization.ts";
+import {
+  assertNoOtherStateOwnsSessionRepos,
+  assertRecordedWorktreePath
+} from "./session-safety.ts";
 import {
   ensureSessionPrefix,
   getSessionStateFilePath,
@@ -205,7 +210,7 @@ async function prepareSpawn(
   const retainedState = store.get(rootSourceRoot, session);
   const sourcePlan = resolveSpawnSourcePlan(retainedState, session, spawnOptions);
   assertSpawnRequest(runtime, rootSourceRoot, session, sourcePlan);
-  const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
+  const rootWorktreePath = getSessionWorktreePath(home, rootSourceRoot, session, retainedState);
 
   const getStartRef = createStartRefResolver(runtime, rootSourceRoot, {
     checkoutRoot: rootCheckoutRoot,
@@ -392,7 +397,6 @@ function createRepoLifecycleNode(options: {
       if (existingState.materializationStatus === "materialized") {
         validateWorktreeForSession(
           context.runtime,
-          context.home,
           repoConfig.sourceRoot,
           existingState.worktreePath,
           context.session
@@ -615,13 +619,18 @@ async function spawnWithoutConfig(
   rootCheckoutRoot: string
 ): Promise<never> {
   const { home } = store;
-  assertNoGlobalWorktreePathStateCollisions(store, session, [{ sourceRoot: rootSourceRoot }]);
+  const priorSessionState = store.get(rootSourceRoot, session);
+
+  assertSessionWorktreePathsAvailable(
+    store,
+    session,
+    [{ sourceRoot: rootSourceRoot }],
+    priorSessionState
+  );
 
   if (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh") {
     assertFreshSessionWorktreeAvailable(runtime, home, rootSourceRoot, session);
   }
-
-  const priorSessionState = store.get(rootSourceRoot, session);
 
   const existingRepoState = priorSessionState?.repos.find(
     (repo) => repo.sourceRoot === rootSourceRoot
@@ -636,7 +645,7 @@ async function spawnWithoutConfig(
   }).get(rootSourceRoot);
 
   ok(plan, `Missing Worktree preparation plan for ${rootSourceRoot}`);
-  const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
+  const worktreePath = getSessionWorktreePath(home, rootSourceRoot, session, priorSessionState);
 
   // Record the Diff base before creating the worktree, so a retry keeps it after the Session branch exists.
   const pendingRepoState = createInitialRepoLifecycleState(
@@ -807,8 +816,7 @@ function prepareSpawnMaterialization(
     sessionState,
     reposInOrder.map((repo) => repo.sourceRoot)
   );
-  assertUniqueExpectedWorktreePaths(home, session, reposInOrder);
-  assertNoGlobalWorktreePathStateCollisions(store, session, reposInOrder);
+  assertSessionWorktreePathsAvailable(store, session, reposInOrder, sessionState);
 
   if (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh") {
     for (const repoConfig of reposInOrder) {
@@ -823,12 +831,18 @@ function createNewSessionState(
   home: string,
   rootSourceRoot: string,
   session: string,
-  reposInOrder: RepoConfig[]
+  reposInOrder: RepoConfig[],
+  options: { rootWorktreePath?: string } = {}
 ): SessionState {
   return {
     generation: { number: 0, status: "not-started" },
     repos: reposInOrder.map((repo) =>
-      createInitialRepoLifecycleState(repo, getExpectedWorktreePath(home, repo.sourceRoot, session))
+      createInitialRepoLifecycleState(
+        repo,
+        samePath(repo.sourceRoot, rootSourceRoot) && options.rootWorktreePath !== undefined
+          ? options.rootWorktreePath
+          : getExpectedWorktreePath(home, repo.sourceRoot, session)
+      )
     ),
     rootSourceRoot,
     session,
@@ -836,28 +850,35 @@ function createNewSessionState(
   };
 }
 
-function assertNoGlobalWorktreePathStateCollisions(
+function assertSessionWorktreePathsAvailable(
   store: SessionStateStore,
   session: string,
-  repoConfigs: { sourceRoot: string }[]
+  repoConfigs: { sourceRoot: string }[],
+  state: SessionState | undefined
 ) {
-  const { home } = store;
-  const states = store.list();
+  const otherRepos = store.list().flatMap((retained) => retained.repos);
+  const ownerByPath = new Map<string, string>();
 
-  for (const repoConfig of repoConfigs) {
-    const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
+  for (const { sourceRoot } of repoConfigs) {
+    const worktreePath = getSessionWorktreePath(store.home, sourceRoot, session, state);
+    const normalizedPath = path.normalize(worktreePath);
+    const sessionOwner = ownerByPath.get(normalizedPath);
 
-    const collision = states
-      .flatMap((state) => state.repos)
-      .find(
-        (repoState) =>
-          samePath(repoState.worktreePath, expectedPath) &&
-          !samePath(repoState.sourceRoot, repoConfig.sourceRoot)
+    if (sessionOwner !== undefined) {
+      throw new MonkeError(
+        `Session worktree path collision at ${worktreePath}: ${sessionOwner} and ${sourceRoot} both resolve to ${path.basename(sourceRoot)}/${session}`
       );
+    }
+
+    ownerByPath.set(normalizedPath, sourceRoot);
+
+    const collision = otherRepos.find(
+      (repo) => samePath(repo.worktreePath, worktreePath) && !samePath(repo.sourceRoot, sourceRoot)
+    );
 
     if (collision) {
       throw new MonkeError(
-        `Session worktree path collision at ${expectedPath}; already recorded for ${collision.sourceRoot}. Repo-name/session worktree paths must be unique within MONKE_HOME.`
+        `Session worktree path collision at ${worktreePath}; already recorded for ${collision.sourceRoot}. Repo-name/session worktree paths must be unique within MONKE_HOME.`
       );
     }
   }
@@ -895,12 +916,28 @@ function minimumCodiffVersionForRuntime(runtime: Runtime) {
   return loadActiveToolInstall(getMonkeHome(runtime))?.manifest.minimumCodiffVersion;
 }
 
+export interface MaterializeOptions {
+  /** Adopt the invoking Ordinary worktree as the Root repo's Session worktree. */
+  adopt?: boolean;
+}
+
+export const ADOPTION_CONSEQUENCES =
+  "mt chop now removes this worktree with its Session, and default mt cleanup removes it once its work is preserved. Cleanup also stops process trees attached to it that are more than a day old.";
+
 /** Materialize through the dependency-gated Session lifecycle scheduler. */
-export async function runMaterialize(runtime: Runtime) {
-  const request = resolveMaterializeRequest(runtime);
+export async function runMaterialize(runtime: Runtime, options: MaterializeOptions = {}) {
+  const request = resolveMaterializeRequest(runtime, options);
   await withGlobalLockAsync(request.home, async () => {
     const store = new SessionStateStore(request.home);
     const execution = initializeMaterialization(runtime, request, store);
+
+    // Warn before materialization records ownership. Later failure does not undo adoption.
+    if (options.adopt === true) {
+      createLogger(runtime).warning(
+        `Adopting ${request.context.worktreeRoot}: ${ADOPTION_CONSEQUENCES}`
+      );
+    }
+
     await runSessionMaterialization({
       nodes: createMaterializeNodes(execution),
       onCheckpoint: runtime.sessionMaterializationBoundary,
@@ -910,15 +947,33 @@ export async function runMaterialize(runtime: Runtime) {
       store
     });
   });
+
   createLogger(runtime).success(`Materialized session ${request.session}`);
 }
 
-function resolveMaterializeRequest(runtime: Runtime) {
+function resolveMaterializeRequest(runtime: Runtime, options: MaterializeOptions) {
   const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
+
+  const context = resolveRepoContext(runtime, runtime.cwd, home, {
+    inferSessionName: options.adopt !== true
+  });
 
   if (context.isSourceCheckout) {
-    throw new MonkeError("mt materialize must run inside a session worktree");
+    throw new MonkeError(
+      options.adopt === true
+        ? "mt materialize --adopt must run inside an Ordinary worktree, not the Source checkout"
+        : "mt materialize must run inside a session worktree"
+    );
+  }
+
+  if (options.adopt === true) {
+    if (context.currentBranch === "HEAD") {
+      throw new MonkeError(
+        `Cannot adopt detached worktree ${context.worktreeRoot}; check out a branch first, then rerun mt materialize --adopt`
+      );
+    }
+
+    return { context, home, session: context.currentBranch };
   }
 
   if (!context.sessionName) {
@@ -933,17 +988,35 @@ function initializeMaterialization(
   request: ReturnType<typeof resolveMaterializeRequest>,
   store: SessionStateStore
 ) {
-  const retainedState = store.get(request.context.sourceRoot, request.session);
-  const graph = loadResolvedGraphForSession(runtime, request.context.sourceRoot, retainedState);
+  const { context, home, session } = request;
+  const retainedState = store.get(context.sourceRoot, session);
+
+  const recordedRootPath =
+    retainedState && getSessionWorktreePath(home, context.sourceRoot, session, retainedState);
+
+  if (recordedRootPath !== undefined && !samePath(recordedRootPath, context.worktreeRoot)) {
+    throw new MonkeError(
+      `Session ${session} is already bound to ${recordedRootPath}; run mt materialize there, or mt chop ${session} to remove the Session`
+    );
+  }
+
+  const graph = loadResolvedGraphForSession(runtime, context.sourceRoot, retainedState);
 
   const sessionState =
     retainedState ??
-    createNewSessionState(
-      request.home,
-      request.context.sourceRoot,
-      request.session,
-      graph.reposInMaterializationOrder
+    createNewSessionState(home, context.sourceRoot, session, graph.reposInMaterializationOrder, {
+      rootWorktreePath: context.worktreeRoot
+    });
+
+  if (retainedState === undefined) {
+    assertNewSessionClaim(home, store, sessionState);
+    assertSessionWorktreePathsAvailable(
+      store,
+      session,
+      graph.reposInMaterializationOrder,
+      sessionState
     );
+  }
 
   ensureSessionPrefix(
     sessionState,
@@ -957,6 +1030,15 @@ function initializeMaterialization(
     sessionState,
     store
   };
+}
+
+/** Apply removal's placement and ownership checks before a new Session records its worktrees. */
+function assertNewSessionClaim(home: string, store: SessionStateStore, state: SessionState) {
+  assertNoOtherStateOwnsSessionRepos(state, store.list());
+
+  for (const repo of state.repos) {
+    assertRecordedWorktreePath(home, state, repo);
+  }
 }
 
 function createMaterializeNodes(execution: ReturnType<typeof initializeMaterialization>) {
@@ -978,10 +1060,6 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
       (repo) => repo.sourceRoot === repoConfig.sourceRoot
     );
 
-    const recordedWorktreePath =
-      recordedState?.worktreePath ??
-      getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session);
-
     return createRepoLifecycleNode({
       context: {
         home: execution.home,
@@ -993,14 +1071,13 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
       },
       initialState: createInitialRepoLifecycleState(
         repoConfig,
-        recordedWorktreePath,
+        getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session),
         recordedState
       ),
       prepare: async (lifecycleState, checkpoint) => {
         if (repoConfig.sourceRoot === execution.context.sourceRoot) {
           validateWorktreeForSession(
             execution.runtime,
-            execution.home,
             repoConfig.sourceRoot,
             execution.context.worktreeRoot,
             execution.session
@@ -1029,28 +1106,6 @@ export async function runSetup(runtime: Runtime) {
   }
 
   await reconcileProjectSkills(runtime);
-}
-
-function assertUniqueExpectedWorktreePaths(
-  home: string,
-  session: string,
-  reposInOrder: RepoConfig[]
-) {
-  const ownerByPath = new Map<string, string>();
-
-  for (const repoConfig of reposInOrder) {
-    const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
-    const normalizedPath = path.normalize(expectedPath);
-    const existingOwner = ownerByPath.get(normalizedPath);
-
-    if (existingOwner !== undefined) {
-      throw new MonkeError(
-        `Session worktree path collision at ${expectedPath}: ${existingOwner} and ${repoConfig.sourceRoot} both resolve to ${path.basename(repoConfig.sourceRoot)}/${session}`
-      );
-    }
-
-    ownerByPath.set(normalizedPath, repoConfig.sourceRoot);
-  }
 }
 
 function readGitPathAtRef(runtime: Runtime, sourceRoot: string, ref: string, relativePath: string) {

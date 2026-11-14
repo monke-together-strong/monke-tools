@@ -43,13 +43,7 @@ function resolveCheckout(runtime: Runtime) {
   const [session] = owners;
 
   if (session) {
-    validateWorktreeForSession(
-      runtime,
-      home,
-      context.sourceRoot,
-      context.worktreeRoot,
-      session.session
-    );
+    validateWorktreeForSession(runtime, context.sourceRoot, context.worktreeRoot, session.session);
   }
 
   const owner = resourceOwner(context.sourceRoot, context.worktreeRoot, session?.session);

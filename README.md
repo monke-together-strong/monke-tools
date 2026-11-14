@@ -33,6 +33,7 @@ mt diff                  # Review the current checkout through its machine-local
 mt swing '^'             # Return to the source checkout
 mt swing banana          # Return to the session
 mt materialize           # Rerun the session's env sync and bootstrap
+mt materialize --adopt   # Adopt this Ordinary worktree as a Session worktree for its branch
 ```
 
 Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts. `-m` starts from default branches, and `--from <ref>` starts the root repo from a branch, tag, or commit. A retry of either reuses the commits pinned by the first attempt. Add `--codex` to open the session in Codex. See [Spawn usage](skills/internal/monke-worktrees/SKILL.md#create-and-resume-work) for details.
