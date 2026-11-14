@@ -4,6 +4,7 @@ import path from "node:path";
 import { seedWorktreeFiles } from "./env.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import {
+  assertAdoptedWorktreePresent,
   branchExists,
   getExpectedWorktreePath,
   getSessionWorktreePath,
@@ -165,14 +166,7 @@ export async function prepareWorktree(
   const carryPending = snapshot !== undefined && existingState.dirtyCarryStatus === "pending";
   const recordedPath = existingState.worktreePath;
 
-  if (
-    !samePath(recordedPath, getExpectedWorktreePath(home, sourceRoot, session)) &&
-    !existsSync(recordedPath)
-  ) {
-    throw new MonkeError(
-      `Adopted Session worktree ${recordedPath} is missing; run mt chop ${session} from ${sourceRoot} to release the Session`
-    );
-  }
+  assertAdoptedWorktreePresent(home, sourceRoot, session, recordedPath);
 
   if (carryPending && existsSync(recordedPath)) {
     validateWorktreeForSession(runtime, sourceRoot, recordedPath, session);

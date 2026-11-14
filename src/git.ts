@@ -396,6 +396,23 @@ export function getSessionWorktreePath(
   );
 }
 
+/** Refuse to stand in for an adopted Session worktree that no longer exists. */
+export function assertAdoptedWorktreePresent(
+  home: string,
+  sourceRoot: string,
+  session: string,
+  worktreePath: string
+) {
+  if (
+    !samePath(worktreePath, getExpectedWorktreePath(home, sourceRoot, session)) &&
+    !existsSync(worktreePath)
+  ) {
+    throw new MonkeError(
+      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${session} from ${sourceRoot} to release the Session`
+    );
+  }
+}
+
 /** Validate that an existing linked worktree belongs to `sourceRoot` and is on the Session branch. */
 export function validateWorktreeForSession(
   runtime: Runtime,

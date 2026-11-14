@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
@@ -114,6 +114,23 @@ describe("adopting an Ordinary worktree", () => {
     expect(existsSync(depWorktree)).toBeFalsy();
     expect(() => loadSessionState(home, root, SESSION)).toThrow("Missing retained Session state");
     expect(git(root, ["branch", "--list", SESSION]).trim()).not.toBe("");
+  });
+
+  it("refuses to replace a missing adopted worktree", () => {
+    const { foreignPath, home, root } = createAdoptionFixture("adopt-missing");
+    runMonke({ args: ["materialize", "--adopt"], cwd: foreignPath, monkeHome: home });
+    rmSync(foreignPath, { force: true, recursive: true });
+
+    for (const args of [
+      ["spawn", SESSION],
+      ["swing", SESSION]
+    ]) {
+      const result = runMonkeCapturingFailure({ args, cwd: root, monkeHome: home });
+
+      expect(result.error?.message).toContain(`Adopted Session worktree ${foreignPath} is missing`);
+    }
+
+    expect(existsSync(path.join(home, "worktrees", "root", SESSION))).toBeFalsy();
   });
 
   it("rejects a worktree whose removal would reach its Source checkout", () => {

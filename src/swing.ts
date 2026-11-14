@@ -8,6 +8,7 @@ import { openCodexWorkspace } from "./codex.ts";
 import { MonkeError } from "./errors.ts";
 import {
   branchExists,
+  assertAdoptedWorktreePresent,
   describeSessionBranchMismatch,
   getSessionWorktreePath,
   listWorktrees,
@@ -324,6 +325,7 @@ async function resolveStoredTarget(
   }
 
   const worktreePath = getRecordedSessionWorktreePath(home, rootSourceRoot, target.session);
+  assertAdoptedWorktreePresent(home, rootSourceRoot, target.session, worktreePath);
 
   if (!existsSync(worktreePath)) {
     const linkedWorktree = listLinkedWorktrees(runtime, rootSourceRoot).find(
