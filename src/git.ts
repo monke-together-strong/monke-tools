@@ -129,7 +129,7 @@ function inferSessionNameForContext(
   if (isOutsideExpectedRoot(relativeSessionPath)) {
     const owner = findRecordedSessionOwner(home, sourceRoot, worktreeRoot);
 
-    if (owner !== undefined) {
+    if (owner !== null) {
       sessionName = owner.session;
     } else if (options.allowExternalSessionWorktree) {
       createLogger(runtime).warning(

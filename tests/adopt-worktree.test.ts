@@ -3,7 +3,6 @@ import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import { getExpectedWorktreePath } from "../src/git.ts";
 import { loadSessionState } from "../src/session-state-store.ts";
 import {
   createRepo,
@@ -83,7 +82,7 @@ describe("adopting an Ordinary worktree", () => {
     expect(adopted.stderr).toContain("mt chop and default mt cleanup now remove this worktree");
 
     const state = loadSessionState(home, root, SESSION);
-    const depWorktree = getExpectedWorktreePath(home, depRoot, SESSION);
+    const depWorktree = path.join(home, "worktrees", "dep", SESSION);
 
     expect(state.repos.map((repo) => [repo.sourceRoot, repo.worktreePath])).toStrictEqual([
       [depRoot, depWorktree],
@@ -96,7 +95,7 @@ describe("adopting an Ordinary worktree", () => {
     expect(read(foreignPath, ".env")).toContain(
       `DEP_DIR=${path.relative(foreignPath, depWorktree)}\n`
     );
-    expect(existsSync(getExpectedWorktreePath(home, root, SESSION))).toBeFalsy();
+    expect(existsSync(path.join(home, "worktrees", "root", SESSION))).toBeFalsy();
 
     // Later runs find the Session from its recorded worktree.
     runMonke({ args: ["materialize"], cwd: foreignPath, monkeHome: home });
@@ -104,16 +103,32 @@ describe("adopting an Ordinary worktree", () => {
   });
 
   it("chops an adopted Session from inside its worktree and keeps the branches", () => {
-    const { depRoot, foreignPath, home, root } = createAdoptionFixture("adopt-chop");
+    const { foreignPath, home, root } = createAdoptionFixture("adopt-chop");
+    const depWorktree = path.join(home, "worktrees", "dep", SESSION);
     runMonke({ args: ["materialize", "--adopt"], cwd: foreignPath, monkeHome: home });
+    expect(existsSync(depWorktree)).toBeTruthy();
 
     runMonke({ args: ["chop", "--force"], cwd: foreignPath, monkeHome: home });
 
     expect(existsSync(foreignPath)).toBeFalsy();
-    expect(existsSync(getExpectedWorktreePath(home, depRoot, SESSION))).toBeFalsy();
-    expect(existsSync(path.join(home, "sessions"))).toBeTruthy();
+    expect(existsSync(depWorktree)).toBeFalsy();
     expect(() => loadSessionState(home, root, SESSION)).toThrow("Missing retained Session state");
     expect(git(root, ["branch", "--list", SESSION]).trim()).not.toBe("");
+  });
+
+  it("rejects a worktree whose removal would reach its Source checkout", () => {
+    const { home, root } = createAdoptionFixture("adopt-nested");
+    const nestedPath = path.join(root, ".worktrees", "nested");
+    git(root, ["worktree", "add", "-b", "feature/nested", nestedPath]);
+
+    const nested = runMonkeCapturingFailure({
+      args: ["materialize", "--adopt"],
+      cwd: nestedPath,
+      monkeHome: home
+    });
+
+    expect(nested.error?.message).toContain("not a valid Session worktree");
+    expect(existsSync(path.join(home, "sessions"))).toBeFalsy();
   });
 
   it("rejects a detached worktree and a Session already bound to another worktree", () => {

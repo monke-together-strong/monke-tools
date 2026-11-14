@@ -23,7 +23,7 @@ import {
   loadToolInstall
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
-import { containsPath, samePath } from "./path-identity.ts";
+import { samePath } from "./path-identity.ts";
 import { reconcileProjectSkills } from "./project-skills.ts";
 import {
   createInitialRepoLifecycleState,
@@ -34,8 +34,10 @@ import { runCheckoutSetup } from "./resource-lifecycle.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import { formatFailureReceipt, runSessionMaterialization } from "./session-materialization.ts";
 import type { SessionMaterializationNode } from "./session-materialization.ts";
+import { assertRecordedWorktreePath } from "./session-safety.ts";
 import {
   ensureSessionPrefix,
+  findSessionOwner,
   getSessionStateFilePath,
   loadSessionState,
   SessionStateStore
@@ -979,10 +981,6 @@ function initializeMaterialization(
     );
   }
 
-  if (retainedState === undefined) {
-    assertAdoptableWorktree(home, store, context.sourceRoot, context.worktreeRoot, session);
-  }
-
   const graph = loadResolvedGraphForSession(runtime, context.sourceRoot, retainedState);
 
   const sessionState =
@@ -990,6 +988,10 @@ function initializeMaterialization(
     createNewSessionState(home, context.sourceRoot, session, graph.reposInMaterializationOrder, {
       rootWorktreePath: context.worktreeRoot
     });
+
+  if (retainedState === undefined) {
+    assertNewSessionClaim(home, store, sessionState, context.worktreeRoot);
+  }
 
   ensureSessionPrefix(
     sessionState,
@@ -1005,36 +1007,23 @@ function initializeMaterialization(
   };
 }
 
-/**
- * A new Session may claim the invoking worktree only when no other Session records it, and an
- * unrecorded worktree under Monke home only at its canonical path.
- */
-function assertAdoptableWorktree(
+/** A new Session may claim the invoking worktree only when no other Session records it. */
+function assertNewSessionClaim(
   home: string,
   store: SessionStateStore,
-  sourceRoot: string,
-  worktreePath: string,
-  session: string
+  state: SessionState,
+  worktreePath: string
 ) {
-  const owner = store
-    .list()
-    .find((state) => state.repos.some((repo) => samePath(repo.worktreePath, worktreePath)));
+  const owner = findSessionOwner(store.list(), worktreePath);
 
-  if (owner !== undefined) {
+  if (owner !== null) {
     throw new MonkeError(
       `Worktree ${worktreePath} is already recorded by Session ${owner.session} at ${owner.rootSourceRoot}`
     );
   }
 
-  const canonicalPath = getExpectedWorktreePath(home, sourceRoot, session);
-
-  if (
-    containsPath(path.join(home, "worktrees"), worktreePath) &&
-    !samePath(worktreePath, canonicalPath)
-  ) {
-    throw new MonkeError(
-      `Cannot adopt ${worktreePath} inside Monke home; Session ${session} belongs at ${canonicalPath}`
-    );
+  for (const repo of state.repos) {
+    assertRecordedWorktreePath(home, state, repo);
   }
 }
 

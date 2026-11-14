@@ -24,7 +24,8 @@ worktree is not ready until materialization succeeds.
 To materialize a worktree another tool created, run `mt materialize --adopt` inside
 it. It keeps its path and becomes the Session for its current branch; dependencies get
 Session worktrees under Monke home. Chop and Cleanup then remove it like any Session
-worktree, and Cleanup may stop its day-old processes. Detached worktrees need a branch first.
+worktree, and Cleanup may stop its day-old processes. Detached worktrees need a branch
+first, and worktrees inside Monke home or a Source checkout cannot be adopted.
 
 Use `mt swing <target>` to navigate to a Session or worktree; `^` selects source
 and `-` selects the previous target. Shell navigation requires the installed shell

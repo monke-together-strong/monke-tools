@@ -241,11 +241,17 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
   return states;
 }
 
-/** Find the Session that records `worktreePath` for `sourceRoot`, failing closed on ambiguity. */
-export function findRecordedSessionOwner(home: string, sourceRoot: string, worktreePath: string) {
-  const owners = listSessionStatesRelevantToWorktrees(home, [worktreePath]).filter((state) =>
+/** Find the Session among `states` that records `worktreePath`, failing closed on ambiguity. */
+export function findSessionOwner(
+  states: SessionState[],
+  worktreePath: string,
+  sourceRoot?: string
+) {
+  const owners = states.filter((state) =>
     state.repos.some(
-      (repo) => samePath(repo.sourceRoot, sourceRoot) && samePath(repo.worktreePath, worktreePath)
+      (repo) =>
+        samePath(repo.worktreePath, worktreePath) &&
+        (sourceRoot === undefined || samePath(repo.sourceRoot, sourceRoot))
     )
   );
 
@@ -253,7 +259,16 @@ export function findRecordedSessionOwner(home: string, sourceRoot: string, workt
     throw new MonkeError(`Worktree ${worktreePath} is recorded by multiple Sessions`);
   }
 
-  return owners[0];
+  return owners[0] ?? null;
+}
+
+/** Find the retained Session that records `worktreePath` for `sourceRoot`. */
+export function findRecordedSessionOwner(home: string, sourceRoot: string, worktreePath: string) {
+  return findSessionOwner(
+    listSessionStatesRelevantToWorktrees(home, [worktreePath]),
+    worktreePath,
+    sourceRoot
+  );
 }
 
 function parseSessionStateFile(home: string, filePath: string) {

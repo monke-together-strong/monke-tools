@@ -8,6 +8,7 @@ import { containsPath, samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { assertSessionIdentity, removeSession } from "./session-removal.ts";
 import {
+  findSessionOwner,
   getSessionStateFilePath,
   listSessionStates,
   listSessionStatesRelevantToWorktrees,
@@ -274,22 +275,6 @@ function assertInvocationSessionScope(
       `Managed worktree ${invocation.worktreeRoot} does not match its recorded Session identity`
     );
   }
-}
-
-function findSessionOwner(states: SessionState[], worktreePath: string, sourceRoot?: string) {
-  const matches = states.filter((state) =>
-    state.repos.some(
-      (repo) =>
-        samePath(repo.worktreePath, worktreePath) &&
-        (sourceRoot === undefined || samePath(repo.sourceRoot, sourceRoot))
-    )
-  );
-
-  if (matches.length > 1) {
-    throw new MonkeError(`Worktree ${worktreePath} is recorded by multiple Sessions`);
-  }
-
-  return matches[0] ?? null;
 }
 
 function findRetainedSessionForSource(states: SessionState[], session: string, sourceRoot: string) {

@@ -15,7 +15,7 @@ export function inspectSessionRepoRegistration(
   repo: SessionRepoState
 ) {
   assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
-  assertRecordedWorktreePath(home, state.session, repo);
+  assertRecordedWorktreePath(home, state, repo);
 
   const worktrees = listWorktrees(runtime, repo.sourceRoot);
   const exact = worktrees.find((entry) => samePath(entry.path, repo.worktreePath));
@@ -60,23 +60,32 @@ export function inspectSessionRepoRegistration(
 }
 
 /**
- * A recorded Session worktree is canonical inside Monke home; an adopted one may live elsewhere,
- * including inside its Source checkout, but never contains it.
+ * A recorded Session worktree sits at its canonical path, or, once adopted, outside Monke home and
+ * clear of every participating Source checkout, so removing it never reaches shared state or
+ * source.
  */
-function assertRecordedWorktreePath(home: string, session: string, repo: SessionRepoState) {
-  const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, session);
+export function assertRecordedWorktreePath(
+  home: string,
+  state: SessionState,
+  repo: SessionRepoState
+) {
+  const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
   const sessionParent = path.join(home, "worktrees", path.basename(repo.sourceRoot));
-  const insideMonkeHome = containsPath(path.join(home, "worktrees"), repo.worktreePath);
+
+  const adoptedPathOverlaps =
+    !samePath(repo.worktreePath, expectedPath) &&
+    [home, ...state.repos.map((member) => member.sourceRoot)].some((protectedPath) =>
+      worktreePathsOverlap(repo.worktreePath, protectedPath)
+    );
 
   if (
     !path.relative(sessionParent, expectedPath) ||
     !containsPath(sessionParent, expectedPath) ||
     !path.isAbsolute(repo.worktreePath) ||
-    (insideMonkeHome && !samePath(repo.worktreePath, expectedPath)) ||
-    containsPath(repo.worktreePath, repo.sourceRoot)
+    adoptedPathOverlaps
   ) {
     throw new MonkeError(
-      `Recorded Session worktree path ${repo.worktreePath} is not a valid Session worktree for ${repo.sourceRoot}; expected ${expectedPath} or an adopted worktree outside Monke home`
+      `Recorded Session worktree path ${repo.worktreePath} is not a valid Session worktree for ${repo.sourceRoot}; expected ${expectedPath}, or an adopted worktree outside Monke home and every Source checkout`
     );
   }
 }
