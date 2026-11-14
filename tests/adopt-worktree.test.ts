@@ -91,7 +91,15 @@ describe("adopting an Ordinary worktree", () => {
     expect(state.repos.every((repo) => repo.materializationStatus === "materialized")).toBeTruthy();
     expect(existsSync(path.join(foreignPath, ".bootstrapped"))).toBeTruthy();
     expect(read(foreignPath, "notes.txt")).toBe("uncommitted work\n");
-    expect(read(foreignPath, "api/.env")).not.toBe("PORT=3000\nDATABASE_PORT=5432\n");
+
+    const port = (sourceRoot: string, key: string) =>
+      state.repos
+        .find((repo) => repo.sourceRoot === sourceRoot)
+        ?.assignedPorts.find((entry) => entry.key === key)?.value;
+
+    expect(read(foreignPath, "api/.env")).toBe(
+      `PORT=${port(root, "API_PORT")}\nDATABASE_PORT=${port(depRoot, "DEP_PORT")}\n`
+    );
     expect(read(foreignPath, ".env")).toContain(
       `DEP_DIR=${path.relative(foreignPath, depWorktree)}\n`
     );
