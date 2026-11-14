@@ -57,7 +57,6 @@ describe("Git operations", () => {
     expect(() => {
       validateWorktreeForSession(
         createRuntime({ cwd: sourceRoot, env: { MONKE_HOME: home } }),
-        home,
         sourceRoot,
         worktreePath,
         "banana"

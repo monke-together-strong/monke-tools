@@ -6,6 +6,7 @@ import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import {
   branchExists,
   getExpectedWorktreePath,
+  getSessionWorktreePath,
   listWorktrees,
   resolveCheckoutSource,
   resolveRepoContext,
@@ -75,6 +76,9 @@ export function planWorktreePreparation(
   const retainedRepo = (sourceRoot: string) =>
     request.retainedState?.repos.find((repo) => repo.sourceRoot === sourceRoot);
 
+  const worktreePath = (sourceRoot: string) =>
+    getSessionWorktreePath(home, sourceRoot, session, request.retainedState);
+
   const checkouts = new Map(
     source.mode === "current-head"
       ? request.repos.map(({ checkoutRoot, sourceRoot }) => [
@@ -106,9 +110,9 @@ export function planWorktreePreparation(
   for (const [sourceRoot, snapshot] of snapshots) {
     assertDirtyCarryBoundary(
       runtime,
-      home,
       sourceRoot,
       session,
+      worktreePath(sourceRoot),
       snapshot,
       retainedRepo(sourceRoot)?.dirtyCarryStatus === "pending"
     );
@@ -129,11 +133,7 @@ export function planWorktreePreparation(
               : undefined,
           pendingDirtyCarry:
             snapshot &&
-            trackDirtyCarry(
-              snapshot,
-              retainedRepo(sourceRoot),
-              getExpectedWorktreePath(home, sourceRoot, session)
-            ),
+            trackDirtyCarry(snapshot, retainedRepo(sourceRoot), worktreePath(sourceRoot)),
           snapshot,
           source,
           sourceRoot
@@ -163,10 +163,19 @@ export async function prepareWorktree(
   const { existingState, home, plan, session } = request;
   const { snapshot, source, sourceRoot } = plan;
   const carryPending = snapshot !== undefined && existingState.dirtyCarryStatus === "pending";
-  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
+  const recordedPath = existingState.worktreePath;
 
-  if (carryPending && existsSync(expectedPath)) {
-    validateWorktreeForSession(runtime, home, sourceRoot, expectedPath, session);
+  if (
+    !samePath(recordedPath, getExpectedWorktreePath(home, sourceRoot, session)) &&
+    !existsSync(recordedPath)
+  ) {
+    throw new MonkeError(
+      `Adopted Session worktree ${recordedPath} is missing; run mt chop ${session} from ${sourceRoot} to release the Session`
+    );
+  }
+
+  if (carryPending && existsSync(recordedPath)) {
+    validateWorktreeForSession(runtime, sourceRoot, recordedPath, session);
   }
 
   const worktree =
@@ -179,7 +188,7 @@ export async function prepareWorktree(
           session,
           requirePinnedRef(existingState)
         )
-      : await ensureSessionWorktree(runtime, home, sourceRoot, session, {
+      : await ensureSessionWorktree(runtime, home, sourceRoot, session, recordedPath, {
           checkoutSource: plan.checkout,
           skipCleanCheck: source.mode === "current-head" && source.copyDirty
         });
@@ -260,17 +269,19 @@ function ensureCleanCheckout(runtime: Runtime, sourceRoot: string, label = "Sour
   }
 }
 
-/** Reuse the Session worktree, or create it from the Session branch or the checkout's HEAD. */
+/**
+ * Reuse the recorded Session worktree, or create it at that path from the Session branch or the
+ * checkout's HEAD.
+ */
 async function ensureSessionWorktree(
   runtime: Runtime,
   home: string,
   sourceRoot: string,
   session: string,
+  expectedPath: string,
   options: { checkoutSource?: CheckoutSource; skipCleanCheck: boolean }
 ) {
   validateSessionBranchName(runtime, sourceRoot, session);
-
-  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
   const worktrees = listWorktreesForSessionPreparation(runtime, sourceRoot, session, expectedPath);
 
   const branchMatch = worktrees.find(

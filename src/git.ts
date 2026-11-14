@@ -3,7 +3,9 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
-import type { Runtime } from "./types.ts";
+import { samePath } from "./path-identity.ts";
+import { findRecordedSessionOwner } from "./session-state-store.ts";
+import type { Runtime, SessionState } from "./types.ts";
 
 export interface WorktreeEntry {
   branch: string | null;
@@ -122,43 +124,27 @@ function inferSessionNameForContext(
 ) {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
+  let sessionName = toSessionPath(relativeSessionPath);
 
   if (isOutsideExpectedRoot(relativeSessionPath)) {
-    if (!options.allowExternalSessionWorktree) {
+    const owner = findRecordedSessionOwner(home, sourceRoot, worktreeRoot);
+
+    if (owner !== undefined) {
+      sessionName = owner.session;
+    } else if (options.allowExternalSessionWorktree) {
+      createLogger(runtime).warning(
+        `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`
+      );
+
+      return branch;
+    } else {
       throw new MonkeError(
-        `Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`
+        `Linked worktree ${worktreeRoot} is not a Session worktree. Run mt materialize --adopt inside it to adopt it into Session "${branch}".`
       );
     }
-
-    createLogger(runtime).warning(
-      `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`
-    );
-
-    return branch;
   }
 
-  return inferSessionName(home, sourceRoot, worktreeRoot, branch, {
-    allowBranchMismatch: options.allowSessionBranchMismatch
-  });
-}
-
-/** Infer a Session name from a linked worktree path under Monke home. */
-function inferSessionName(
-  home: string,
-  sourceRoot: string,
-  worktreeRoot: string,
-  branch: string,
-  options: { allowBranchMismatch?: boolean } = {}
-) {
-  const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
-  const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
-  const sessionName = toSessionPath(relativeSessionPath);
-
-  if (isOutsideExpectedRoot(relativeSessionPath)) {
-    throw new MonkeError(`Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`);
-  }
-
-  if (sessionName !== branch && options.allowBranchMismatch !== true) {
+  if (sessionName !== branch && !options.allowSessionBranchMismatch) {
     throw new MonkeError(
       `Expected linked worktree session "${sessionName}" to match current branch "${branch}"`
     );
@@ -397,28 +383,32 @@ export function getExpectedWorktreePath(home: string, sourceRoot: string, sessio
   return path.join(home, "worktrees", path.basename(sourceRoot), session);
 }
 
-/** Validate that a worktree is the expected Session worktree for one repo. */
+/** Return a repo's recorded Session worktree path, or its canonical path when none is recorded. */
+export function getSessionWorktreePath(
+  home: string,
+  sourceRoot: string,
+  session: string,
+  state: SessionState | undefined
+) {
+  return (
+    state?.repos.find((repo) => samePath(repo.sourceRoot, sourceRoot))?.worktreePath ??
+    getExpectedWorktreePath(home, sourceRoot, session)
+  );
+}
+
+/** Validate that an existing linked worktree belongs to `sourceRoot` and is on the Session branch. */
 export function validateWorktreeForSession(
   runtime: Runtime,
-  home: string,
   sourceRoot: string,
   worktreePath: string,
   session: string,
   options: { allowBranchMismatch?: boolean } = {}
 ) {
-  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
-
-  if (path.normalize(worktreePath) !== path.normalize(expectedPath)) {
-    throw new MonkeError(
-      `Expected session "${session}" worktree at ${expectedPath}, found ${worktreePath}`
-    );
-  }
-
   if (!existsSync(worktreePath)) {
     throw new MonkeError(`Expected worktree to exist at ${worktreePath}`);
   }
 
-  const context = resolveRepoContext(runtime, worktreePath, home, { inferSessionName: false });
+  const context = resolveRepoContext(runtime, worktreePath, null, { inferSessionName: false });
 
   if (context.isSourceCheckout) {
     throw new MonkeError(`Expected ${worktreePath} to be a linked session worktree`);

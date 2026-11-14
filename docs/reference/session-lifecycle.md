@@ -16,6 +16,8 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Blocked repo materialization**: Materialization that cannot begin because a dependency's materialization failed. _Avoid_: Failed materialization, cancelled materialization
 
+**Worktree adoption**: **Materialize** that records an existing **Ordinary worktree**, at its current path, as the **Root repo**'s **Session worktree** for the Session named after its branch. The adopted worktree then follows the full Session lifecycle, including removal. _Avoid_: Import, borrowed worktree
+
 **Materialization generation**: One retained attempt to materialize every repo in a **Session** dependency graph. _Avoid_: Command invocation, retry run
 
 ## Removal
@@ -72,5 +74,6 @@ Part of the [domain glossary](../../GLOSSARY.md).
 - An incomplete **Materialization generation** retains completed work for resumption. A completed generation may be followed by another.
 - A **Prepared worktree** alone creates no **Cleanup obligation**. Repos incur Cleanup obligations during materialization.
 - **Chop** selects a whole Session or one Ordinary worktree; only a Session target performs **Session removal**.
+- Session state, not location, decides whether a worktree is a **Session worktree**. Spawn creates Session worktrees under **Monke home**; **Worktree adoption** may record a Root repo's worktree elsewhere.
 - A **Missing Session worktree** can still have a **Cleanup obligation**. Missing directories do not imply finalization.
 - **Swing** changes the working location; **Diff** changes neither the checkout nor its branch. A **Shell adapter** connects navigation to the user's shell.

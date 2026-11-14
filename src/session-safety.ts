@@ -15,19 +15,7 @@ export function inspectSessionRepoRegistration(
   repo: SessionRepoState
 ) {
   assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
-  const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
-  const sessionParent = path.join(home, "worktrees", path.basename(repo.sourceRoot));
-
-  if (
-    !path.relative(sessionParent, expectedPath) ||
-    !containsPath(sessionParent, expectedPath) ||
-    !samePath(repo.worktreePath, expectedPath) ||
-    !path.isAbsolute(repo.worktreePath)
-  ) {
-    throw new MonkeError(
-      `Recorded Session worktree path is not canonical; expected ${expectedPath}`
-    );
-  }
+  assertRecordedWorktreePath(home, state.session, repo);
 
   const worktrees = listWorktrees(runtime, repo.sourceRoot);
   const exact = worktrees.find((entry) => samePath(entry.path, repo.worktreePath));
@@ -69,6 +57,28 @@ export function inspectSessionRepoRegistration(
     registeredBranch: exact.branch,
     repo
   };
+}
+
+/**
+ * A recorded Session worktree is canonical inside Monke home; an adopted one may live elsewhere,
+ * including inside its Source checkout, but never contains it.
+ */
+function assertRecordedWorktreePath(home: string, session: string, repo: SessionRepoState) {
+  const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, session);
+  const sessionParent = path.join(home, "worktrees", path.basename(repo.sourceRoot));
+  const insideMonkeHome = containsPath(path.join(home, "worktrees"), repo.worktreePath);
+
+  if (
+    !path.relative(sessionParent, expectedPath) ||
+    !containsPath(sessionParent, expectedPath) ||
+    !path.isAbsolute(repo.worktreePath) ||
+    (insideMonkeHome && !samePath(repo.worktreePath, expectedPath)) ||
+    containsPath(repo.worktreePath, repo.sourceRoot)
+  ) {
+    throw new MonkeError(
+      `Recorded Session worktree path ${repo.worktreePath} is not a valid Session worktree for ${repo.sourceRoot}; expected ${expectedPath} or an adopted worktree outside Monke home`
+    );
+  }
 }
 
 export function assertNoOtherStateOwnsSessionRepos(state: SessionState, allStates: SessionState[]) {

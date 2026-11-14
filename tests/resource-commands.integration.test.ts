@@ -378,7 +378,7 @@ export default function ({ previous }) {
             }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "current-worktree-from-another-graph")
+          worktreePath: getExpectedWorktreePath(scenario.home, scenario.repoRoot, "current")
         }
       ],
       rootSourceRoot: scenario.repoRoot,

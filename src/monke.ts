@@ -9,6 +9,7 @@ import { MonkeError } from "./errors.ts";
 import {
   branchExists,
   getExpectedWorktreePath,
+  getSessionWorktreePath,
   resolveDefaultBranchRef,
   resolveStartRef,
   resolveRepoContext,
@@ -22,7 +23,7 @@ import {
   loadToolInstall
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
-import { samePath } from "./path-identity.ts";
+import { containsPath, samePath } from "./path-identity.ts";
 import { reconcileProjectSkills } from "./project-skills.ts";
 import {
   createInitialRepoLifecycleState,
@@ -205,7 +206,7 @@ async function prepareSpawn(
   const retainedState = store.get(rootSourceRoot, session);
   const sourcePlan = resolveSpawnSourcePlan(retainedState, session, spawnOptions);
   assertSpawnRequest(runtime, rootSourceRoot, session, sourcePlan);
-  const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
+  const rootWorktreePath = getSessionWorktreePath(home, rootSourceRoot, session, retainedState);
 
   const getStartRef = createStartRefResolver(runtime, rootSourceRoot, {
     checkoutRoot: rootCheckoutRoot,
@@ -392,7 +393,6 @@ function createRepoLifecycleNode(options: {
       if (existingState.materializationStatus === "materialized") {
         validateWorktreeForSession(
           context.runtime,
-          context.home,
           repoConfig.sourceRoot,
           existingState.worktreePath,
           context.session
@@ -636,7 +636,7 @@ async function spawnWithoutConfig(
   }).get(rootSourceRoot);
 
   ok(plan, `Missing Worktree preparation plan for ${rootSourceRoot}`);
-  const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
+  const worktreePath = getSessionWorktreePath(home, rootSourceRoot, session, priorSessionState);
 
   // Record the Diff base before creating the worktree, so a retry keeps it after the Session branch exists.
   const pendingRepoState = createInitialRepoLifecycleState(
@@ -823,12 +823,18 @@ function createNewSessionState(
   home: string,
   rootSourceRoot: string,
   session: string,
-  reposInOrder: RepoConfig[]
+  reposInOrder: RepoConfig[],
+  options: { rootWorktreePath?: string } = {}
 ): SessionState {
   return {
     generation: { number: 0, status: "not-started" },
     repos: reposInOrder.map((repo) =>
-      createInitialRepoLifecycleState(repo, getExpectedWorktreePath(home, repo.sourceRoot, session))
+      createInitialRepoLifecycleState(
+        repo,
+        samePath(repo.sourceRoot, rootSourceRoot) && options.rootWorktreePath !== undefined
+          ? options.rootWorktreePath
+          : getExpectedWorktreePath(home, repo.sourceRoot, session)
+      )
     ),
     rootSourceRoot,
     session,
@@ -895,9 +901,18 @@ function minimumCodiffVersionForRuntime(runtime: Runtime) {
   return loadActiveToolInstall(getMonkeHome(runtime))?.manifest.minimumCodiffVersion;
 }
 
+export interface MaterializeOptions {
+  /** Adopt the invoking Ordinary worktree as the Root repo's Session worktree. */
+  adopt?: boolean;
+}
+
+/** What adoption hands to Monke's removal flows; shared by the CLI help and the success output. */
+export const ADOPTION_CONSEQUENCES =
+  "mt chop and default mt cleanup now remove this worktree once its work is preserved. Cleanup also stops processes started from it that are more than a day old.";
+
 /** Materialize through the dependency-gated Session lifecycle scheduler. */
-export async function runMaterialize(runtime: Runtime) {
-  const request = resolveMaterializeRequest(runtime);
+export async function runMaterialize(runtime: Runtime, options: MaterializeOptions = {}) {
+  const request = resolveMaterializeRequest(runtime, options);
   await withGlobalLockAsync(request.home, async () => {
     const store = new SessionStateStore(request.home);
     const execution = initializeMaterialization(runtime, request, store);
@@ -910,15 +925,34 @@ export async function runMaterialize(runtime: Runtime) {
       store
     });
   });
-  createLogger(runtime).success(`Materialized session ${request.session}`);
+
+  const logger = createLogger(runtime);
+  logger.success(`Materialized session ${request.session}`);
+
+  if (options.adopt === true) {
+    logger.warning(`Adopted ${request.context.worktreeRoot}: ${ADOPTION_CONSEQUENCES}`);
+  }
 }
 
-function resolveMaterializeRequest(runtime: Runtime) {
+function resolveMaterializeRequest(runtime: Runtime, options: MaterializeOptions) {
   const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
+
+  const context = resolveRepoContext(runtime, runtime.cwd, home, {
+    inferSessionName: options.adopt !== true
+  });
 
   if (context.isSourceCheckout) {
     throw new MonkeError("mt materialize must run inside a session worktree");
+  }
+
+  if (options.adopt === true) {
+    if (context.currentBranch === "HEAD") {
+      throw new MonkeError(
+        `Cannot adopt detached worktree ${context.worktreeRoot}; check out a branch first, then rerun mt materialize --adopt`
+      );
+    }
+
+    return { context, home, session: context.currentBranch };
   }
 
   if (!context.sessionName) {
@@ -933,17 +967,29 @@ function initializeMaterialization(
   request: ReturnType<typeof resolveMaterializeRequest>,
   store: SessionStateStore
 ) {
-  const retainedState = store.get(request.context.sourceRoot, request.session);
-  const graph = loadResolvedGraphForSession(runtime, request.context.sourceRoot, retainedState);
+  const { context, home, session } = request;
+  const retainedState = store.get(context.sourceRoot, session);
+
+  const recordedRootPath =
+    retainedState && getSessionWorktreePath(home, context.sourceRoot, session, retainedState);
+
+  if (recordedRootPath !== undefined && !samePath(recordedRootPath, context.worktreeRoot)) {
+    throw new MonkeError(
+      `Session ${session} is already bound to ${recordedRootPath}; run mt materialize there, or mt chop ${session} to release it`
+    );
+  }
+
+  if (retainedState === undefined) {
+    assertAdoptableWorktree(home, store, context.sourceRoot, context.worktreeRoot, session);
+  }
+
+  const graph = loadResolvedGraphForSession(runtime, context.sourceRoot, retainedState);
 
   const sessionState =
     retainedState ??
-    createNewSessionState(
-      request.home,
-      request.context.sourceRoot,
-      request.session,
-      graph.reposInMaterializationOrder
-    );
+    createNewSessionState(home, context.sourceRoot, session, graph.reposInMaterializationOrder, {
+      rootWorktreePath: context.worktreeRoot
+    });
 
   ensureSessionPrefix(
     sessionState,
@@ -957,6 +1003,39 @@ function initializeMaterialization(
     sessionState,
     store
   };
+}
+
+/**
+ * A new Session may claim the invoking worktree only when no other Session records it, and an
+ * unrecorded worktree under Monke home only at its canonical path.
+ */
+function assertAdoptableWorktree(
+  home: string,
+  store: SessionStateStore,
+  sourceRoot: string,
+  worktreePath: string,
+  session: string
+) {
+  const owner = store
+    .list()
+    .find((state) => state.repos.some((repo) => samePath(repo.worktreePath, worktreePath)));
+
+  if (owner !== undefined) {
+    throw new MonkeError(
+      `Worktree ${worktreePath} is already recorded by Session ${owner.session} at ${owner.rootSourceRoot}`
+    );
+  }
+
+  const canonicalPath = getExpectedWorktreePath(home, sourceRoot, session);
+
+  if (
+    containsPath(path.join(home, "worktrees"), worktreePath) &&
+    !samePath(worktreePath, canonicalPath)
+  ) {
+    throw new MonkeError(
+      `Cannot adopt ${worktreePath} inside Monke home; Session ${session} belongs at ${canonicalPath}`
+    );
+  }
 }
 
 function createMaterializeNodes(execution: ReturnType<typeof initializeMaterialization>) {
@@ -978,10 +1057,6 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
       (repo) => repo.sourceRoot === repoConfig.sourceRoot
     );
 
-    const recordedWorktreePath =
-      recordedState?.worktreePath ??
-      getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session);
-
     return createRepoLifecycleNode({
       context: {
         home: execution.home,
@@ -993,14 +1068,13 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
       },
       initialState: createInitialRepoLifecycleState(
         repoConfig,
-        recordedWorktreePath,
+        getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session),
         recordedState
       ),
       prepare: async (lifecycleState, checkpoint) => {
         if (repoConfig.sourceRoot === execution.context.sourceRoot) {
           validateWorktreeForSession(
             execution.runtime,
-            execution.home,
             repoConfig.sourceRoot,
             execution.context.worktreeRoot,
             execution.session

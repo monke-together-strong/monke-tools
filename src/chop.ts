@@ -2,7 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
-import { branchExists, getExpectedWorktreePath, listWorktrees, resolveRepoContext } from "./git.ts";
+import { branchExists, listWorktrees, resolveRepoContext } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { containsPath, samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
@@ -148,17 +148,17 @@ function resolveChopTarget(
   invocation: ReturnType<typeof resolveRepoContext>,
   target: string | undefined
 ): ChopTarget {
-  const managedInvocation =
-    !invocation.isSourceCheckout && isManagedWorktreePath(home, invocation.worktreeRoot);
-
-  let allStates: SessionState[] = [];
   let invocationOwner: SessionState | null = null;
 
-  if (managedInvocation) {
-    allStates = listSessionStatesRelevantToWorktrees(home, [invocation.worktreeRoot]);
-    invocationOwner = findSessionOwner(allStates, invocation.worktreeRoot, invocation.sourceRoot);
+  // Session state decides ownership, so an adopted worktree outside Monke home selects its Session.
+  if (!invocation.isSourceCheckout) {
+    invocationOwner = findSessionOwner(
+      listSessionStatesRelevantToWorktrees(home, [invocation.worktreeRoot]),
+      invocation.worktreeRoot,
+      invocation.sourceRoot
+    );
 
-    if (invocationOwner === null) {
+    if (invocationOwner === null && isManagedWorktreePath(home, invocation.worktreeRoot)) {
       // Preserve fail-closed behavior when invalid state may be the missing owner.
       listSessionStates(home);
       throw new MonkeError(
@@ -166,7 +166,9 @@ function resolveChopTarget(
       );
     }
 
-    assertInvocationSessionScope(runtime, home, invocation, invocationOwner);
+    if (invocationOwner !== null) {
+      assertInvocationSessionScope(runtime, home, invocation, invocationOwner);
+    }
   }
 
   if (target === undefined) {
@@ -208,11 +210,10 @@ function resolveChopTarget(
   const ordinaryCandidate = resolveOrdinaryTarget(runtime, invocation, target);
   const managedCandidate = isManagedWorktreePath(home, ordinaryCandidate.path);
 
-  if (allStates.length === 0 && managedCandidate) {
-    allStates = listSessionStatesRelevantToWorktrees(home, [ordinaryCandidate.path]);
-  }
-
-  const selectedOwner = findSessionOwner(allStates, ordinaryCandidate.path);
+  const selectedOwner = findSessionOwner(
+    listSessionStatesRelevantToWorktrees(home, [ordinaryCandidate.path]),
+    ordinaryCandidate.path
+  );
 
   if (selectedOwner !== null) {
     assertSessionIdentity(home, selectedOwner);
@@ -268,10 +269,7 @@ function assertInvocationSessionScope(
       samePath(candidate.worktreePath, invocation.worktreeRoot)
   );
 
-  if (
-    repo === undefined ||
-    !samePath(repo.worktreePath, getExpectedWorktreePath(home, repo.sourceRoot, state.session))
-  ) {
+  if (repo === undefined) {
     throw new MonkeError(
       `Managed worktree ${invocation.worktreeRoot} does not match its recorded Session identity`
     );
