@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -72,10 +72,11 @@ export function assertRecordedWorktreePath(
   const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
   const sessionParent = path.join(home, "worktrees", path.basename(repo.sourceRoot));
 
+  // Compare physical paths so a symlinked home or checkout cannot hide an overlap.
   const adoptedPathOverlaps =
     !samePath(repo.worktreePath, expectedPath) &&
     [home, ...state.repos.map((member) => member.sourceRoot)].some((protectedPath) =>
-      worktreePathsOverlap(repo.worktreePath, protectedPath)
+      worktreePathsOverlap(physicalPath(repo.worktreePath), physicalPath(protectedPath))
     );
 
   if (
@@ -87,6 +88,15 @@ export function assertRecordedWorktreePath(
     throw new MonkeError(
       `Recorded Session worktree path ${repo.worktreePath} is not a valid Session worktree for ${repo.sourceRoot}; expected ${expectedPath}, or an adopted worktree outside Monke home and every Source checkout`
     );
+  }
+}
+
+/** Resolve symlinks in an existing path; a missing path keeps its lexical form. */
+function physicalPath(target: string) {
+  try {
+    return realpathSync.native(target);
+  } catch {
+    return target;
   }
 }
 

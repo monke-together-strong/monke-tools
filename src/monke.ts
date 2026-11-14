@@ -925,7 +925,10 @@ export interface MaterializeOptions {
   adopt?: boolean;
 }
 
-/** What adoption hands to Monke's removal flows; shared by the CLI help and the success output. */
+/**
+ * What adoption hands to Monke's removal flows; shared by the CLI help and the pre-materialization
+ * warning.
+ */
 export const ADOPTION_CONSEQUENCES =
   "mt chop and default mt cleanup now remove this worktree once its work is preserved. Cleanup also stops processes started from it that are more than a day old.";
 

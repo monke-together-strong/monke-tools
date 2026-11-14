@@ -1,4 +1,4 @@
-import { existsSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
@@ -146,6 +146,20 @@ describe("adopting an Ordinary worktree", () => {
 
     expect(nested.error?.message).toContain("not a valid Session worktree");
     expect(existsSync(path.join(home, "sessions"))).toBeFalsy();
+  });
+
+  it("rejects a worktree that contains Monke home through a symlinked path", () => {
+    const { foreignPath, root } = createAdoptionFixture("adopt-home-alias");
+    const alias = path.join(path.dirname(root), "alias");
+    symlinkSync(foreignPath, alias);
+
+    const result = runMonkeCapturingFailure({
+      args: ["materialize", "--adopt"],
+      cwd: foreignPath,
+      monkeHome: path.join(alias, ".monke")
+    });
+
+    expect(result.error?.message).toContain("not a valid Session worktree");
   });
 
   it("rejects a worktree nested inside another Session's worktree", () => {
