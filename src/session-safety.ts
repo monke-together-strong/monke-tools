@@ -86,12 +86,12 @@ export function assertRecordedWorktreePath(
     adoptedPathOverlaps
   ) {
     throw new MonkeError(
-      `Recorded Session worktree path ${repo.worktreePath} is not a valid Session worktree for ${repo.sourceRoot}; expected ${expectedPath}, or an adopted worktree outside Monke home and every Source checkout`
+      `Recorded Session worktree path ${repo.worktreePath} is not a valid Session worktree for ${repo.sourceRoot}; expected ${expectedPath}, or an adopted worktree outside Monke home and every participating Source checkout`
     );
   }
 }
 
-/** Resolve symlinks in an existing path; a missing path keeps its lexical form. */
+/** Missing worktrees still need placement checks during Session removal. */
 function physicalPath(target: string) {
   try {
     return realpathSync.native(target);

@@ -241,7 +241,7 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
   return states;
 }
 
-/** Find the Session among `states` that records `worktreePath`, failing closed on ambiguity. */
+/** Return the matching Session, or null. Throw if multiple Sessions match. */
 export function findSessionOwner(
   states: SessionState[],
   worktreePath: string,
@@ -262,7 +262,6 @@ export function findSessionOwner(
   return owners[0] ?? null;
 }
 
-/** Find the retained Session that records `worktreePath` for `sourceRoot`. */
 export function findRecordedSessionOwner(home: string, sourceRoot: string, worktreePath: string) {
   return findSessionOwner(
     listSessionStatesRelevantToWorktrees(home, [worktreePath]),

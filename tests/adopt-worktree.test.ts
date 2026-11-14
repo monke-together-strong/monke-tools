@@ -53,7 +53,6 @@ external:
 `
   });
 
-  // Another tool's worktree: outside Monke home, with a directory name unrelated to its branch.
   const foreignPath = path.join(sandbox, "other-tool", "t3-1234");
   git(root, ["worktree", "add", "-b", SESSION, foreignPath]);
   write(foreignPath, "notes.txt", "uncommitted work\n");
@@ -79,7 +78,7 @@ describe("adopting an Ordinary worktree", () => {
       monkeHome: home
     });
 
-    expect(adopted.stderr).toContain("mt chop and default mt cleanup now remove this worktree");
+    expect(adopted.stderr).toContain("mt chop now removes this worktree with its Session");
 
     const state = loadSessionState(home, root, SESSION);
     const depWorktree = path.join(home, "worktrees", "dep", SESSION);
@@ -105,7 +104,6 @@ describe("adopting an Ordinary worktree", () => {
     );
     expect(existsSync(path.join(home, "worktrees", "root", SESSION))).toBeFalsy();
 
-    // Later runs find the Session from its recorded worktree.
     runMonke({ args: ["materialize"], cwd: foreignPath, monkeHome: home });
     runMonke({ args: ["resources", "acquire"], cwd: foreignPath, monkeHome: home });
   });
@@ -141,7 +139,7 @@ describe("adopting an Ordinary worktree", () => {
     expect(existsSync(path.join(home, "worktrees", "root", SESSION))).toBeFalsy();
   });
 
-  it("rejects a worktree whose removal would reach its Source checkout", () => {
+  it("rejects a worktree inside its Source checkout", () => {
     const { home, root } = createAdoptionFixture("adopt-nested");
     const nestedPath = path.join(root, ".worktrees", "nested");
     git(root, ["worktree", "add", "-b", "feature/nested", nestedPath]);
@@ -197,6 +195,14 @@ describe("adopting an Ordinary worktree", () => {
     });
 
     expect(detached.error?.message).toContain("check out a branch");
+
+    const detachedHint = runMonkeCapturingFailure({
+      args: ["materialize"],
+      cwd: detachedPath,
+      monkeHome: home
+    });
+
+    expect(detachedHint.error?.message).toContain("Check out a branch in it");
 
     runMonke({ args: ["materialize", "--adopt"], cwd: foreignPath, monkeHome: home });
     git(foreignPath, ["switch", "-c", "feature/elsewhere"]);

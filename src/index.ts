@@ -135,7 +135,7 @@ function createProgram(runtime: Runtime) {
     .description("Materialize the current Session worktree and its Dependency repos")
     .option(
       "--adopt",
-      `adopt this Ordinary worktree as the Session for its current branch; ${ADOPTION_CONSEQUENCES}`
+      `adopt this Ordinary worktree as the Root repo's Session worktree for its current branch. ${ADOPTION_CONSEQUENCES}`
     )
     .action((options) => runMaterialize(runtime, { adopt: options.adopt === true }));
 

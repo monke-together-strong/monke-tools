@@ -139,7 +139,9 @@ function inferSessionNameForContext(
       return branch;
     } else {
       throw new MonkeError(
-        `Linked worktree ${worktreeRoot} is not a Session worktree. Run mt materialize --adopt inside it to adopt it into Session "${branch}".`
+        branch === "HEAD"
+          ? `Linked worktree ${worktreeRoot} is not a Session worktree. Check out a branch in it, then run mt materialize --adopt there to adopt it.`
+          : `Linked worktree ${worktreeRoot} is not a Session worktree. Run mt materialize --adopt inside it to adopt it into Session "${branch}".`
       );
     }
   }
@@ -396,7 +398,6 @@ export function getSessionWorktreePath(
   );
 }
 
-/** Refuse to stand in for an adopted Session worktree that no longer exists. */
 export function assertAdoptedWorktreePresent(
   home: string,
   sourceRoot: string,
@@ -408,12 +409,15 @@ export function assertAdoptedWorktreePresent(
     !existsSync(worktreePath)
   ) {
     throw new MonkeError(
-      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${session} from ${sourceRoot} to release the Session`
+      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${session} from ${sourceRoot} to remove the Session`
     );
   }
 }
 
-/** Validate that an existing linked worktree belongs to `sourceRoot` and is on the Session branch. */
+/**
+ * Validate that an existing linked worktree belongs to `sourceRoot` and, unless
+ * `allowBranchMismatch` is set, is on the Session branch.
+ */
 export function validateWorktreeForSession(
   runtime: Runtime,
   sourceRoot: string,

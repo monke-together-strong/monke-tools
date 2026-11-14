@@ -21,11 +21,10 @@ Source checkouts provide configuration and seed files.
 After failure, use the reported retry command from the recorded checkout. A created
 worktree is not ready until materialization succeeds.
 
-To materialize a worktree another tool created, run `mt materialize --adopt` inside
-it. It keeps its path and becomes the Session for its current branch; dependencies get
-Session worktrees under Monke home. Chop and Cleanup then remove it like any Session
-worktree, and Cleanup may stop its day-old processes. Detached worktrees need a branch
-first, and worktrees inside Monke home or a Source checkout cannot be adopted.
+To materialize an Ordinary worktree, run `mt materialize --adopt` inside it.
+The worktree keeps its path and becomes the Root repo's Session worktree for its
+current branch. Dependencies get Session worktrees under Monke home. Chop and
+Cleanup can then remove the adopted worktree as part of Session removal.
 
 Use `mt swing <target>` to navigate to a Session or worktree; `^` selects source
 and `-` selects the previous target. Shell navigation requires the installed shell

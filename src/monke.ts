@@ -850,10 +850,6 @@ function createNewSessionState(
   };
 }
 
-/**
- * Each repo's Session worktree path, recorded or canonical, must be unique within the Session and
- * not recorded for another repo by any retained Session.
- */
 function assertSessionWorktreePathsAvailable(
   store: SessionStateStore,
   session: string,
@@ -925,12 +921,8 @@ export interface MaterializeOptions {
   adopt?: boolean;
 }
 
-/**
- * What adoption hands to Monke's removal flows; shared by the CLI help and the pre-materialization
- * warning.
- */
 export const ADOPTION_CONSEQUENCES =
-  "mt chop and default mt cleanup now remove this worktree once its work is preserved. Cleanup also stops processes started from it that are more than a day old.";
+  "mt chop now removes this worktree with its Session, and default mt cleanup removes it once its work is preserved. Cleanup also stops process trees attached to it that are more than a day old.";
 
 /** Materialize through the dependency-gated Session lifecycle scheduler. */
 export async function runMaterialize(runtime: Runtime, options: MaterializeOptions = {}) {
@@ -939,7 +931,7 @@ export async function runMaterialize(runtime: Runtime, options: MaterializeOptio
     const store = new SessionStateStore(request.home);
     const execution = initializeMaterialization(runtime, request, store);
 
-    // Disclose before any effect, so a failed first materialization still reports the handover.
+    // Warn before materialization records ownership. Later failure does not undo adoption.
     if (options.adopt === true) {
       createLogger(runtime).warning(
         `Adopting ${request.context.worktreeRoot}: ${ADOPTION_CONSEQUENCES}`
@@ -967,7 +959,11 @@ function resolveMaterializeRequest(runtime: Runtime, options: MaterializeOptions
   });
 
   if (context.isSourceCheckout) {
-    throw new MonkeError("mt materialize must run inside a session worktree");
+    throw new MonkeError(
+      options.adopt === true
+        ? "mt materialize --adopt must run inside an Ordinary worktree, not the Source checkout"
+        : "mt materialize must run inside a session worktree"
+    );
   }
 
   if (options.adopt === true) {
@@ -1000,7 +996,7 @@ function initializeMaterialization(
 
   if (recordedRootPath !== undefined && !samePath(recordedRootPath, context.worktreeRoot)) {
     throw new MonkeError(
-      `Session ${session} is already bound to ${recordedRootPath}; run mt materialize there, or mt chop ${session} to release it`
+      `Session ${session} is already bound to ${recordedRootPath}; run mt materialize there, or mt chop ${session} to remove the Session`
     );
   }
 
@@ -1036,10 +1032,7 @@ function initializeMaterialization(
   };
 }
 
-/**
- * A new Session may claim its worktrees only when removal could later run: no other Session records
- * or nests with any of them, and each path passes removal's placement rules.
- */
+/** Apply removal's placement and ownership checks before a new Session records its worktrees. */
 function assertNewSessionClaim(home: string, store: SessionStateStore, state: SessionState) {
   assertNoOtherStateOwnsSessionRepos(state, store.list());
 
