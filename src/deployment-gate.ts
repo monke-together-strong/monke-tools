@@ -24,7 +24,7 @@ type Gate =
     }
   | {
       readonly context: string;
-      readonly kind: "status";
+      readonly kind: "railway";
       readonly repo: string;
       readonly sha: string;
     };
@@ -48,6 +48,7 @@ class GhError extends Error {
 
 const EXIT_CODES: Record<GateStatus, number> = { failed: 1, passed: 0, skipped: 2, timed_out: 3 };
 const USAGE_EXIT_CODE = 64;
+const STATUS_PAGE_SIZE = 100;
 const FAILED_CONCLUSIONS = new Set(["cancelled", "failure", "startup_failure", "timed_out"]);
 
 const DURATION_UNIT_MS = new Map([
@@ -76,11 +77,14 @@ const JobsSchema = z.object({
   )
 });
 
-const StatusSchema = z.object({
-  statuses: z.array(
-    z.object({ context: z.string(), description: z.string().nullable(), state: z.string() })
-  )
-});
+const StatusesSchema = z.array(
+  z.object({
+    context: z.string(),
+    description: z.string().nullable(),
+    state: z.string(),
+    target_url: z.string().nullable()
+  })
+);
 
 async function waitForGate(gate: Gate, options: WaitOptions): Promise<GateResult> {
   const deadline = Date.now() + options.timeoutMs;
@@ -116,7 +120,7 @@ async function waitForGate(gate: Gate, options: WaitOptions): Promise<GateResult
 }
 
 function pollGate(gate: Gate, gh: GhApi): Promise<PollResult> {
-  return gate.kind === "workflow" ? pollWorkflow(gate, gh) : pollStatus(gate, gh);
+  return gate.kind === "workflow" ? pollWorkflow(gate, gh) : pollRailway(gate, gh);
 }
 
 async function pollWorkflow(
@@ -215,30 +219,64 @@ function failedSuffix(failedJobs: readonly string[]): string {
   return failedJobs.length > 0 ? ` (failed: ${failedJobs.join(", ")})` : "";
 }
 
-async function pollStatus(gate: Extract<Gate, { kind: "status" }>, gh: GhApi): Promise<PollResult> {
-  const { statuses } = await gh(
-    `repos/${gate.repo}/commits/${gate.sha}/status?per_page=100`,
-    StatusSchema
-  );
+/**
+ * Railway posts `pending` before starting a deployment. A `success` without a `pending` for the
+ * same deployment means Railway skipped it, as when a failed check blocks deployment.
+ */
+async function pollRailway(
+  gate: Extract<Gate, { kind: "railway" }>,
+  gh: GhApi
+): Promise<PollResult> {
+  // GitHub lists statuses newest first, across every context of the commit.
+  const all: z.infer<typeof StatusesSchema> = [];
 
-  const status = statuses.find((candidate) => candidate.context === gate.context);
+  for (let page = 1; ; page += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- The response length determines whether another page is needed.
+    const statuses = await gh(
+      `repos/${gate.repo}/commits/${gate.sha}/statuses?per_page=${STATUS_PAGE_SIZE}&page=${page}`,
+      StatusesSchema
+    );
 
-  if (status === undefined) {
+    all.push(...statuses);
+
+    if (statuses.length < STATUS_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  const latest = all.find((candidate) => candidate.context === gate.context);
+
+  if (latest === undefined) {
     return { detail: `no ${gate.context} status on ${gate.sha} yet`, status: "pending" };
   }
 
-  const detail = `${gate.context}: ${status.description ?? status.state}`;
+  const detail = `${gate.context}: ${latest.description ?? latest.state}: ${latest.target_url}`;
 
-  switch (status.state) {
+  switch (latest.state) {
     case "pending": {
       return { detail, status: "pending" };
     }
 
     case "success": {
-      // Railway reports success with "No deployment needed" when a service's watched paths did not change.
-      const deployed = !/no deployment needed/iu.test(status.description ?? "");
+      // Railway reports "No deployment needed" when the service's watched paths did not change.
+      if (/no deployment needed/iu.test(latest.description ?? "")) {
+        return { detail, status: "skipped" };
+      }
 
-      return { detail, status: deployed ? "passed" : "skipped" };
+      // Railway links each status to its deployment, so only the latest deployment's statuses count.
+      const started = all.some(
+        (candidate) =>
+          candidate.context === gate.context &&
+          candidate.target_url === latest.target_url &&
+          candidate.state === "pending"
+      );
+
+      return started
+        ? { detail, status: "passed" }
+        : {
+            detail: `${gate.context}: Railway reported success without deploying. Check the deployment and required checks: ${latest.target_url}`,
+            status: "failed"
+          };
     }
 
     default: {
@@ -260,12 +298,12 @@ function parseDuration(value: string): number {
 
 function resolveGate(options: {
   job?: string;
+  railway?: string;
   repo: string;
   sha: string;
-  status?: string;
   workflow?: string;
 }): Gate {
-  const { job, repo, sha, status, workflow } = options;
+  const { job, railway, repo, sha, workflow } = options;
 
   if (workflow !== undefined) {
     return { kind: "workflow", repo, sha, workflow, ...(job === undefined ? {} : { job }) };
@@ -275,11 +313,11 @@ function resolveGate(options: {
     throw new InvalidArgumentError("--job requires --workflow.");
   }
 
-  if (status === undefined) {
-    throw new InvalidArgumentError("pass --workflow or --status.");
+  if (railway === undefined) {
+    throw new InvalidArgumentError("pass --workflow or --railway.");
   }
 
-  return { context: status, kind: "status", repo, sha };
+  return { context: railway, kind: "railway", repo, sha };
 }
 
 export function createWaitForGateCommand(runtime: Runtime) {
@@ -291,9 +329,14 @@ export function createWaitForGateCommand(runtime: Runtime) {
       )
       .requiredOption("--repo <owner/name>", "GitHub repository")
       .requiredOption("--sha <sha>", "landed commit SHA")
-      .addOption(new Option("--workflow <name>", "workflow name or file").conflicts("status"))
+      .addOption(new Option("--workflow <name>", "workflow name or file").conflicts("railway"))
       .option("--job <name>", "job within --workflow that is the gate")
-      .addOption(new Option("--status <context>", "commit status context").conflicts("workflow"))
+      .addOption(
+        new Option(
+          "--railway <context>",
+          "Railway service's commit status context, such as <project> - <service>"
+        ).conflicts("workflow")
+      )
       .addOption(
         new Option("--timeout <duration>", "give up after this long")
           .argParser(parseDuration)

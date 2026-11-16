@@ -6,7 +6,7 @@ import { runCliAsync } from "../src/index.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
-type Endpoint = "jobs" | "runs" | "status";
+type Endpoint = "jobs" | "runs" | "status" | "statusPage2";
 
 // The exit codes `mt prs wait-for-gate --help` documents for each gate status.
 const exitCodes = { failed: 1, passed: 0, skipped: 2, timed_out: 3 };
@@ -39,6 +39,7 @@ async function waitForGate(
 case "$2" in
   */jobs\\?*) key=jobs ;;
   */actions/runs\\?*) key=runs ;;
+  *\\&page=2) key=statusPage2 ;;
   *) key=status ;;
 esac
 dir=$(dirname "$0")
@@ -80,44 +81,121 @@ function result({ detail, status }: Expected) {
   return { exitCode: exitCodes[status], stdout: `${status}: ${detail}\n` };
 }
 
-describe("mt prs wait-for-gate on a Railway commit status", () => {
-  const context = "Monke Together Strong - true-ice-quant";
-  const gate = ["--repo", "monke-together-strong/winters-echo", "--sha", "1062839"];
+describe("mt prs wait-for-gate on a Railway service", () => {
+  const context = "crypto-trading - crypto-trading";
 
-  const status = (state: string, description: string) => ({
-    statuses: [{ context, description, state }]
+  const gate = [
+    "--repo",
+    "monke-together-strong/crypto-trading",
+    "--sha",
+    "5702fe9",
+    "--railway",
+    context
+  ];
+
+  const deployUrl = (id: string) =>
+    `https://railway.com/project/p/service/s?id=${id}&environmentId=e`;
+
+  const status = (state: string, description: string, id = "d1") => ({
+    context,
+    description,
+    state,
+    target_url: deployUrl(id)
   });
 
   it.each<{ expected: Expected; name: string; responses: unknown[] }>([
     {
       expected: {
-        detail: `${context}: Success - true-ice-quant-demo.up.railway.app`,
+        detail: `${context}: Railway reported success without deploying. Check the deployment and required checks: ${deployUrl("d1")}`,
+        status: "failed"
+      },
+      name: "fails when Railway reports success for a deploy it never started",
+      responses: [[status("success", "Success - crypto-trading-demo.up.railway.app")]]
+    },
+    {
+      expected: {
+        detail: `${context}: Success - crypto-trading-demo.up.railway.app: ${deployUrl("d1")}`,
         status: "passed"
       },
-      name: "passes once the service deploys",
+      name: "passes once the deploy Railway started succeeds",
       responses: [
-        { statuses: [] },
-        status("pending", "Deploying"),
-        status("success", "Success - true-ice-quant-demo.up.railway.app")
+        [],
+        [status("pending", "Railway is deploying the service")],
+        [
+          status("success", "Success - crypto-trading-demo.up.railway.app"),
+          status("pending", "Railway is deploying the service")
+        ]
       ]
     },
     {
       expected: {
-        detail: `${context}: No deployment needed - watched paths not modified`,
-        status: "skipped"
+        detail: `${context}: Success - crypto-trading-demo.up.railway.app: ${deployUrl("d2")}`,
+        status: "passed"
       },
-      name: "skips a service Railway did not deploy",
-      responses: [status("success", "No deployment needed - watched paths not modified")]
+      name: "passes when a redeploy succeeds after a skipped deploy",
+      responses: [
+        [
+          status("success", "Success - crypto-trading-demo.up.railway.app", "d2"),
+          status("pending", "Railway is deploying the service", "d2"),
+          status("success", "Success - crypto-trading-demo.up.railway.app")
+        ]
+      ]
     },
     {
-      expected: { detail: `${context}: Deployment failed`, status: "failed" },
+      expected: {
+        detail: `${context}: Railway reported success without deploying. Check the deployment and required checks: ${deployUrl("d2")}`,
+        status: "failed"
+      },
+      name: "fails when Railway skips a redeploy of a commit it deployed before",
+      responses: [
+        [
+          status("success", "Success - crypto-trading-demo.up.railway.app", "d2"),
+          status("success", "Success - crypto-trading-demo.up.railway.app"),
+          status("pending", "Railway is deploying the service")
+        ]
+      ]
+    },
+    {
+      expected: {
+        detail: `${context}: No deployment needed - watched paths not modified: ${deployUrl("d1")}`,
+        status: "skipped"
+      },
+      name: "skips a service whose watched paths did not change",
+      responses: [[status("success", "No deployment needed - watched paths not modified")]]
+    },
+    {
+      expected: { detail: `${context}: Deployment failed: ${deployUrl("d1")}`, status: "failed" },
       name: "fails when the deploy fails",
-      responses: [status("pending", "Deploying"), status("failure", "Deployment failed")]
+      responses: [
+        [
+          status("failure", "Deployment failed"),
+          status("pending", "Railway is deploying the service")
+        ]
+      ]
     }
   ])("$name", async ({ expected, responses }) => {
+    await expect(waitForGate(gate, { status: responses })).resolves.toMatchObject(result(expected));
+  });
+
+  it("passes when the deployment's pending status is on a later page", async () => {
+    const others = Array.from({ length: 99 }, () => ({
+      context: "ci",
+      description: null,
+      state: "success",
+      target_url: null
+    }));
+
     await expect(
-      waitForGate([...gate, "--status", context], { status: responses })
-    ).resolves.toMatchObject(result(expected));
+      waitForGate(gate, {
+        status: [[status("success", "Success - crypto-trading-demo.up.railway.app"), ...others]],
+        statusPage2: [[status("pending", "Railway is deploying the service")]]
+      })
+    ).resolves.toMatchObject(
+      result({
+        detail: `${context}: Success - crypto-trading-demo.up.railway.app: ${deployUrl("d1")}`,
+        status: "passed"
+      })
+    );
   });
 });
 
