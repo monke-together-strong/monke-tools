@@ -220,9 +220,8 @@ function failedSuffix(failedJobs: readonly string[]): string {
 }
 
 /**
- * Classifies a Railway service's latest deployment of a commit from its status history. Railway
- * posts `pending` before a deploy it starts, so a `success` without one means Railway skipped the
- * deploy, as it does when a failed check blocks it.
+ * Railway posts `pending` before starting a deployment. A `success` without a `pending` for the
+ * same deployment means Railway skipped it, as when a failed check blocks deployment.
  */
 async function pollRailway(
   gate: Extract<Gate, { kind: "railway" }>,
@@ -232,7 +231,7 @@ async function pollRailway(
   const all: z.infer<typeof StatusesSchema> = [];
 
   for (let page = 1; ; page += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- Each page follows the previous one.
+    // oxlint-disable-next-line no-await-in-loop -- The response length determines whether another page is needed.
     const statuses = await gh(
       `repos/${gate.repo}/commits/${gate.sha}/statuses?per_page=${STATUS_PAGE_SIZE}&page=${page}`,
       StatusesSchema
@@ -275,7 +274,7 @@ async function pollRailway(
       return started
         ? { detail, status: "passed" }
         : {
-            detail: `${gate.context}: Railway reported success without deploying, as when a failed check skips the deploy: ${latest.target_url}`,
+            detail: `${gate.context}: Railway reported success without deploying. Check the deployment and required checks: ${latest.target_url}`,
             status: "failed"
           };
     }
@@ -335,7 +334,7 @@ export function createWaitForGateCommand(runtime: Runtime) {
       .addOption(
         new Option(
           "--railway <context>",
-          "Railway service's commit status context, such as `<project> - <service>`"
+          "Railway service's commit status context, such as <project> - <service>"
         ).conflicts("workflow")
       )
       .addOption(

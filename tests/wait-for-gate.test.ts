@@ -96,7 +96,6 @@ describe("mt prs wait-for-gate on a Railway service", () => {
   const deployUrl = (id: string) =>
     `https://railway.com/project/p/service/s?id=${id}&environmentId=e`;
 
-  // GitHub lists a commit's statuses newest first; Railway links each one to its deployment.
   const status = (state: string, description: string, id = "d1") => ({
     context,
     description,
@@ -107,7 +106,7 @@ describe("mt prs wait-for-gate on a Railway service", () => {
   it.each<{ expected: Expected; name: string; responses: unknown[] }>([
     {
       expected: {
-        detail: `${context}: Railway reported success without deploying, as when a failed check skips the deploy: ${deployUrl("d1")}`,
+        detail: `${context}: Railway reported success without deploying. Check the deployment and required checks: ${deployUrl("d1")}`,
         status: "failed"
       },
       name: "fails when Railway reports success for a deploy it never started",
@@ -144,7 +143,7 @@ describe("mt prs wait-for-gate on a Railway service", () => {
     },
     {
       expected: {
-        detail: `${context}: Railway reported success without deploying, as when a failed check skips the deploy: ${deployUrl("d2")}`,
+        detail: `${context}: Railway reported success without deploying. Check the deployment and required checks: ${deployUrl("d2")}`,
         status: "failed"
       },
       name: "fails when Railway skips a redeploy of a commit it deployed before",
@@ -178,7 +177,7 @@ describe("mt prs wait-for-gate on a Railway service", () => {
     await expect(waitForGate(gate, { status: responses })).resolves.toMatchObject(result(expected));
   });
 
-  it("reads the deploy's start from a later page of the commit's statuses", async () => {
+  it("passes when the deployment's pending status is on a later page", async () => {
     const others = Array.from({ length: 99 }, () => ({
       context: "ci",
       description: null,
