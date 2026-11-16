@@ -80,44 +80,87 @@ function result({ detail, status }: Expected) {
   return { exitCode: exitCodes[status], stdout: `${status}: ${detail}\n` };
 }
 
-describe("mt prs wait-for-gate on a Railway commit status", () => {
-  const context = "Monke Together Strong - true-ice-quant";
-  const gate = ["--repo", "monke-together-strong/winters-echo", "--sha", "1062839"];
+describe("mt prs wait-for-gate on a Railway service", () => {
+  const context = "crypto-trading - crypto-trading";
 
-  const status = (state: string, description: string) => ({
-    statuses: [{ context, description, state }]
+  const gate = [
+    "--repo",
+    "monke-together-strong/crypto-trading",
+    "--sha",
+    "5702fe9",
+    "--railway",
+    context
+  ];
+
+  const deployUrl = (id: string) =>
+    `https://railway.com/project/p/service/s?id=${id}&environmentId=e`;
+
+  // GitHub lists a commit's statuses newest first; Railway links each one to its deployment.
+  const status = (state: string, description: string, id = "d1") => ({
+    context,
+    description,
+    state,
+    target_url: deployUrl(id)
   });
 
   it.each<{ expected: Expected; name: string; responses: unknown[] }>([
     {
       expected: {
-        detail: `${context}: Success - true-ice-quant-demo.up.railway.app`,
+        detail: `${context}: Railway reported success without deploying, as when a failed check skips the deploy: ${deployUrl("d1")}`,
+        status: "failed"
+      },
+      name: "fails when Railway reports success for a deploy it never started",
+      responses: [[status("success", "Success - crypto-trading-demo.up.railway.app")]]
+    },
+    {
+      expected: {
+        detail: `${context}: Success - crypto-trading-demo.up.railway.app: ${deployUrl("d1")}`,
         status: "passed"
       },
-      name: "passes once the service deploys",
+      name: "passes once the deploy Railway started succeeds",
       responses: [
-        { statuses: [] },
-        status("pending", "Deploying"),
-        status("success", "Success - true-ice-quant-demo.up.railway.app")
+        [],
+        [status("pending", "Railway is deploying the service")],
+        [
+          status("success", "Success - crypto-trading-demo.up.railway.app"),
+          status("pending", "Railway is deploying the service")
+        ]
       ]
     },
     {
       expected: {
-        detail: `${context}: No deployment needed - watched paths not modified`,
-        status: "skipped"
+        detail: `${context}: Success - crypto-trading-demo.up.railway.app: ${deployUrl("d2")}`,
+        status: "passed"
       },
-      name: "skips a service Railway did not deploy",
-      responses: [status("success", "No deployment needed - watched paths not modified")]
+      name: "passes when a redeploy succeeds after a skipped deploy",
+      responses: [
+        [
+          status("success", "Success - crypto-trading-demo.up.railway.app", "d2"),
+          status("pending", "Railway is deploying the service", "d2"),
+          status("success", "Success - crypto-trading-demo.up.railway.app")
+        ]
+      ]
     },
     {
-      expected: { detail: `${context}: Deployment failed`, status: "failed" },
+      expected: {
+        detail: `${context}: No deployment needed - watched paths not modified: ${deployUrl("d1")}`,
+        status: "skipped"
+      },
+      name: "skips a service whose watched paths did not change",
+      responses: [[status("success", "No deployment needed - watched paths not modified")]]
+    },
+    {
+      expected: { detail: `${context}: Deployment failed: ${deployUrl("d1")}`, status: "failed" },
       name: "fails when the deploy fails",
-      responses: [status("pending", "Deploying"), status("failure", "Deployment failed")]
+      responses: [
+        [
+          status("failure", "Deployment failed"),
+          status("pending", "Railway is deploying the service")
+        ]
+      ]
     }
   ])("$name", async ({ expected, responses }) => {
-    await expect(
-      waitForGate([...gate, "--status", context], { status: responses })
-    ).resolves.toMatchObject(result(expected));
+    await expect(waitForGate(gate, { status: responses })).resolves.toMatchObject(result(expected));
   });
 });
 

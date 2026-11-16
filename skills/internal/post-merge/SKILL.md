@@ -101,11 +101,11 @@ Run `mt prs wait-for-gate` on the merge commit, and wait for it to exit:
 
 ```sh
 mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
-mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --status <context>
+mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --railway "<project> - <service>"
 ```
 
-- **Deployment**: the deploy job within its workflow, or the commit status a
-  deployer posts, such as one per Railway service.
+- **Deployment**: the deploy job within its workflow, or, for Railway, the
+  commit status context of each service the merged change deploys.
 - **Library release PR**: the release workflow, then confirm the release PR
   includes this PR's release entry and hand off its URL. When the user asks to
   publish the new version, follow [library release](references/library-release.md).
