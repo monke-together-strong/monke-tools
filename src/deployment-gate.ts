@@ -48,6 +48,7 @@ class GhError extends Error {
 
 const EXIT_CODES: Record<GateStatus, number> = { failed: 1, passed: 0, skipped: 2, timed_out: 3 };
 const USAGE_EXIT_CODE = 64;
+const STATUS_PAGE_SIZE = 100;
 const FAILED_CONCLUSIONS = new Set(["cancelled", "failure", "startup_failure", "timed_out"]);
 
 const DURATION_UNIT_MS = new Map([
@@ -219,23 +220,32 @@ function failedSuffix(failedJobs: readonly string[]): string {
 }
 
 /**
- * Classifies a Railway service's deploy of a commit from its status history. Railway posts
- * `pending` before a deploy it starts, so a `success` without one means Railway skipped the deploy,
- * as it does when a failed check blocks it.
+ * Classifies a Railway service's latest deployment of a commit from its status history. Railway
+ * posts `pending` before a deploy it starts, so a `success` without one means Railway skipped the
+ * deploy, as it does when a failed check blocks it.
  */
 async function pollRailway(
   gate: Extract<Gate, { kind: "railway" }>,
   gh: GhApi
 ): Promise<PollResult> {
-  // GitHub lists statuses newest first.
-  const all = await gh(
-    `repos/${gate.repo}/commits/${gate.sha}/statuses?per_page=100`,
-    StatusesSchema
-  );
+  // GitHub lists statuses newest first, across every context of the commit.
+  const all: z.infer<typeof StatusesSchema> = [];
 
-  const statuses = all.filter((candidate) => candidate.context === gate.context);
+  for (let page = 1; ; page += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- Each page follows the previous one.
+    const statuses = await gh(
+      `repos/${gate.repo}/commits/${gate.sha}/statuses?per_page=${STATUS_PAGE_SIZE}&page=${page}`,
+      StatusesSchema
+    );
 
-  const [latest] = statuses;
+    all.push(...statuses);
+
+    if (statuses.length < STATUS_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  const latest = all.find((candidate) => candidate.context === gate.context);
 
   if (latest === undefined) {
     return { detail: `no ${gate.context} status on ${gate.sha} yet`, status: "pending" };
@@ -254,7 +264,15 @@ async function pollRailway(
         return { detail, status: "skipped" };
       }
 
-      return statuses.some((candidate) => candidate.state === "pending")
+      // Railway links each status to its deployment, so only the latest deployment's statuses count.
+      const started = all.some(
+        (candidate) =>
+          candidate.context === gate.context &&
+          candidate.target_url === latest.target_url &&
+          candidate.state === "pending"
+      );
+
+      return started
         ? { detail, status: "passed" }
         : {
             detail: `${gate.context}: Railway reported success without deploying, as when a failed check skips the deploy: ${latest.target_url}`,
