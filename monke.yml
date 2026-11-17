@@ -53,7 +53,6 @@ skills:
         kind: reference
       - triage
       - wait-what
-      - wayfinder
       - wizard
       - slug: writing-for-agents
         modelInvocation: allow
