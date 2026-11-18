@@ -1760,10 +1760,9 @@ done
 
       expect(preflight).toMatch(expected);
 
-      const publishedResult = await runInstallSkillsLocked(fixture.runtime, fixture.guidance).then(
-        () => "accepted",
-        (cause: unknown) => errorMessage(ThrownValueSchema.parse(cause))
-      );
+      const publishedResult = await runInstallSkillsLocked(fixture.runtime, fixture.guidance)
+        .then(() => "accepted")
+        .catch((cause: unknown) => errorMessage(ThrownValueSchema.parse(cause)));
 
       expect(publishedResult).toMatch(expected);
       expect(

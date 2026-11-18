@@ -6,10 +6,12 @@ import { describe, expect, it } from "vite-plus/test";
 import { createOxlintConfig } from "../packages/oxc-config/src/oxlint.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
-const requireViteDependency = createRequire(import.meta.resolve("vite-plus/package.json"));
+const requirePresetDependency = createRequire(
+  new URL("../packages/oxc-config/package.json", import.meta.url)
+);
 
 const requireTsgolintDependency = createRequire(
-  requireViteDependency.resolve("oxlint-tsgolint/package.json")
+  requirePresetDependency.resolve("oxlint-tsgolint/package.json")
 );
 
 const tsgolintExecutable = requireTsgolintDependency.resolve(
