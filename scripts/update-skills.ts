@@ -90,13 +90,11 @@ import {
 import { summarizeSkillChanges } from "./skill-summary.ts";
 import { listStagedSkillSlugs } from "./skills-cli.ts";
 
-/** Details for an interactive staged Skill slug replacement. */
 interface SlugReplacementRequest {
   /** Local Skill slug currently recorded in the recipe store. */
   recordedSlug: string;
   /** Upstream-facing selector that produced the staged slug. */
   selector: string;
-  /** Human-facing source string from the owning Skill import recipe. */
   source: string;
   /** Newly staged Skill slug produced by the upstream import. */
   stagedSlug: string;
@@ -118,7 +116,6 @@ type SkillUpdateCollection =
       scope: SkillPublicationScope;
     };
 
-/** Own update locking, publication recovery, and review acceptance for the requested scope. */
 export async function runUpdateSkills(runtime: Runtime, options: SkillUpdateOptions) {
   if (options.scope === "repo") {
     await updateSkillCollections(runtime, options, {
@@ -148,7 +145,7 @@ export async function runUpdateSkills(runtime: Runtime, options: SkillUpdateOpti
     const guidance = activeGuidanceRoot(runtime);
 
     if (!loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference) {
-      throw new MonkeError("Select targets first with: mt skills configure");
+      throw new MonkeError("No Skill targets are configured. Run mt skills configure first.");
     }
 
     return updateSkillCollections(runtime, options, {
@@ -220,7 +217,7 @@ async function updateSkillCollections(
 
           writeMessage(`Updating repo imports: ${root}\n`);
 
-          // Publisher updates run in connection order before consumer publication.
+          // Publish one connection at a time so interactive prompts never overlap.
           // oxlint-disable-next-line no-await-in-loop
           const result = await withSkillImportMutation(
             root,
@@ -301,6 +298,7 @@ async function updateSkillCollections(
 
       for (const updated of updatedCollections) {
         try {
+          // Each capture takes the collection's mutation lock before reading its published files.
           // oxlint-disable-next-line no-await-in-loop
           await updated.snapshotAfter();
           capturedCollections += 1;
@@ -456,7 +454,7 @@ async function updateSkills(
         continue;
       }
 
-      // Fetch and import concurrently while publication remains in recipe order.
+      // Preparation can overlap across sources. Publish each result in recipe order.
       // oxlint-disable-next-line no-await-in-loop
       const prepared = await prepare(recipe, index);
 
@@ -476,7 +474,7 @@ async function updateSkills(
       stagingDirectory = preparedDirectory;
       reportSecurityRiskAssessment(assessmentOutput, writeMessage);
 
-      // Accepted slug replacements determine the next recipe before publication.
+      // Prompts must complete before publication can change the stored recipe.
       // oxlint-disable-next-line no-await-in-loop
       const stagedGuidance = await resolveUpdatedGuidance({
         confirmSlugReplacement: promptForSlugReplacement,
@@ -722,7 +720,7 @@ function createGitSkillPreparer(options: {
     );
   };
 
-  // Installer commands cannot change remote sources, so their preparation need not wait.
+  // Start remote sources early. Local sources may depend on an earlier installer command.
   for (const recipe of recipes) {
     if (!recipe.localSource && isRemoteSkillSource(recipe, repoRoot)) {
       start(recipe);
@@ -976,7 +974,7 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   for (const replacement of replacements) {
-    // Interactive confirmations must remain ordered rather than prompting concurrently.
+    // Wait for each answer before showing the next prompt.
     // oxlint-disable-next-line no-await-in-loop
     const accepted = await options.confirmSlugReplacement(replacement);
 

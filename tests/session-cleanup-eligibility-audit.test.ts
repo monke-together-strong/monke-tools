@@ -54,14 +54,8 @@ const SnapshotSchema = z.object({
   session: z.string().nullable()
 }) satisfies z.ZodType<SessionCleanupEvidence>;
 
-// Representatives from 137 local Session expectations in an independent ownership
-// audit. Removed rows differed only by consistently renamed identifiers, preserving
-// every distinct input shape and equality relationship. Original capture: d25878c.
-// All 16 live positives were cross-checked with individual GitHub PR/compare requests.
-// A seventeenth case is verified partial recovery, independently checked with
-// its retained Root branch/merged PR and remaining dependency comparison.
-// Expectations were not copied from this method's boolean results. Identifiers
-// are anonymized while preserving all equality and Session/member relationships.
+// An independent ownership audit supplied the expected decisions (commit d25878c).
+// The anonymized fixture preserves which repos and worktrees belong to each Session.
 const inventory = z
   .array(z.object({ expected: z.boolean(), id: z.string(), snapshot: SnapshotSchema }))
   .parse(cases);

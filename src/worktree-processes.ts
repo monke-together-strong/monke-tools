@@ -5,7 +5,6 @@ import { MonkeError } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
-/** A live process whose working directory is inside a managed worktree. */
 export interface WorktreeProcess {
   ageMs: number;
   /** True when the command line names a path inside the worktree, not just the cwd. */
@@ -45,11 +44,9 @@ function parsePsLine(line: string) {
   };
 }
 
-/** Processes with a common ancestor inside the worktree; a supervisor and what it spawned. */
 export interface WorktreeProcessTree {
   /** Oldest member's age; a supervisor's short-lived children do not make the tree young. */
   ageMs: number;
-  /** True when any member's command line names a path inside the worktree. */
   attached: boolean;
   members: WorktreeProcess[];
   roots: WorktreeProcess[];
@@ -141,8 +138,8 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
 }
 
 /**
- * A shell that merely `cd`ed into a worktree is not attached; a server started from it is. `ps`
- * prints arguments unquoted, so match the path as a substring rather than by token.
+ * The working directory proves presence. Only a path in a command line marks it as attached. `ps`
+ * prints unquoted arguments, so a path containing spaces can span tokens.
  */
 function commandReferences(command: string, worktreePath: string) {
   const normalized = path.normalize(worktreePath);
@@ -223,7 +220,6 @@ export function stopStaleWorktreeProcesses(
   const roots = stale.flatMap((tree) => tree.roots);
 
   for (const signal of ["TERM", "KILL"] as const) {
-    // A pid can be reused between the scan and now; only signal the process the scan saw.
     const targets = survivors(runtime, signal === "TERM" ? roots : members);
 
     if (targets.length === 0) {

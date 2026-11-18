@@ -63,13 +63,11 @@ interface RepoMaterializationCheckpoint {
   cleanupObligated: boolean;
 }
 
-/** The Session checkpoints one Repo materialization may persist, including its terminal result. */
 type RepoMaterializationCheckpointName = Extract<
   SessionMaterializationCheckpoint,
   "cleanup-obligation" | "repo-progress" | "repo-result" | "resource-command-output"
 >;
 
-/** The subset a repo persists while still materializing. */
 type RepoMaterializationProgressCheckpoint = Exclude<
   RepoMaterializationCheckpointName,
   "repo-result"

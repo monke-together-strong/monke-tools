@@ -40,11 +40,9 @@ const CONTROL_RE = new RegExp(
 export interface ResolveSkillSelectorSlugMappingsOptions {
   /** Upstream Skill import selectors to install one at a time. */
   selectors: readonly string[];
-  /** Source string passed through to upstream `skills add`. */
   source: string;
 }
 
-/** Extracts and renders the upstream security assessment from noisy install output. */
 export function extractSecurityRiskAssessment(output: string) {
   const assessment = parseSecurityRiskAssessment(output);
 
@@ -55,7 +53,6 @@ export function extractSecurityRiskAssessment(output: string) {
   return renderSecurityRiskAssessment(assessment);
 }
 
-/** Writes a non-empty upstream security assessment when one is present. */
 export function reportSecurityRiskAssessment(
   output: string | readonly SecurityRiskAssessment[],
   writeMessage: (message: string) => void
@@ -156,7 +153,6 @@ function jsonRiskLabel(value: string | undefined) {
   }
 }
 
-/** Parses upstream security assessment rows from install output. */
 function parseSecurityRiskAssessment(output: string) {
   const rawLines = output.split(/\r?\n/u);
   const strippedLines = rawLines.map(stripTerminalEscapes);
@@ -383,7 +379,7 @@ function visibleLength(value: string) {
 /** Resolves exact selector-to-local-slug mappings by staging each selector in isolation. */
 export function resolveSkillSelectorSlugMappings(options: ResolveSkillSelectorSlugMappingsOptions) {
   if (options.selectors.length === 0) {
-    throw new MonkeError("At least one Skill import selector must be selected");
+    throw new MonkeError("Select at least one Skill to import.");
   }
 
   return options.selectors.map((selector) => resolveSkillSelectorSlugMapping(options, selector));

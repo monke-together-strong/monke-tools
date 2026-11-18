@@ -170,7 +170,6 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
         explicitSources.add(source);
       }
     } catch {
-      // Discovery also works from outside a checkout.
       if (explicit) {
         knownSources.add(candidate);
         explicitSources.add(candidate);
@@ -267,7 +266,6 @@ async function executeInventory(
   options: CleanupOptions
 ) {
   for (const original of inventory.sessions) {
-    // Reuse the global unowned-worktree discovery; revalidateMember rechecks overlaps live.
     // oxlint-disable-next-line no-await-in-loop -- Earlier Cleanup commands may change later Sessions, Git refs, or provider evidence.
     const fresh = await inspectSessionCleanup(runtime, home, [], {
       archiveUntracked: options.archiveUntracked,

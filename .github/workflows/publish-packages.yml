@@ -37,7 +37,7 @@ jobs:
           node-version: 26.12.1
 
       - name: Setup npm
-        # Tegami packs with Bun but publishes through npm; trusted publishing requires npm 11.5.1+.
+        # Tegami packs with Bun and publishes with npm. Pin npm for trusted publishing.
         run: npm install --global npm@11.5.1
 
       - name: Setup Mainline

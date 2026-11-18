@@ -47,7 +47,7 @@ export function inspectSessionRepoRegistration(
 
   if (exact === undefined) {
     throw new MonkeError(
-      `Session worktree exists but is not registered; delete the directory by hand, then rerun Cleanup`
+      `Session worktree path ${repo.worktreePath} exists without a Git registration. Inspect its contents and move the directory aside before retrying.`
     );
   }
 

@@ -22,7 +22,12 @@ The end is now. The start is the later of seven days ago and the end of the newe
 
 ## 2. Inventory units
 
-A **unit** is a T3 thread with `createdBy: user`, including forks, together with the subagent threads and sidechats it spawned. List units for every project from `t3_project_list` with `t3_thread_list` (`includeSubagents: false`, `limit: 100`), paging until `updatedAt` falls before the start. Take units updated inside the window, plus the newest report's Deferred units. Exclude the current thread. Units still `running`, `waiting`, `queued`, or `starting` become Deferred.
+A **unit** is a T3 thread with `createdBy: user`, including forks, together with
+its subagent threads and sidechats. Run `t3_thread_list` with `allProjects: true`
+and `includeSubagents: false`. Page until `updatedAt` falls before the start.
+Take units updated inside the window and the newest report's Deferred units.
+Exclude the current thread. Defer units still preparing, queued, starting,
+running, or waiting. Get project names and roots from `t3_project_list`.
 
 `t3_thread_list` omits sidechats, so list the window's sidechats from T3's private store. This stopgap holds until T3 lists them:
 
@@ -36,7 +41,8 @@ select t.thread_id, t.project_id,
 from orchestration_v2_projection_threads t
 where t.deleted_at is null
   and json_extract(t.payload_json, '$.lineage.sideChat') = 1
-  and t.updated_at >= '<start>';
+  and t.updated_at >= '<start>'
+  and t.updated_at <= '<end>';
 SQL
 ```
 

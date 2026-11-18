@@ -136,7 +136,6 @@ export function reconcileProjectSkillRegistry(
   excludeProjectSkillLinks(runtime, root, scope);
 }
 
-/** Recreate the current clone's registered links during checkout setup. */
 export async function reconcileProjectSkills(runtime: Runtime, cwd = runtime.cwd) {
   const context = projectSkillRegistry(runtime, cwd);
 

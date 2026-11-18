@@ -4,138 +4,79 @@
 
 ## Install
 
-Install the latest stable release on macOS arm64 or Linux x64:
+Install the latest stable release on macOS arm64 or Linux x64.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh | sh
 ```
 
-The installer asks which agents should receive skills and configures your current Bash or Zsh shell. Follow its shell instructions before starting a session. To choose skill targets later, run `mt skills configure`.
-
-Create a shared global skill with `mt skills create my-workflow`, or move existing
-skills into Monke home with `mt skills adopt ~/.claude/skills/my-workflow`.
-Monke links them to your configured agents. Import private or personal skills with
-`mt skills add /path/to/skill-repo --link`,
-`mt skills add owner/repo`, or `mt skills add --name course --command 'installer --project --yes'`.
-`mt skills update` updates all registered imports and opens one comparison.
-Recipes, invocation policies, and private content stay outside monke's repository.
-See [Monke skills](skills/internal/monke-skills/SKILL.md).
-
-For unattended installation, replace the trailing `sh` with `sh -s -- --targets codex claude cursor`. See the [installation guide](skills/internal/monke-install/SKILL.md) for custom targets, local builds, and recovery.
+Follow the installer's shell instructions before starting a Session. For unattended
+installation, custom targets, and recovery, see the [installation guide](skills/internal/monke-install/SKILL.md).
 
 ## Start a session
 
-From a repo with `monke.yml`:
+Create a Session and review your changes. With `monke.yml`, Spawn also prepares
+the repo's configured environment and dependencies.
 
 ```bash
-mt spawn banana          # Prepare this repo and its dependencies
-mt diff                  # Review the current checkout through its machine-local adapter
-mt swing '^'             # Return to the source checkout
-mt swing banana          # Return to the session
-mt materialize           # Rerun the session's env sync and bootstrap
-mt materialize --adopt   # Adopt this Ordinary worktree as a Session worktree for its branch
+mt spawn banana
+mt diff
+mt swing '^'             # Return to the Source checkout
+mt swing banana          # Return to the Session
 ```
 
-Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts. `-m` starts from default branches, and `--from <ref>` starts the root repo from a branch, tag, or commit. A retry of either reuses the commits pinned by the first attempt. Add `--codex` to open the session in Codex. See [Spawn usage](skills/internal/monke-worktrees/SKILL.md#create-and-resume-work) for details.
-
-When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees.
-
-Preview eligible Sessions across discovered Sources with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Repeatable `--source <repo>` options add repositories to discovery without restricting Session selection.
-
-Positional worktree paths restrict cleanup targets. Use `--archive-untracked` to preserve untracked notes before removal. See [cleanup recovery](skills/references/internal/CLEANUP_RECOVERY.md) for missing worktrees and `--include-unowned`.
-
-The [session command reference](skills/internal/monke-worktrees/SKILL.md) covers branch reuse, PR navigation, and cleanup recovery. See [diff usage](skills/internal/monke-diff/SKILL.md) for comparisons and diff bases. Use `mt <command> --help` for available flags.
+When finished, run `mt chop banana`. It preserves local branches and deletes
+ignored files with the worktrees. To find Sessions eligible for removal across
+repos, run `mt cleanup --dry-run` before `mt cleanup`. The [Session guide](skills/internal/monke-worktrees/SKILL.md)
+covers branch selection, worktree adoption, PR navigation, and cleanup recovery.
 
 ### Diff delivery
 
-Desktop Codiff remains the default. `mt diff configure --adapter codiff` or
-`mt diff configure --adapter ms` saves the
-machine-local preference in `$MONKE_HOME/config.yml`; `mt diff configure` offers a
-picker. `mt diff --adapter codiff` or `--adapter ms` overrides delivery for that
-invocation without rewriting the preference.
+`mt diff` opens desktop Codiff by default. Run `mt diff configure` to save a
+different adapter. With Monke See installed and configured, `mt diff --adapter ms`
+prints a browser review link for that invocation.
 
-The Monke See adapter prints Monke See's canonical review URL unchanged; diagnostics
-stay on stderr. It requires an installed Monke See CLI with the version-1 review JSON
-contract and a configured viewer. Monke See owns authentication,
-rendering, Refresh, and link expiry. PR/MR shorthand requires authenticated `gh` or
-`glab` to resolve a full review URL; full URLs need no Monke provider lookup. Diff never
-installs Monke See, changes its exposure, or falls back to another adapter on failure.
-
-Bare `mt diff` infers its base from default-branch history in any checkout, and a
-Session remembers the selected base. On the default branch or at its tip, it shows
-local changes only. `mt diff --pick` chooses another base or local changes only. Explicit sources bypass both automatic selection
-and the picker, and never replace the remembered base:
-
-```sh
-mt diff --working-tree                 # Staged, unstaged, and untracked changes only
-mt diff --commit HEAD                  # One commit, including its parent comparison
-mt diff --branch main                  # Branch contribution plus working-tree edits
-mt diff main..HEAD                     # Direct endpoint comparison
-mt diff main...HEAD                    # Merge base of main/HEAD against HEAD
-mt diff '#42'                          # GitHub PR in the selected repository
-mt diff pr 42                          # Alternate PR number form
-mt diff pr owner:feature               # Open GitHub PR for a branch
-mt diff mr 42                          # GitLab MR in the selected repository
-mt diff https://github.com/owner/repo/pull/42
-mt diff https://gitlab.example.com/group/repo/-/merge_requests/42
-mt diff --path /existing/checkout --commit HEAD
-```
-
-A positional branch or commit ref follows the same semantics with either adapter. Use flags
-to disambiguate. `--path` accepts an existing Checkout or one of its nested
-directories; Diff never switches its branch or creates a worktree. Clean working
-trees and equal-endpoint ranges are honest empty reviews, not HEAD substitutions.
-Explicit sources cannot be combined with each other or `--pick`.
-
-Codiff **1.14.0 or newer is required** for desktop Diff. Stock 1.14.0 supports
-working-tree, commit, branch, and PR/MR comparisons. Codiff owns PR/MR access and
-provider refresh.
-
-**Range limitation:** the packaged macOS launcher in Codiff 1.14.0 rewrites
-`main..feature` and `main...feature` into branch comparisons. Monke opens ranges
-only when the launcher advertises `desktop-source-v1` range support, and otherwise
-fails without opening another comparison.
+`mt diff` can use a Session's remembered base or infer one from `main` or `master`
+history. On either branch it shows local changes. Run
+`mt diff --pick` to choose a base or review local changes only. See
+`mt diff --help` for explicit comparisons and the [Diff guide](skills/internal/monke-diff/SKILL.md)
+for time-based comparisons.
 
 ## Use checkout resources
 
 With resources configured in `monke.yml`, run these commands in a
-[Source checkout or Session worktree](GLOSSARY.md#session-topology):
+[Source checkout or Session worktree](GLOSSARY.md#session-topology).
 
 ```bash
-mt setup                        # Write dependency paths and static resource values
+mt setup
 # Start any infrastructure required by the repo's resource modules.
-mt resources acquire            # Acquire missing allocations; reuse existing ones
-mt resources exec -- <command>  # Run with the recorded resource values
-mt resources release            # Release allocations after use
+mt resources acquire
+mt resources exec -- <command>
+mt resources release
 ```
 
-See [resource commands](skills/references/internal/RESOURCES.md) for execution and recovery. Release keeps the checkout and infrastructure; `mt chop` removes
-the whole Session.
+Release keeps the checkout and its infrastructure. See [resource commands](skills/references/internal/RESOURCES.md)
+for reuse and recovery.
 
 ## Run post-merge after external merges
 
-In T3 Code, create and track a PR in one command:
+In T3 Code, create and track a PR in one command.
 
 ```bash
 mt prs create --thread <thread-id> --checkout <checkout> -- \
   --base main --head <branch> --title <title> --body-file <body-file>
 ```
 
-The command reports success after tracking is saved and the poller is scheduled.
-Use `mt prs track` for an existing PR and untrack a PR before merging it yourself.
-While any PR is tracked, `mt prs poll` runs every
-five minutes through launchd on macOS or a systemd user timer on Linux; `mt prs
-list` shows tracked PRs.
-
-[Post-merge](skills/internal/post-merge/SKILL.md) runs in its own thread on GPT
-6.1 Sol. The thread that owns the PR starts it, then recaps its remaining work
-or settles. When a tracked PR merges outside its thread,
-`mt prs poll` asks that thread to hand off, or starts the post-merge thread
-itself if the thread rejects the message.
+Use `mt prs track` for an existing PR. When a tracked PR merges outside its
+owning thread, `mt prs poll` asks the thread to run post-merge. If delivery
+fails, the poller tries to start a thread for it. Untrack a PR before merging
+it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
+cleanup and when verification needs a separate thread.
 
 ## Configure a repo
 
-Add `monke.yml` at the repo root. For example, this maps an assigned session port into `PORT` in `apps/api/.env`:
+Add `monke.yml` at the repo root. This example maps an assigned Session port into
+`PORT` in `apps/api/.env`.
 
 ```yaml
 apps:
@@ -146,21 +87,23 @@ apps:
         env: PORT
 ```
 
-The [configuration reference](skills/internal/monke-config/references/monke-yml.md) covers dependency repos, custom env files, bootstrap, seed files, and checkout resources. Optional root `PR.md` and `POST_MERGE.md` files configure the [pr](skills/internal/pr/SKILL.md) and [post-merge](skills/internal/post-merge/SKILL.md) skills; see [monke-config](skills/internal/monke-config/SKILL.md).
+See the [configuration reference](skills/internal/monke-config/references/monke-yml.md)
+for dependencies, env files, seed paths, and resources. For `PR.md` and
+`POST_MERGE.md`, see the [repo configuration guide](skills/internal/monke-config/SKILL.md).
 
 ## Agent skills
 
-Run `mt skills configure` to select agents or change the saved targets. Codex and Claude also receive shared global instructions; existing guidance outside the managed section is preserved.
+Run `mt skills configure` to select agents or change the saved targets. Codex
+and Claude also receive shared global instructions in a Monke-managed section.
 
-To use skills from a local checkout in one project, run this inside the consumer repo:
+To use skills from a local checkout in one project, run this inside the Consumer repo.
 
 ```bash
-mt skills add ../local-file-viewer --project
+mt skills add ../banana-workflows --project
 ```
 
-Local sources stay linked, so source edits appear without reinstalling. See
-[project installs](skills/internal/monke-skills/SKILL.md#project-installs) for skill
-selection, agent targets, and syncing other worktrees.
+See the [skills guide](skills/internal/monke-skills/SKILL.md) to create or adopt a
+global skill, import personal skills, or sync project installs to other worktrees.
 
 Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
 
@@ -171,19 +114,18 @@ mt update --check         # Check without changing the install
 mt update                # Activate the latest stable release
 ```
 
-Updating a local build switches to a release install while preserving the source checkout. Edits to installed release skills or references block updates; follow the [recovery guide](skills/internal/monke-install/SKILL.md#update-recovery) to preserve them.
+Updating a local build switches to a release install and preserves the source
+checkout. Changes to installed release guidance block updates. See the
+[update recovery guide](skills/internal/monke-install/SKILL.md#update-and-recovery).
 
 ## Development
 
-Install [Vite+](https://viteplus.dev/guide/), then run from this checkout:
+Install [Vite+](https://viteplus.dev/guide/), then run these commands from this checkout.
 
 ```bash
 vp install
 vpr install:local
 ```
 
-Rerun the local install after CLI changes before testing from another repo. Locally installed skills link to source, so edits are visible immediately; adding or removing skill directories requires `mt skills configure` to refresh links.
-
-Run `vp check <changed-files>` for scoped formatting, lint, and type checks. Use `vpr test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
-
-For domain terminology, start with [GLOSSARY.md](GLOSSARY.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).
+Rerun the local install after CLI changes before testing from another repo.
+See [repository instructions](AGENTS.md) for checks, terminology, and issue tracking.

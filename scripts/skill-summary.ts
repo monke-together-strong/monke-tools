@@ -40,7 +40,7 @@ export async function summarizeSkillChanges(options: {
       return;
     }
 
-    writeMessage(`Summarizing ${changes.length} skill change(s) with Codex...\n`);
+    writeMessage("Generating skill update summaries with Codex.\n");
     const limit = pLimit(8);
 
     // Summarize each change separately so one failure or timeout keeps the other summaries.
@@ -165,7 +165,7 @@ async function summarizeChange(runtime: Runtime, change: SkillChange, cwd: strin
   const summary = contents.trim();
 
   if (!summary) {
-    throw new MonkeError("Codex returned an empty summary");
+    throw new MonkeError("Codex returned an empty summary. Review the diff for this change.");
   }
 
   return summary;

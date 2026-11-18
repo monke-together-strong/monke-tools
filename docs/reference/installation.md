@@ -6,11 +6,11 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Local tool install**: A monke-tools install built from a source checkout and shared across **Consumer repos**.
 
-**Release install**: A monke-tools install obtained from an official tagged release.
+**Release install**: A monke-tools install obtained from an official stable release.
 
-**Customized release install**: A **Release install** whose distributed guidance differs from its original release content.
+**Customized release install**: A **Release install** whose packaged skills, references, repo import recipes, or global instructions differ from the release bundle.
 
-**Active tool install**: The one **Local tool install** or **Release install** currently selected for use.
+**Active tool install**: The **Local tool install** or **Release install** currently selected in a **Monke home**.
 
 **Tool build identity**: The human-readable version identity of an installed monke-tools build.
 
@@ -42,7 +42,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Mainline release**: A stable monke-tools release published from validated mainline changes.
 
-**Codiff runtime dependency**: The separately versioned Codiff executable required by desktop **Diff**; Monke See delivery uses its own installed CLI.
+**Codiff runtime dependency**: The separately installed Codiff executable required by the desktop **Diff adapter**.
 
 **Shared Oxc presets**: Team-owned lint and format policy distributed across **Consumer repos**.
 
@@ -52,8 +52,8 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Relationships
 
-- One **Active tool install** serves all **Consumer repos** on the machine.
-- Each install has its own **Install manifest**; **Global monke config** belongs to the machine rather than an install.
+- **Consumer repos** using the same **Monke home** share an **Active tool install**.
+- Each install has its own **Install manifest**. **Global monke config** belongs to its **Monke home**.
 - A **Local tool install** has an **Installed source checkout**. A **Release install** has a **Release bundle** as its origin.
 - **Distributed skills**, **Distributed references**, and **Global agent instructions** belong to the installed version. **Codiff** has an independent release lifecycle.
 - **Skill authoring mode** keeps guidance changes in the source checkout; a **Customized release install** carries changes in installed release content.

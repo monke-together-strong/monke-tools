@@ -55,7 +55,6 @@ const ResourceCommandReturnSchema = z.record(
   z.string().refine((value) => value.trim().length > 0)
 );
 
-/** Resolve, reuse, prune, and collision-check deterministic Resource values. */
 export function resolveResourceValues(options: {
   env: Record<string, string | undefined>;
   existingRepoState:
@@ -128,7 +127,6 @@ export function resolveResourceValues(options: {
   };
 }
 
-/** Resolve, reuse, prune, execute, and validate Resource command outputs. */
 export async function resolveResourceCommands(options: {
   acquireExplicit?: boolean;
   existingRepoState:
@@ -175,7 +173,7 @@ export async function resolveResourceCommands(options: {
       );
     }
 
-    // oxlint-disable-next-line no-await-in-loop -- Commands in one repo are intentionally ordered; sibling repos remain concurrent.
+    // oxlint-disable-next-line no-await-in-loop -- Each acquisition persists its progress before the next command runs.
     await withResourceCommandLock(
       options.store.home,
       options.repoConfig.sourceRoot,

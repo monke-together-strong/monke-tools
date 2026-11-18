@@ -1,7 +1,7 @@
 apps: {}
 bootstrapCommand: vp install --frozen-lockfile
 skills:
-  - commit: f104aa8f821a3f7397318b0dc8ad2f7e4a1f8bc7
+  - commit: 0d2dc00df47d7686c94324cfe9c3444710d9f16d
     source: https://github.com/backnotprop/pstack
     skills:
       - principle-encode-lessons-in-structure
@@ -14,7 +14,7 @@ skills:
       - slug: unslop
         modelInvocation: allow
         description: Cut AI tells from any writing.
-  - commit: 929481461f0dd435b7cb19fb2a3737987c15d8d6
+  - commit: 60a164713b69595d6f71f84925abbc00a9d81a0f
     source: https://github.com/haydenbleasel/ultracite/tree/main/skills/ultracite
     skills:
       - slug: ultracite
@@ -23,7 +23,7 @@ skills:
     source: https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me
     skills:
       - show-me
-  - commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
+  - commit: 5863806dd4e15c63174bee4e7515a4256792ecfa
     source: https://github.com/mattpocock/skills
     skills:
       - slug: code-review
@@ -56,21 +56,21 @@ skills:
       - wizard
       - slug: writing-for-agents
         modelInvocation: allow
-  - commit: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
+  - commit: 5863806dd4e15c63174bee4e7515a4256792ecfa
     source: https://github.com/mattpocock/skills/tree/main/skills/engineering/pr
     skills:
       - slug: pr
         kind: reference
-  - commit: c3bb418ee38ee49a6b999b7752c1368f3123a2bd
+  - commit: d41d9860b0094dcb68030657da63461212835aaa
     source: https://github.com/pbakaus/impeccable
     skills:
       - impeccable
-  - commit: 8a3536678a528cc012b9e62484290e79d0be410f
+  - commit: 968d8cb9dc42ae5d52e8fd356cf84596ec832a26
     source: https://github.com/shadcn-ui/ui
     skills:
       - shadcn
   - acceptOpenClawRisks: true
-    commit: 02f3158379a7ec355d73c92bf97d432fafb2adc9
+    commit: 3cc834ceec0410c4ff37c09e5b81c91e65fc9fc9
     source: openclaw/agent-skills
     skills:
       - autoreview

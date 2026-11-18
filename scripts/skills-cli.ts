@@ -10,9 +10,7 @@ const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
 
 export interface BuildSkillsInstallArgsOptions {
   importerVersion?: string;
-  /** Upstream Skill import selectors to install. */
   selectors: readonly string[];
-  /** Source string passed through to upstream `skills add`. */
   source: string;
 }
 
@@ -47,7 +45,9 @@ export function listStagedSkillSlugs(stagingDirectory: string) {
   const stagedSkillsRoot = path.join(stagingDirectory, ".agents", "skills");
 
   if (!existsSync(stagedSkillsRoot)) {
-    throw new MonkeError(`Expected staged skills at ${stagedSkillsRoot}`);
+    throw new MonkeError(
+      `The importer did not create ${stagedSkillsRoot}. Check the Skill source and selection.`
+    );
   }
 
   const stagedSkillNames = readdirSync(stagedSkillsRoot)
@@ -59,7 +59,9 @@ export function listStagedSkillSlugs(stagingDirectory: string) {
     .toSorted();
 
   if (stagedSkillNames.length === 0) {
-    throw new MonkeError(`No staged skill directories found at ${stagedSkillsRoot}`);
+    throw new MonkeError(
+      `No Skills were imported into ${stagedSkillsRoot}. Check the Skill source and selection.`
+    );
   }
 
   return stagedSkillNames;

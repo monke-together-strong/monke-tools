@@ -1,6 +1,5 @@
 import type { Runtime } from "./types.ts";
 
-/** Run a release command with consistent operator-facing failure diagnostics. */
 export function runReleaseCommand(
   command: string,
   arguments_: string[],

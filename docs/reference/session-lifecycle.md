@@ -4,9 +4,9 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Preparation and materialization
 
-**Default branch spawn mode**: A **Spawn** mode that starts the **Root repo** from an explicit start ref, or from its default branch when none is given, and starts each **Dependency repo** from its default branch. No edits are carried. A retry reuses each repo's pinned start commit.
+**Default branch spawn mode**: A **Spawn** mode that pins each repo's start commit to `main` or `master`, with an optional start ref for the **Root repo**. Retries reuse those commits. The mode starts without carrying local edits.
 
-**Worktree preparation**: Creation or validation of one **Session worktree**, including its permitted source changes and **Seed material**.
+**Worktree preparation**: Creation or validation of one **Session worktree**, with any permitted incoming edits and **Seed material** applied.
 
 **Prepared worktree**: A **Session worktree** whose preparation is complete but whose **Repo materialization** may still be pending. _Avoid_: Complete worktree, failed worktree
 
@@ -14,7 +14,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Repo materialization**: Preparation of a repo's configured environment, dependencies, and resources for use within a **Session**.
 
-**Blocked repo materialization**: Materialization that cannot begin because a dependency's materialization failed. _Avoid_: Failed materialization, cancelled materialization
+**Blocked repo materialization**: Materialization that cannot begin because a direct dependency's preparation or materialization failed, or because the dependency is itself blocked. _Avoid_: Failed materialization, cancelled materialization
 
 **Worktree adoption**: **Materialize** that records an existing **Ordinary worktree**, at its current path, as the **Root repo**'s **Session worktree** for the Session named after its branch. The adopted worktree then follows the full Session lifecycle, including removal. _Avoid_: Import, borrowed worktree
 
@@ -22,9 +22,9 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Removal
 
-**Cleanup obligation**: A repo's retained requirement to run its **Cleanup command** before its **Session state** can be removed. _Avoid_: Cleanup eligibility, prepared state, worktree existence
+**Cleanup obligation**: A retained requirement to release a Session member's checkout resources or run its recorded **Cleanup command** before finalization. _Avoid_: Cleanup eligibility, prepared state, worktree existence
 
-**Session removal**: The ordered effects that remove one **Session**: preserving work that **Cleanup** proved, satisfying **Cleanup obligations**, removing each **Session worktree**, and **Session finalization**. Both **Chop** and **Cleanup** perform it, and a Cleanup dry run previews it.
+**Session removal**: Removal of a **Session**'s worktrees and state. **Chop** and **Cleanup** both satisfy retained teardown obligations and preserve local branches. **Cleanup** also preserves work identified for archiving or detached HEAD retention.
 
 **Session finalization**: Completion of **Session removal** after its **Cleanup obligations** are satisfied and all recorded worktrees are gone.
 
@@ -32,7 +32,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Merged PR**: A pull request accepted into its base branch through a recorded merge.
 
-**Cleanup-eligible Session**: A retained **Session** whose committed and local work is proven preserved and whose members all satisfy removal safety checks, so **Cleanup** may remove it. _Avoid_: Merge-cleanable Session
+**Cleanup-eligible Session**: A retained **Session** that satisfies **Cleanup**'s removal safety checks. Its work is already preserved or can be preserved during removal. _Avoid_: Merge-cleanable Session
 
 **Chop target**: The **Session** or **Ordinary worktree** selected for one **Chop** operation.
 
@@ -40,11 +40,11 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Swing target**: A **Source checkout**, **Session worktree**, or **Ordinary worktree** selected for navigation.
 
-**Swing picker**: The interactive choice among existing **Swing targets** within one **Root repo** scope.
+**Swing picker**: The interactive choice among existing **Swing targets** of the invoking checkout's repo.
 
-**Previous Swing target**: The last different **Swing target** remembered for one **Root repo**.
+**Previous Swing target**: The checkout recorded as the departure point of the last **Swing** between distinct checkouts of a repo.
 
-**Diff source**: The Git comparison requested by one **Diff**, identifying working-tree changes, a commit, a branch comparison, a commit range, or a pull request.
+**Diff source**: The Git comparison requested by one **Diff**, identifying working-tree changes, a commit, a branch comparison, a commit range, a pull request, or a merge request.
 
 **Diff adapter**: The selected way a **Diff** is presented, either through a local application or through a browser review identified by a **Diff link**.
 
@@ -73,7 +73,6 @@ Part of the [domain glossary](../../GLOSSARY.md).
 - Each **Session** has one participating worktree per repo. **Worktree preparation** can complete independently; **Repo materialization** depends on that repo's preparation and its dependencies' materialization.
 - An incomplete **Materialization generation** retains completed work for resumption. A completed generation may be followed by another.
 - A **Prepared worktree** alone creates no **Cleanup obligation**. Repos incur Cleanup obligations during materialization.
-- **Chop** selects a whole Session or one Ordinary worktree; only a Session target performs **Session removal**.
-- Session state, not location, decides whether a worktree is a **Session worktree**. Spawn creates Session worktrees under **Monke home**; **Worktree adoption** may record a Root repo's worktree elsewhere, outside Monke home and every participating **Source checkout**.
+- **Spawn** places new Session worktrees under **Monke home**. **Worktree adoption** can record a Session worktree outside Monke home.
 - A **Missing Session worktree** can still have a **Cleanup obligation**. Missing directories do not imply finalization.
-- **Swing** changes the working location; **Diff** changes neither the checkout nor its branch. A **Shell adapter** connects navigation to the user's shell.
+- The **Shell adapter** applies a navigation request in the parent shell.

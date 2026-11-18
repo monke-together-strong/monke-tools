@@ -15,10 +15,9 @@ registry using the existing recipe format and distribution mechanism. This
 replaces the source-only import boundary in [ADR 0002](./0002-import-skills-through-skills-cli-wrapper.md)
 without creating a separate category of external-repository skills.
 
-The repository's `skills.lock.json` retains the Bundled import recipes. The
-runtime registry lives at `$MONKE_HOME/skill-registry/skills.lock.json`, starts
-with the bundled imports, and then owns its recipes and invocation overrides
-independently. `mt skills update` refreshes every registered source. `mt update`
+The registry starts with monke-tools' imports and owns its recipes and invocation
+overrides independently. These imports originally came from the repository's
+`skills.lock.json`. `mt skills update` refreshes registered sources. `mt update`
 updates the tool and its bundled guidance without replaying personal installers.
 
 Getting skills and distributing them are separate choices. A source may come

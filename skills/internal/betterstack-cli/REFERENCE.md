@@ -1,44 +1,14 @@
-# BetterStack CLI Reference
+# Query Better Stack telemetry
 
-This is the shared Better Stack query workflow. Repo-local wrapper skills own source IDs, table names, service tags, event names, and reusable domain SQL.
+Before writing SQL, use `source get` to confirm the source ID, SQL table name,
+and `data_region`. Include the metadata token when querying to validate the
+table and endpoint against that source. Use CLI help for credential options.
 
-## Credentials
+## Query shape
 
-`--help` lists the credential env vars. Source and connection metadata commands use a Better Stack API token; `query run` uses query connection credentials. When `query run` also has an API token, it checks that the table and query endpoint match the source.
-
-Without `--env-file`, the CLI loads `BETTERSTACK_ENV_FILE` when set, otherwise `.env.demo` from the current working directory when it exists. Set `BETTERSTACK_ENV_FILE` in a repo-local wrapper script when credentials live elsewhere.
-
-## Source Metadata
-
-Confirm source details before custom SQL:
-
-```bash
-pnpm betterstack source get --id <source-id>
-```
-
-Capture:
-
-- source id
-- table name such as `t<team>.<source_slug>`
-- source `data_region`
-
-## Query Shape
-
-Always include `LIMIT`. Prefer explicit machine-readable output such as `FORMAT JSONEachRow`. Pass longer SQL with `--sql-file <path>` or `--stdin`.
-
-For retained log history, query both hot and cold storage:
-
-```sql
-SELECT dt, raw
-FROM (
-  SELECT dt, raw FROM remote(REPLACE_HOT_LOGS_TABLE)
-  UNION ALL
-  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE) WHERE _row_type = 1
-)
-ORDER BY dt DESC
-LIMIT 50
-FORMAT JSONEachRow
-```
+Use an explicit time window and `LIMIT`. Prefer `FORMAT JSONEachRow` for
+machine-readable output. For retained log history, query both hot and cold
+storage with the [SQL examples](references/query-shapes.sql).
 
 Rules:
 
@@ -48,7 +18,7 @@ Rules:
 - Use `_row_type = 1` for logs and `_row_type = 3` for spans in `s3Cluster`.
 - Do not stop at generic success markers when the same run id contains errors.
 
-## Investigation Closure
+## Investigation closure
 
 For "was it processed?" and similar questions:
 

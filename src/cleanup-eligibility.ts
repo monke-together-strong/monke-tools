@@ -108,7 +108,7 @@ export interface CleanupEvidence {
   candidate: CleanupCandidate;
   /** Qualifying merged commit-associated PRs; null means the lookup failed. */
   commitPullRequests?: CommitPullRequestEvidence[] | null;
-  /** Absent only in older saved evidence; absence is not proof a check ran. */
+  /** True once inspection attempts committed-work checks. Older reports may omit this field. */
   committedWorkAttempted?: boolean;
   defaultTree?: { tree: string; witness: string } | false | null;
   head: string | null;
@@ -201,7 +201,6 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return decision("ineligible", "default-branch");
   }
 
-  // The merged-PR checks below run only with a branch, where the detached-HEAD match never applies.
   const branchPrs = relevantPullRequests(snapshot, repository);
 
   if (branchPrs.some((pr) => pr.state === "open")) {
@@ -244,10 +243,6 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     ]);
   }
 
-  // A worktree whose HEAD is already inside the verified default branch holds
-  // no unique commits, whatever its role or PR history. The local check above
-  // already rejected uncommitted changes or proved them preserved. A freshly
-  // spawned Session looks the same, so this proof waits a day.
   if (snapshot.ancestorOfDefault) {
     const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
 
@@ -281,7 +276,6 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return decision("unknown", "ancestry-unavailable");
   }
 
-  // Both answers came back; unique commits without a merged PR is a settled fact.
   return decision("ineligible", "no-merged-pr");
 }
 
@@ -508,9 +502,8 @@ function isMergedToDefault(
 }
 
 /**
- * A linked worktree's `.git` file is written once at creation and never rewritten. Take the earlier
- * of birth and modification time: copies and restores can reset birth time forward, and an mtime in
- * the past is never newer than creation.
+ * Estimate worktree age from its `.git` file. Copies and restores can reset birth time, so use the
+ * earlier timestamp when both are available.
  */
 function worktreeAge(worktreePath: string): number | null {
   try {
@@ -523,7 +516,7 @@ function worktreeAge(worktreePath: string): number | null {
   }
 }
 
-/** Read-only collection: no fetch, optional Git writes, write lock, or Session removal. */
+/** Collect evidence without fetching, taking a lock, or allowing optional Git writes. */
 export async function collectCleanupEvidence(
   runtime: Runtime,
   candidate: CleanupCandidate,
@@ -840,8 +833,8 @@ type StructureMemo = { ok: true; result: ExecResult } | { error: unknown; ok: fa
 
 /**
  * Cache repository-structure reads (worktree listings, top-level and common-dir lookups) for one
- * collection pass. Branch, HEAD, status, and index reads stay live, and callers must revalidate
- * with an unmemoized runtime before acting.
+ * collection pass. Branch, HEAD, status, and index reads stay live. Start with a fresh structure
+ * cache for revalidation, and read directly from Git before removal.
  */
 export function memoizeRepoStructure(runtime: Runtime): Runtime {
   const cache = new Map<string, StructureMemo>();

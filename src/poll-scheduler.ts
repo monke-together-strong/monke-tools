@@ -13,7 +13,7 @@ interface PollJob {
   /** Absolute paths of the files that define the job; the first one marks it as installed. */
   files: Record<string, string>;
   load: () => void;
-  /** Unloads the job. A launchd job that runs this on itself is stopped, so call it last. */
+  /** Unloads the job. Call last because launchd can stop the poll when it unloads itself. */
   unload: () => void;
 }
 
@@ -58,7 +58,6 @@ export function schedulePoll(runtime: Runtime) {
   }
 }
 
-/** Remove the scheduled poll, such as when no PR is tracked. */
 export function unschedulePoll(runtime: Runtime) {
   const job = pollJob(runtime, "mt");
   const [marker] = Object.keys(job?.files ?? {});

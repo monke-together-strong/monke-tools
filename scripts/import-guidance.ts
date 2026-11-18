@@ -46,7 +46,7 @@ export function assertManagedGuidanceRoots(repoRoot: string) {
   }
 }
 
-/** Materializes staged upstream guidance using its recorded local Import kind. */
+/** Roll back affected files on failure. Retain recovery copies if rollback fails. */
 export function copyStagedGuidanceToManagedRoots(
   options: {
     commitState?: () => void;
@@ -74,7 +74,6 @@ export function copyStagedGuidanceToManagedRoots(
     disableModelInvocation: item.disableModelInvocation ?? options.defaultDisableModelInvocation
   }));
 
-  // Validate every destination before copying staged content or moving any originals.
   const destinations = [...options.guidance, ...obsoleteGuidance].map((item) => ({
     item,
     targetPath: importedGuidancePath(options.repoRoot, item)
@@ -300,7 +299,6 @@ function publishPreparedGuidance(
   }
 }
 
-/** Convert staged guidance and apply its recorded local metadata before publication. */
 export function prepareStagedGuidance(
   guidance: readonly SkillImportRecipeSkill[],
   stagedSkillsRoot: string,
@@ -354,11 +352,13 @@ function transformPreparedReference(referencePath: string) {
   }
 
   if (!existsSync(skillEntryPath)) {
-    throw new MonkeError(`Expected staged Skill entry document at ${skillEntryPath}`);
+    throw new MonkeError(
+      `The reference source is missing ${skillEntryPath}. Check the upstream Skill.`
+    );
   }
 
   if (!lstatSync(skillEntryPath).isFile()) {
-    throw new MonkeError(`Expected staged Skill entry document to be a regular file`);
+    throw new MonkeError(`The reference source must provide a regular file at ${skillEntryPath}.`);
   }
 
   const body = removeLeadingYamlFrontmatter(readFileSync(skillEntryPath, "utf-8"));
@@ -367,7 +367,6 @@ function transformPreparedReference(referencePath: string) {
   redirectEntryLinks(referencePath, skillEntryPath, referenceEntryPath);
 }
 
-/** Supporting documents that link to the renamed entry follow it to MAIN.md. */
 function redirectEntryLinks(referencePath: string, oldEntry: string, newEntry: string) {
   for (const file of new Bun.Glob("**/*.md").scanSync({ cwd: referencePath, dot: true })) {
     const filePath = path.join(referencePath, file);
@@ -384,7 +383,6 @@ function redirectEntryLinks(referencePath: string, oldEntry: string, newEntry: s
         continue;
       }
 
-      // The destination follows `](` in an inline link or `]:` in a definition.
       const escaped = link.raw.replaceAll(/[$()*+.?[\\\]^{|}]/gu, String.raw`\$&`);
 
       const match = new RegExp(String.raw`\](?:\(|:)\s*<?${escaped}`, "u").exec(
@@ -484,7 +482,7 @@ export function assertObsoleteReferencesAreUnconsumed(
 
     if (consumers.length > 0) {
       throw new MonkeError(
-        `Cannot replace Imported reference ${guidance.slug}; it is used by ${consumers.join(", ")}`
+        `Cannot replace Imported reference ${guidance.slug}; it is used by ${consumers.join(", ")}. Update those links before retrying.`
       );
     }
   }

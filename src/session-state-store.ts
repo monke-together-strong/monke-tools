@@ -22,10 +22,7 @@ import { unwrapBoundaryResult, parseOwnedYamlFile, parseOwnedYamlText } from "./
 
 const GLOBAL_PORT_FLOOR = 10_000;
 
-// Reserve a generous flat block per repo so multiple concurrent sessions can each allocate
-// their full port set without exhausting the block. Sized for the heaviest realistic repo
-// (tens of ports per session) times comfortable concurrency headroom; blocks stack from
-// GLOBAL_PORT_FLOOR, so even ~50 repos at this width fit under the 65535 ceiling.
+// Allow each repo to assign ports for concurrent Sessions without resizing its reservation.
 const MIN_REPO_RESERVATION_SIZE = 1000;
 
 const SessionStateIdentitySchema = z.object({
@@ -220,10 +217,8 @@ export class SessionStateStore {
 }
 
 /**
- * List Session states for targeted ownership checks.
- *
- * Invalid state blocks only when it names a participating worktree; broad maintenance remains
- * responsible for reporting unrelated invalid state.
+ * Targeted ownership checks reject invalid state that claims a requested path or whose ownership
+ * cannot be determined. Global Cleanup also reports unrelated invalid state.
  */
 export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths: string[]) {
   const states: SessionState[] = [];
@@ -281,12 +276,7 @@ function parseSessionStateFile(home: string, filePath: string) {
   return state;
 }
 
-/**
- * Parse one Session state file, reporting an unsupported version rather than a shape mismatch.
- *
- * The strict schema pins `version`, so an older record always fails it. Only that failure path pays
- * for a second read; a healthy record is read and parsed once.
- */
+/** Check the version separately after validation fails so an unsupported version gets its own error. */
 function parseSupportedSessionState(filePath: string) {
   try {
     return parseOwnedYamlFile(filePath, SessionStateSchema);
@@ -417,10 +407,9 @@ export function allocateLocalPorts(options: {
       const blockSize = options.reservation.size;
       const inUse = globallyManagedPorts.size;
       throw new MonkeError(
-        `No available ports remain inside the reserved block for ${options.repoConfig.sourceRoot} ` +
-          `(block holds ${blockSize} ports from ${options.reservation.blockStart}, ${inUse} already held by other sessions). ` +
-          `Tear down unused sessions to free ports, or delete the reservation file under ` +
-          `<MONKE_HOME>/repo-reservations and re-run to grow the block.`
+        `No ports are available in the ${blockSize}-port reservation for ${options.repoConfig.sourceRoot}, starting at ${options.reservation.blockStart}. ` +
+          `Across Monke home, ${inUse} ports are assigned to other checkouts. ` +
+          `Use mt chop to remove any unused Sessions that hold ports in that reservation, then retry.`
       );
     }
 

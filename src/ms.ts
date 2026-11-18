@@ -151,7 +151,9 @@ async function resolveProviderArgs(
   try {
     response = JSON.parse(result.stdout);
   } catch {
-    throw new MonkeError(`${command} could not resolve the Diff review URL.`);
+    throw new MonkeError(
+      `${command} could not resolve the Diff review URL. Pass the full pull request or merge request URL.`
+    );
   }
 
   const urlSchema = z.string().refine(isReviewUrl);
@@ -163,7 +165,9 @@ async function resolveProviderArgs(
   ).safeParse(response);
 
   if (result.exitCode !== 0 || !parsed.success) {
-    throw new MonkeError(`${command} could not resolve the Diff review URL.`);
+    throw new MonkeError(
+      `${command} could not resolve the Diff review URL. Pass the full pull request or merge request URL.`
+    );
   }
 
   return [

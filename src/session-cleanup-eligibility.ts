@@ -112,13 +112,11 @@ export interface SessionCleanupDecision {
   kind: "live" | "recovery" | "finalization" | "blocked";
   /** One decision per snapshot member, in the same order. */
   members: SessionCleanupMemberDecision[];
-  /** Whether Cleanup can proceed now, needs archival or resource recovery first, or is blocked. */
   readiness: "ready" | "archive-required" | "resource-recovery-required" | "blocked";
   reasons: SessionCleanupReason[];
   status: CleanupDecision["status"];
 }
 
-/** A Session snapshot with the decision made from exactly that snapshot. */
 export interface SessionCleanupInspection {
   decision: SessionCleanupDecision;
   snapshot: SessionCleanupEvidence;
@@ -235,7 +233,6 @@ function decideSession(
   };
 }
 
-/** Preserve the Session's role assignment when reporting an individual member. */
 export function decideSessionCleanupMember(
   rootSourceRoot: string | null,
   member: SessionCleanupMember
@@ -258,7 +255,6 @@ export function decideSessionCleanupMember(
     };
   }
 
-  // Roles come from this Session, never a caller's worktree/path-name assumption.
   return decideCleanupEligibility({
     ...member.evidence,
     candidate: {
@@ -388,7 +384,6 @@ export async function inspectSessionCleanup(
                 worktreePath: repo.worktreePath
               };
 
-              // A Source that no longer exists is a settled fact, not missing evidence.
               if (!existsSync(repo.sourceRoot)) {
                 snapshot.blockers.push("source-missing");
                 snapshot.problems?.push({
@@ -458,9 +453,8 @@ export async function inspectSessionCleanup(
       })
   );
 
-  // A dependency can change while a later member waits for GitHub. Recheck all
-  // members synchronously after provider reads; do not yield between members.
-  // This pass never yields, so one structure read per Source is as fresh as many.
+  // A dependency can change while a later member waits for GitHub. Recheck all members in
+  // one synchronous pass with a fresh cache, then read Git directly before removal.
   const recheck = memoizeRepoStructure(runtime);
   const recheckReadOnly = readOnlyCleanupRuntime(recheck);
 
@@ -554,7 +548,6 @@ export async function inspectSessionCleanup(
   };
 }
 
-/** List registered worktrees that no retained Session records, per available Source. */
 function discoverUnownedWorktrees(
   runtime: Runtime,
   states: SessionState[],

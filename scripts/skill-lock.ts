@@ -56,7 +56,9 @@ function assertSkillRestoreMarkerEntry(repoRoot: string) {
   const metadata = lstatSync(file, { throwIfNoEntry: false });
 
   if (metadata && !metadata.isFile() && !metadata.isSymbolicLink()) {
-    throw new MonkeError(`Skill restore marker path is obstructed: ${file}`);
+    throw new MonkeError(
+      `Skill restore marker path is obstructed: ${file}. Move the entry and retry.`
+    );
   }
 
   return file;
@@ -74,9 +76,10 @@ export function assertSkillRestoreMarker(repoRoot: string) {
   try {
     accessSync(parent, fsConstants.W_OK + fsConstants.X_OK);
   } catch (cause) {
-    throw new MonkeError(`Skill restore marker parent is not writable and searchable: ${parent}`, {
-      cause
-    });
+    throw new MonkeError(
+      `Skill restore marker parent is not writable and searchable: ${parent}. Restore write and search permissions and retry.`,
+      { cause }
+    );
   }
 
   const entry = lstatSync(file, { throwIfNoEntry: false });
@@ -92,7 +95,9 @@ export function assertSkillRestoreMarker(repoRoot: string) {
     directory.uid !== uid &&
     entry.uid !== uid
   ) {
-    throw new MonkeError(`Skill restore marker cannot be replaced in sticky directory: ${file}`);
+    throw new MonkeError(
+      `Skill restore marker cannot be replaced in sticky directory: ${file}. Ask the marker or directory owner to move the marker and retry.`
+    );
   }
 }
 
@@ -132,7 +137,7 @@ function readRestoreMarkers(repoRoot: string) {
   }
 }
 
-/** Matching accepted bytes need no marker write or upstream fetch. */
+/** Reuse installed guidance only when the recipe, tooling, and delivered files match the marker. */
 export function isSkillRecipeRestored(repoRoot: string, recipe: SkillImportRecipe) {
   assertSkillRestoreMarkerEntry(repoRoot);
   const marker = readRestoreMarkers(repoRoot)[recipe.source];
@@ -168,7 +173,7 @@ export function assertRepoImportIgnoreFile(repoRoot: string) {
   const metadata = lstatSync(file, { throwIfNoEntry: false });
 
   if (metadata && (!metadata.isFile() || metadata.nlink > 1)) {
-    throw new MonkeError(`.gitignore must be a regular file without aliases: ${file}`);
+    throw new MonkeError(`Replace ${file} with a regular file that has no symbolic or hard links.`);
   }
 }
 
@@ -375,7 +380,7 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
   };
 }
 
-/** Remote imports use skills.sh's SHA URL; local Git sources receive an immutable checkout. */
+/** Return a commit-specific importer URL or the path to a detached local checkout. */
 export async function pinnedSkillSource(
   lock: { commit: string; repository: string; subpath: string },
   stagingDirectory: string
@@ -431,7 +436,6 @@ function redirectFetchesToCheckout(
   repository: string,
   checkout: string
 ): Runtime {
-  // Append to inherited Git config parameters rather than replacing them.
   const index = Number(runtime.env.GIT_CONFIG_COUNT ?? 0);
 
   const env = {
@@ -479,7 +483,7 @@ function validateUpstreamLinks(checkout: string) {
   visit(root);
 }
 
-/** Stage a publishing repo and one level of its declared imports as one collection. */
+/** Stage a publishing repo and, when requested, one level of its declared imports. */
 export async function stageGitSkillSource(options: {
   includeDeclaredImports?: boolean;
   previousRecipe?: SkillImportRecipe;
@@ -496,7 +500,7 @@ export async function stageGitSkillSource(options: {
 
   if (!recipe.commit) {
     throw new MonkeError(
-      `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
+      `Skill source ${recipe.source} has no Git pin. Run mt skills update --repo in the repository that declares it.`
     );
   }
 
@@ -662,7 +666,7 @@ async function stageOwnGitSkills(options: {
 
   const { explicit, inspectCollection, ownSelectors, selected } = selectionOptions;
 
-  // The default and alternate catalog installs use separate directories, so run them concurrently.
+  // Wait for both installs before the caller can remove their shared staging directory.
   const [collectionResult, alternateResult] = await Promise.allSettled([
     stagePublisherCollection({
       runtime,
@@ -901,7 +905,9 @@ function copyPublisherSelection(
   const missing = selectors.filter((selector) => !catalog.entries.has(selector.toLowerCase()));
 
   if (missing.length > 0) {
-    throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);
+    throw new MonkeError(
+      `Selected skills not found in ${source}: ${missing.join(", ")}. Check the Skill names in the source.`
+    );
   }
 
   const assessments: SecurityRiskAssessment[] = [];
@@ -1136,7 +1142,7 @@ function stagedSkillSelector(entry: string, slug: string, imported?: SkillImport
   );
 
   if (!frontmatter) {
-    throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
+    throw new MonkeError(`Add YAML frontmatter at the start of ${entry}.`);
   }
 
   const metadata = parseOwnedYamlText(
@@ -1307,7 +1313,7 @@ export async function restoreRepoSkillImports(repoRoot: string) {
   );
 }
 
-/** Restore one accepted Git source without blocking unrelated source updates. */
+/** Restore one accepted Git source. The caller holds the collection's mutation lock. */
 export async function restoreLockedRecipe(
   repoRoot: string,
   recipe: SkillImportRecipe,
@@ -1316,7 +1322,7 @@ export async function restoreLockedRecipe(
 ) {
   if (!recipe.commit) {
     throw new MonkeError(
-      `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
+      `Skill source ${recipe.source} has no Git pin. Run mt skills update --repo in the repository that declares it.`
     );
   }
 
@@ -1358,7 +1364,7 @@ export async function restoreLockedImports(
 
   if (recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
     throw new MonkeError(
-      "Skill lock is incomplete; run mt skills update --repo to pin every recipe before source installation"
+      "Some Skill sources have no Git pin. Run mt skills update --repo in the repository that declares them."
     );
   }
 
@@ -1497,7 +1503,7 @@ function obsoleteImportedGuidance(repoRoot: string, guidance: readonly SkillImpo
   });
 }
 
-/** Generated roots belong only to the current selected guidance. */
+/** Remove guidance outside the selection after checking for consumers of obsolete references. */
 export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
   const obsolete = obsoleteImportedGuidance(repoRoot, guidance);
   assertObsoleteReferencesAreUnconsumed(

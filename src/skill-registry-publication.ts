@@ -126,7 +126,6 @@ function planRegistryImports(root: string, guidance: string, includeNewSources: 
   return { imports, next, registryRoot: root };
 }
 
-/** Bundled guidance a registry copies for one recipe, replacing its obsolete items. */
 interface BundledImport {
   /** Convert the registry's retained skill bytes instead of copying the publisher's bytes. */
   converted: boolean;
@@ -239,7 +238,6 @@ function publishBundledImports(
   });
 }
 
-/** Follow the bundled declarations, returning the guidance they replaced and copied. */
 export function followBundledImports(runtime: Runtime, root: string, guidance: string) {
   const plan = planRegistryImports(root, guidance, true);
   const { imports, next } = plan;
@@ -391,7 +389,6 @@ export function preflightSkillRegistryInstall(
   }
 }
 
-/** Check the proposed full collection against existing target ownership before publishing it. */
 export function preflightRegistryChange(
   runtime: Runtime,
   root: string,

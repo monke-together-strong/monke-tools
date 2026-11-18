@@ -75,7 +75,6 @@ describe("oxc-config frameworks", () => {
       root: makeTempDir("oxc-frameworks")
     });
 
-    // Repository-wide React Doctor extends the config, so only its TanStack rules form overrides.
     const reactDoctorOverrides = (config.overrides ?? []).filter((override) =>
       Object.keys(override.rules ?? {}).some((rule) => rule.startsWith("react-doctor/"))
     );

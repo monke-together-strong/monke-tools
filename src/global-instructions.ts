@@ -60,7 +60,6 @@ export function preflightRemoveGlobalInstructions(
   assertGlobalInstructionsWritable(prepared.filePath);
 }
 
-/** Reconcile the selected harness's Managed instruction section from the source snapshot. */
 export function reconcileGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
@@ -208,7 +207,9 @@ function findManagedInstructionMarkers(content: string) {
     ends.length !== 1 ||
     start > endMarker
   ) {
-    throw new MonkeError("Refusing to modify malformed Global agent instructions markers");
+    throw new MonkeError(
+      "Global agent instructions have invalid management markers. Repair the markers before retrying."
+    );
   }
 
   let end = endMarker + MANAGED_INSTRUCTIONS_END.length;

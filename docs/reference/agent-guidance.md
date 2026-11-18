@@ -24,23 +24,23 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Reference source tree**: The portion of the **Skill source tree** containing **Distributed references**.
 
-**Skill slug**: The filesystem name of one **Distributed skill** inside the **Skill source tree**. _Avoid_: Skill name, package name, agent label
+**Skill slug**: The directory name of a **Distributed skill** or **Distributed reference** in the **Skill source tree**. _Avoid_: Skill name, package name, agent label
 
 **Agent skill name**: The name declared inside a **Distributed skill** for agent-facing selection and display. _Avoid_: Skill slug, folder name, package skill name
 
-**Model-invoked skill**: A **Distributed skill** whose agent metadata permits the model to select it automatically from its description. This capability is independent of whether a human may invoke the skill explicitly. _Avoid_: User-invoked skill, always-loaded guidance
+**Model-invoked skill**: A **Distributed skill** whose agent metadata permits the model to select it automatically from its description. _Avoid_: Always-loaded guidance
 
-**User-invoked skill**: A **Distributed skill** whose agent metadata permits a human to invoke it explicitly. This capability is independent of whether the model may select the skill automatically. _Avoid_: Model-invoked skill, manual-only skill
+**User-invoked skill**: A **Distributed skill** whose agent metadata permits a human to invoke it explicitly.
 
-**Explicit-only skill**: A **User-invoked skill** that the model may not select automatically.
+**Explicit-only skill**: A **User-invoked skill** that the model may not select automatically. _Avoid_: Manual-only skill
 
 **Model invocation override**: A local choice recorded by a **Skill import recipe** that replaces an imported skill's upstream model-invocation setting. It may be a source-wide default or a per-skill choice.
 
-**Internal skill**: A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**.
+**Internal skill**: A monke-tools-owned **Distributed skill** shipped with the tool.
 
 **Imported guidance**: Agent guidance imported from a **Skill import source** and distributed as either an **Imported skill** or an **Imported reference**, whether bundled with monke-tools or registered personally.
 
-**Imported skill**: A discoverable **Imported guidance** item distributed as a **Distributed skill**.
+**Imported skill**: An **Imported guidance** item distributed as a **Distributed skill**.
 
 **Distributed reference**: Non-invocable agent guidance packaged inside the **Skill source tree** for explicit use by skills or other files.
 
@@ -72,19 +72,19 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Skill source folder**: The folder containing the authoritative skill files for a linked or installer-backed **Skill import**, including skills created or adopted into Monke home. _Avoid_: Canonical skill collection, Agent skill root, Skill projection
 
-**Skill import recipe**: The source, Git commit pin, selections, and local import choices used to refresh **Imported guidance** from one **Skill import source**. Choices include **Import kind**, **Model invocation override**, and description overrides.
+**Skill import recipe**: The source, selections, and local overrides used to refresh **Imported guidance** from one **Skill import source**. Git recipes also record a commit pin.
 
 **Skill import recipe store**: A collection of **Skill import recipes** for one imported guidance collection.
 
-**Repo import recipes**: The **Skill import recipes** declared in a repo's root `monke.yml` to publish **Imported guidance** alongside its own **Skill source tree**. monke-tools uses its own Repo import recipes for release guidance. _Avoid_: Bundled import recipes
+**Repo import recipes**: The **Skill import recipes** declared in a repo's root `monke.yml` to publish **Imported guidance** alongside its own **Skill source tree**.
 
-**Skill registry**: A local **Skill import recipe store** for an imported guidance collection. A global registry belongs to one machine's user. A project registry belongs to one local clone and is shared across its worktrees. _Avoid_: Repo import recipes, monke-tools repository
+**Skill registry**: A local **Skill import recipe store** for an imported guidance collection. A global registry belongs to one **Monke home**. A project registry belongs to one local clone and is shared across its worktrees. _Avoid_: Repo import recipes, monke-tools repository
 
 **Skill lock**: The full Git commit pins that identify accepted versions of repository-backed **Imported guidance**. Linked collections and installer commands do not have immutable source pins.
 
 **Skill source revision**: The accepted version of a repository-backed **Skill import source**, which may advance while its selected **Imported guidance** stays identical.
 
-**Guidance digest**: The content identity of restored **Imported guidance** after local choices are applied. Only local restoration state stores the digest, to detect edits and reuse matching files.
+**Guidance digest**: The content identity of restored **Imported guidance** after local choices are applied. A restore marker uses it to detect edits and reuse matching files.
 
 **Imported guidance snapshot**: A captured state of an **Imported guidance** collection, including its supporting files and **Skill lock**.
 
@@ -116,18 +116,12 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Skill install preference**: The remembered set of **Skill install targets** used by later local installs.
 
-**Skills Configure**: Selection of **Skill install targets** as the user's **Skill install preference**.
-
 ## Relationships
 
-- A **Skill projection** exposes compatible skills and references in one **Agent skill root**. A **Managed skill namespace** groups them; a **Flat skill projection** exposes skills directly.
-- **Shared distributed skills** apply across compatible harnesses; **Harness-specific skills** apply only to their named harness.
-- Each **Imported guidance** item has one **Imported guidance owner** and one **Import kind**. Its recipe retains the source and choices needed to refresh it.
-- **Repo import recipes** belong to their publishing repo. monke-tools declares its own imports this way. A global **Skill registry** includes bundled imports and personal or private sources. A project registry contains only explicitly registered sources. Each registry retains its recipes and invocation choices independently.
+- A global **Skill registry** can include imports from the active Monke install and personal sources. A project registry contains explicitly registered sources for that clone.
 - A **Skill import** selects a source collection. **Skill install preferences** select distribution targets; an installer's agent-specific output folder does not restrict those targets.
 - Authored skills from linked and installer-backed sources share editing authority with their **Skill source folder**. Their global and project **Skill projections** expose that same guidance; source refreshes may replace instruction edits. Publisher-declared imports and aliases into their generated folders use consumer-owned copies, preserving the publisher's pins and policies.
 - A skill may be both **Model-invoked** and **User-invoked**.
 - A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes and selection changes, including a skill disappearing and returning; without an override, upstream invocation metadata remains authoritative.
 - A **Skill source revision** may change without changing its **Guidance digest**. The resulting lock-only comparison is still a **Skill update review**.
-- **Skill install preferences** select targets. Projections and managed instruction sections belong to monke-tools; unrelated agent guidance remains user-owned.
-- **Team coding baseline** applies across repos. **Repo coding standards** add repo-specific constraints.
+- Projections and managed instruction sections belong to monke-tools. Other agent guidance remains user-owned.

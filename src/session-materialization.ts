@@ -7,8 +7,7 @@ import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import type { SessionMaterializationCheckpoint, SessionRepoState, SessionState } from "./types.ts";
 
-// One bounded-concurrency policy, applied per lifecycle phase so that Worktree preparation and
-// Repo materialization each stay within the same cap rather than sharing one queue.
+// Use separate limits so Repo materialization can run while other worktrees are prepared.
 const MAX_CONCURRENT_WORKTREE_PREPARATIONS = 4;
 const MAX_CONCURRENT_REPO_MATERIALIZATIONS = 4;
 
@@ -49,7 +48,6 @@ export interface RunSessionMaterializationOptions<TPrepared, TResult> {
   store: SessionStateStore;
 }
 
-/** Schedule and persist one complete dependency-gated Materialization generation. */
 export async function runSessionMaterialization<TPrepared, TResult>(
   options: RunSessionMaterializationOptions<TPrepared, TResult>
 ) {
@@ -342,7 +340,6 @@ function beginGeneration<TPrepared, TResult>(
   };
 }
 
-/** Render the quiescent per-repo receipt for one failed Materialization generation. */
 export function formatFailureReceipt(
   state: SessionState,
   options: { retryCommand: string; rootSourceRoot: string }

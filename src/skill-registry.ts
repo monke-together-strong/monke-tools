@@ -78,7 +78,6 @@ type SkillsRequest =
   | { action: "list" }
   | { action: "restore" };
 
-/** Register imports, get their content, and distribute the resulting shared collection. */
 export function runSkillsRegistry(
   runtime: Runtime,
   request: SkillsRequest,

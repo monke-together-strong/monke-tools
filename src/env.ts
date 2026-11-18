@@ -6,10 +6,6 @@ import { copyMissingEntries } from "./non-clobbering-copy.ts";
 import { samePath } from "./path-identity.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
-/**
- * Seed local env, agent, PR, and Monke config files and configured seed paths from the source
- * checkout.
- */
 export function seedWorktreeFiles(
   config: { seedPaths: readonly string[]; sourceRoot: string },
   worktreeRoot: string,
@@ -446,7 +442,6 @@ function replaceUrlPort(value: string, newPort: number, location: string) {
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
 
-/** Read the port an env value names as a number or a URL port, if it names one. */
 function readPort(rawValue: string) {
   const trimmed = rawValue.trim();
 

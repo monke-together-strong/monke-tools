@@ -1,4 +1,3 @@
-/** Compute one SHA-256 digest with Bun's native cryptographic hasher. */
 export function sha256(value: Bun.BlobOrStringOrBuffer) {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
 }

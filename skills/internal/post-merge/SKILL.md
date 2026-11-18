@@ -57,7 +57,7 @@ continue below. Running this skill is the user's request for that thread; in T3
 Code, start it with `t3_thread_launch`. Finish here only when no thread tool
 exists. Otherwise:
 
-1. Start a new thread on GPT 6.1 Sol, high effort, that runs post-merge for the
+1. Start a new thread on GPT 6.2 Sol, high effort, that runs post-merge for the
    PR, or the pushed commit with its base and source branches, using this skill
    and its checkout. Link it.
 2. Finish this thread in the same turn. The deploy gate, contract checks,
@@ -97,18 +97,12 @@ In T3 Code, rename the thread with `t3_thread_update` to
 push, where the subject names the behavior under check
 and its environment, such as `Verify #123: web embeds on production`.
 
-Run `mt prs wait-for-gate` on the merge commit, and wait for it to exit:
+Use `mt prs wait-for-gate --help` for gate selectors. Wait on the merge commit.
+For Railway, check the commit status context of each service the change deploys.
 
-```sh
-mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --workflow <name> [--job <name>]
-mt prs wait-for-gate --repo <owner/name> --sha <mergeCommit> --railway "<project> - <service>"
-```
-
-- **Deployment**: the deploy job within its workflow, or, for Railway, the
-  commit status context of each service the merged change deploys.
-- **Library release PR**: the release workflow, then confirm the release PR
-  includes this PR's release entry and hand off its URL. When the user asks to
-  publish the new version, follow [library release](references/library-release.md).
+For a library release PR, wait for the release workflow and confirm the release
+PR includes this change's entry. Hand off its URL. When the user asks to publish
+the new version, follow [library release](references/library-release.md).
 
 On `skipped`, the gate did not deploy, so skip its deployment checks. On
 `timed_out`, ask before waiting longer. When the gate has no signal `mt prs wait-for-gate`

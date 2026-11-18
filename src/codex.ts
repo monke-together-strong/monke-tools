@@ -2,7 +2,6 @@ import { createLogger } from "./logger.ts";
 import { findExecutable } from "./runtime.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 
-/** Open a local checkout as a Codex workspace. */
 export function openCodexWorkspace(runtime: Runtime, targetPath: string) {
   const logger = createLogger(runtime);
   const url = formatCodexWorkspaceUrl(targetPath);

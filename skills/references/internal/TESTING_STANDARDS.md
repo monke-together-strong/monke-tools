@@ -1,5 +1,7 @@
 ## Tests
-- Keep a test only if it fails when the behavior breaks and passes when only the internals change. See [principle-test-behavior-not-implementation](../../imported/principle-test-behavior-not-implementation/SKILL.md).
+
+- Apply [principle-test-behavior-not-implementation](../../imported/principle-test-behavior-not-implementation/SKILL.md)
+  to every candidate.
 - Before adding a test, look for existing coverage, including tests that reach the code through its callers. Extend an existing test or table instead of adding a near-duplicate.
 - Test at an existing seam when one reaches the behavior. Add a new seam only when none does, as high as possible; fewer seams is better.
 - Follow prior art: match the structure, helpers, and fixtures of similar tests in the codebase.

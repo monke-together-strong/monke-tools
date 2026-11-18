@@ -151,7 +151,7 @@ export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchem
 
   if (instructions.length > MAX_INSTRUCTION_CHARACTERS) {
     throw new MonkeError(
-      "Generated reviews.path_instructions instructions exceed CodeRabbit's 20,000-character limit"
+      "Generated reviews.path_instructions instructions exceed CodeRabbit's 20,000-character limit. Shorten the included guidance and render the config again."
     );
   }
 
@@ -160,7 +160,7 @@ export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchem
 
   if (template.reviews.path_instructions.some((instruction) => instruction.path === "**/*")) {
     throw new MonkeError(
-      'Template reviews.path_instructions must not contain the generated path "**/*"'
+      'Template reviews.path_instructions must not contain the generated path "**/*". Remove that entry and render the config again.'
     );
   }
 

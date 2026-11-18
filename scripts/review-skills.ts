@@ -9,7 +9,7 @@ export async function runReviewSkills(argv = process.argv.slice(2)) {
   const program = new Command().name("bun run skills:review");
   program
     .command("clear")
-    .description("Clear saved complete skill reviews")
+    .description("Clear saved skill reviews")
     .action(async () => {
       await clearSkillReviews();
     });

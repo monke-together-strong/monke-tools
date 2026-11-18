@@ -96,13 +96,11 @@ const SkillImportRecipeStoreSchema = z.strictObject(
   { error: "Skill import recipe store must be a JSON object" }
 );
 
-/** Recipes for one bundled or machine-local imported guidance collection. */
+/** Recipes for one imported guidance collection. */
 export type SkillImportRecipeStore = z.output<typeof SkillImportRecipeStoreSchema>;
 
-/** Local role assigned to one selected upstream guidance item. */
 export type ImportedGuidanceKind = "skill" | "reference";
 
-/** Source-scoped recipe used to rerun a Skill import. */
 export type SkillImportRecipe = z.output<typeof SkillImportRecipeSchema>;
 
 /** Mapping between an upstream Skill import selector and local Skill slug. */
@@ -317,7 +315,6 @@ function compactRecipe(recipe: SkillImportRecipe) {
   };
 }
 
-/** Keep deterministic compact recipes in machine-local JSON. */
 export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecipeStore) {
   const normalized = normalizeImportRecipeStore(store);
   const storePath = path.join(repoRoot, SKILL_LOCK_PATH);
@@ -328,7 +325,7 @@ export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecip
   );
 }
 
-/** Change only the skills YAML node, preserving the rest of the document. */
+/** Preserve YAML outside `skills`, including comments and resolved values. */
 export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportRecipeStore) {
   const file = path.join(repoRoot, "monke.yml");
   const original = existsSync(file) ? readFileSync(file, "utf-8") : "";

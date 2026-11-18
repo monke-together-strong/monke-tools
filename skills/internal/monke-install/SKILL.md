@@ -6,30 +6,44 @@ disable-model-invocation: true
 
 # Monke installation
 
-Check availability with `command -v mt` and identity with `mt --version`. For local development, run `vp install` then `vpr install:local` in the monke-tools source checkout using [Vite+](https://viteplus.dev/guide/). Refresh after CLI changes before testing in a consumer repo. Local skill edits are immediately visible through source links; adding or removing skill directories requires `mt skills configure` to refresh links.
+Check which binary is active with `command -v mt` and `mt --version`.
 
-Local installation automatically restores exact imported guidance from the Skill lock. After reverting the lock or switching its source version, rerun `vpr install:local` in the installed source checkout. For source-maintenance updates, complete content reviews, or review-cache cleanup, read [maintaining imported guidance](https://github.com/monke-together-strong/monke-tools/blob/main/docs/skill-imports.md).
+For local development, run `vp install` and `vpr install:local` in the monke-tools
+Source checkout. Refresh after CLI changes before testing in a Consumer repo.
+Local skill edits appear through source links. After adding or removing skill
+directories, run `mt skills configure` to refresh links. After changing an
+import pin in `monke.yml`, rerun `vpr install:local` to restore its guidance.
 
-For the latest stable release on macOS arm64 or Linux x64:
+For a stable release on macOS arm64 or Linux x64, run:
 
-```bash
+```sh
 curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh | sh
 ```
 
-The installer prompts for Codex, Claude, Cursor, or one custom skill root, then saves the selection. Later installs reuse it. `mt skills configure` changes targets or retries skill/instruction reconciliation. Noninteractive release installs without saved or explicit targets activate the install without distributing skills and recommend that command.
+Use `mt skills configure` to change distribution targets after installation.
+For a noninteractive release install with explicit targets, run:
 
-For automation, add `--targets codex claude cursor` and/or `--custom-target /absolute/path/to/agent/skills` to the local installer command. For the release installer, replace the trailing `sh` with `sh -s --` followed by those options. Explicit selections replace saved preferences.
+```sh
+curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh |
+	sh -s -- --targets codex claude
+```
 
-`mt update --check` checks availability without changing installation state; successful checks exit zero whether current or outdated. `mt update` activates the highest stable official release without prompting. Both prefer nonempty `GH_TOKEN` over `GITHUB_TOKEN`, otherwise using anonymous access. Updating a local install switches to a release while preserving the source checkout; run `vpr install:local` there to resume local development.
+Pass the same target options with `vpr install:local` for local automation.
+Explicit options replace the saved targets. Run `mt shell install` from Bash
+or Zsh and follow its activation instructions.
 
-## Update recovery
+## Update and recovery
 
-Modified, added, or removed installed release skills/references block both update forms before network access. Preserve every listed edit first. To stay on releases, restore those paths from the bundle identified by `releaseTag` in the active `install-manifest.json`, then retry. To keep authoring, copy edits into the source checkout and activate a local install. Local refresh does not migrate release edits automatically.
+Run `mt update --check` to check for a release and `mt update` to activate it.
+Read the check output to distinguish an available update from an up-to-date
+install. Updating a local install activates a release. To resume development,
+run `vpr install:local` in the preserved Source checkout.
 
-Failures before activation leave the previous install selected: correct the reported cause and retry. Skill/instruction or dependency failures after activation leave the new install active: retry `mt skills configure` or `mt install-dependencies` as reported. Report unresolved reconciliation separately from install activation.
+If installed guidance differs from the release, preserve those edits before
+updating. Restore the changed paths from the bundle named by `releaseTag` in the
+active `install-manifest.json` to stay on releases. To keep editing, carry the
+changes into the Source checkout and activate a local install.
 
-## Shell and dependencies
-
-`mt shell install` configures the current Bash or Zsh startup file; follow its activation instructions. Unsupported shells receive manual PATH guidance. `mt shell init bash` or `mt shell init zsh` prints the adapter.
-
-`mt install-dependencies` reconciles Codiff on Apple Silicon Macs against the active install's minimum version. Missing or outdated Homebrew-owned Codiff is installed/upgraded via the checksummed cask; outdated executables of unknown ownership are left untouched. Other platforms do not invoke Homebrew.
+After an activation failure, check `mt --version` before retrying. Skill or
+dependency reconciliation can fail after the new version is already active.
+Retry the reported `mt skills configure` or `mt install-dependencies` command.

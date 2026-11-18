@@ -1,8 +1,8 @@
 import { parseDocument } from "yaml";
 import * as z from "zod";
 
-// pnpm 12.1.0's JS launcher removes these native-launcher entries from its
-// bootstrap document even for --version. Never execute a package manager here.
+// The pnpm 12.1.0 JavaScript launcher removes these native-launcher entries even for
+// `pnpm --version`. Cleanup checks the recorded edit without running pnpm.
 const blocks = [
   "      '@pnpm/exe':\n        specifier: 12.1.0\n        version: 12.1.0\n",
   "  '@pnpm/exe@12.1.0':\n    resolution: {integrity: sha512-7oghYElCSMURxcBNik6rvOXViwzI8xUsr5VFYlr9xAupSKY9F0L89P+LvlLo4bMSkVo7a4OmpuK9pzYTwYlYCg==}\n    engines: {node: '>=18.*'}\n    hasBin: true\n\n",
@@ -28,7 +28,7 @@ export const pnpmBootstrapManifestSchema = z.object({ packageManager: z.string()
 
 type PnpmBootstrapManifest = z.infer<typeof pnpmBootstrapManifestSchema>;
 
-/** Recognize only the reproduced directional bootstrap edit; preserve every application byte. */
+/** Accept only removal of the known launcher entries with the rest of the lockfile unchanged. */
 export function isPnpmBootstrapDeletion(
   before: string,
   after: string,

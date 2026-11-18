@@ -296,7 +296,7 @@ describe("Swing", () => {
     });
 
     expect(() => runMonke({ args: ["swing", "missing"], cwd: repoRoot, monkeHome: home })).toThrow(
-      `Worktree or Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`
+      `No worktree or Session named "missing" exists for ${repoRoot}. Run mt spawn missing to create it.`
     );
   });
 

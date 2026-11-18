@@ -363,7 +363,7 @@ function resolvePreferredDefaultBranchRef(runtime: Runtime, context: RepoContext
   try {
     ({ ref } = resolveDefaultBranchRef(runtime, context.sourceRoot, { refresh: false }));
   } catch {
-    // A repository without a resolvable default branch has no preferred ref.
+    // The caller can still compare candidate refs without a preferred default.
   }
 
   return ref;

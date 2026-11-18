@@ -280,7 +280,6 @@ apps: {}
     expect(result.stderr).toContain("Chopped Session banana");
   });
 
-  // The Ordinary worktree tables below cover staged, modified, and untracked files.
   it("discards a current Session with modified files under --force and preserves its branch", () => {
     const sandbox = makeTempDir("chop-force-current-session");
     const home = path.join(sandbox, "home");
@@ -1127,7 +1126,6 @@ external:
     expect(existsSync(fixture.statePath)).toBeTruthy();
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
 
-    // Recovery must still work when worktrees were removed outside mt.
     git(fixture.depRoot, ["worktree", "remove", fixture.depWorktree]);
     git(fixture.root, ["worktree", "remove", fixture.rootWorktree]);
     writeFileSync(allow, "", "utf-8");
@@ -1418,7 +1416,7 @@ apps: {}
     expect(result.stdout).toBe(`${fixture.sourceRoot}\n`);
     expect(result.stderr).toContain(`Chopped Ordinary worktree ${fixture.worktreePath}`);
     expect(result.stderr).toContain(
-      `WARNING: your shell is still in the removed worktree; switch to ${fixture.sourceRoot}`
+      `Warning: your shell is still in the removed worktree. Switch to ${fixture.sourceRoot}.`
     );
   });
 
@@ -1882,7 +1880,7 @@ apps: {}
 
     expect(() => {
       runMonke({ args: ["chop"], cwd: sourceRoot, monkeHome: home });
-    }).toThrow(/Source checkout requires an explicit target/u);
+    }).toThrow(/Run mt chop <target> from the Source checkout/u);
     expect(() => {
       runMonke({ args: ["chop", sourceRoot, "--force"], cwd: sourceRoot, monkeHome: home });
     }).toThrow(/Cannot Chop the Source checkout/u);
@@ -2033,7 +2031,7 @@ apps: {}
 
     expect(readFileSync(directivePath, "utf-8")).toBe(fixture.sourceRoot);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain(`Switched to ${fixture.sourceRoot}`);
+    expect(result.stderr).toContain(`Requested shell switch to ${fixture.sourceRoot}`);
   });
 
   it("does not run Cleanup commands or mutate Session state for Ordinary Chop", () => {

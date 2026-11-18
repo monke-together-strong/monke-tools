@@ -42,13 +42,15 @@ function requestShellDirectoryWithFallback(
   const logger = createLogger(runtime);
 
   if (writeDirectoryDirective(runtime, targetPath)) {
-    logger.success(`Switched to ${targetPath}`);
+    logger.success(`Requested shell switch to ${targetPath}`);
 
     return true;
   }
 
   if (removedCurrentWorktree) {
-    logger.warning(`WARNING: your shell is still in the removed worktree; switch to ${targetPath}`);
+    logger.warning(
+      `Warning: your shell is still in the removed worktree. Switch to ${targetPath}.`
+    );
   } else {
     logger.info(`Switch to ${targetPath}`);
   }
@@ -57,10 +59,10 @@ function requestShellDirectoryWithFallback(
 
   if (isShellIntegrationConfigured(runtime)) {
     logger.hint(
-      "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter."
+      "Shell integration is configured but inactive. Restart your shell or run mt through the shell integration."
     );
   } else {
-    logger.hint("Enable automatic switching with: mt shell install");
+    logger.hint("Run mt shell install to enable automatic switching.");
   }
 
   return false;
@@ -219,7 +221,7 @@ function requireSupportedShell(shellName: string) {
 }
 
 function isSupportedShell(shellName: string): shellName is SupportedShell {
-  // SAFETY: membership in the immutable literal tuple establishes the SupportedShell union.
+  // SAFETY: Widening the tuple accepts any search string while membership still checks the supported literals.
   return (SUPPORTED_SHELLS as readonly string[]).includes(shellName);
 }
 

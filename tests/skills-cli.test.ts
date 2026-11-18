@@ -734,7 +734,7 @@ describe("skills CLI", () => {
             onStdout() {}
           })
         )
-      ).rejects.toThrow("Refusing to modify malformed Global agent instructions markers");
+      ).rejects.toThrow("Global agent instructions have invalid management markers");
       expect(readFileSync(codexInstructions, "utf-8")).toBe(malformedContent);
       expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toContain(
         "Team baseline."

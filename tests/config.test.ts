@@ -566,7 +566,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Dependency cycles are not supported/u
+      /Dependency cycle includes.*Update the external declarations in monke.yml/u
     );
   });
 

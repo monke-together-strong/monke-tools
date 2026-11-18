@@ -111,7 +111,6 @@ export function expectedReleaseIdentityFromEnvironment(
   };
 }
 
-/** Activate a verified Release bundle and finish its installation-adjacent work. */
 export async function runActivateReleaseInstall(
   runtime: Runtime,
   options: ActivateReleaseInstallOptions
@@ -285,7 +284,6 @@ function removeEmptyDirectory(directory: string) {
   }
 }
 
-/** Activate a fully built Local tool install and finish its installation-adjacent work. */
 export async function runActivateLocalInstall(
   runtime: Runtime,
   options: ActivateLocalInstallOptions

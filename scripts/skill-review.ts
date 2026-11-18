@@ -118,7 +118,10 @@ export function snapshotSkillGuidance(
   writeImportRecipeStore(destination, store);
 }
 
-/** Every incomplete migration retry compares against the original committed imported tree. */
+/**
+ * Without a saved baseline, a migration retry uses the committed copies of previously tracked
+ * imports.
+ */
 export function snapshotSkillUpdateBaseline(
   repoRoot: string,
   destination: string,
@@ -263,8 +266,7 @@ export async function saveSkillComparison(
       );
     };
 
-    // An interrupted publisher can leave a newer ref transaction with the old
-    // ledger. Recover from the durable ledger before creating or pruning objects.
+    // If publication stops between updating refs and replacing the ledger, the ledger still owns retention.
     const recordedRefs = git([
       "for-each-ref",
       "--format=%(refname) %(objectname)",
@@ -397,7 +399,7 @@ export async function openSkillComparison(
     });
   } catch (cause) {
     throw new MonkeError(
-      `Skill changes remain applied; review delivery failed. Reopen with:\n${reopen}\n${cause instanceof Error ? cause.message : String(cause)}`
+      `The skill review was saved, but the diff viewer did not open. To reopen it, run:\n${reopen}\n${cause instanceof Error ? cause.message : String(cause)}`
     );
   }
 }
@@ -407,7 +409,7 @@ export async function clearSkillReviews(runtime = createRuntime()) {
     rmSync(reviewPaths(runtime).root, { force: true, recursive: true });
   });
   runtime.writeStdout(
-    "Cleared saved skill reviews. Existing review links and windows are invalidated.\n"
+    "Cleared saved skill reviews. Saved review commands can no longer reopen them.\n"
   );
 }
 
@@ -448,8 +450,6 @@ export async function reviewSkillRevisions(
               "skills"
             ))
         ) {
-          // Reconstruct accepted pins with current tooling. Pre-lock history has only
-          // committed imported bytes, so preserve those when no repo recipe is declared.
           await restoreSkillImports(checkout, false);
         }
 

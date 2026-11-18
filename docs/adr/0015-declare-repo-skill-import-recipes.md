@@ -7,10 +7,9 @@ parsing derives repository URLs, subpaths, and update refs. Monke restores pinne
 content with its current import tooling. Content digests and tooling identities
 belong only to gitignored restore markers.
 
-`mt skills` supports add, restore, update, list, remove, and policy in repo scope.
-Only the `skills` YAML node changes when Monke writes a recipe. `apps` is optional,
-so repos can declare imports without Session configuration. Restored guidance
-stays ignored. Hand edits have the same effect as commands after restore.
+Monke edits only the `skills` YAML node when it writes repo recipes. Repos can
+declare imports without Session configuration. Restored guidance stays ignored.
+Hand edits take effect after restore.
 
 This supersedes [ADR 0002](0002-import-skills-through-skills-cli-wrapper.md)'s
 rejection of runtime import commands and its grouped selection requirement.

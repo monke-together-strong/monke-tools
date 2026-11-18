@@ -23,7 +23,10 @@ import { MonkeError } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
-/** Preserve the exact untracked bundle in an immutable, private archive before Session removal. */
+/**
+ * Archive the untracked files privately before removal. Recheck the bytes after Cleanup commands
+ * and before removing the worktree.
+ */
 export function archiveCleanupFiles(runtime: Runtime, home: string, evidence: CleanupEvidence) {
   const proof = evidence.pendingWork;
   const { sourceRoot, worktreePath } = evidence.candidate;
@@ -128,7 +131,6 @@ const ArchiveSchema = z.object({
   worktreePath: z.string()
 });
 
-/** Check the retained copy again after cleanup hooks, immediately before removal. */
 export function assertCleanupArchive(
   runtime: Runtime,
   archivePath: string,

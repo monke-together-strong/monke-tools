@@ -14,7 +14,7 @@ import { dlopen } from "bun:ffi";
 import { closeSync, openSync } from "node:fs";
 import { constants } from "node:os";
 const [library, definitions, command, ...args] = process.argv.slice(1);
-// No user code runs until MT durably records this PID and future process group.
+// Wait for mt to record the process group when the caller protects a checkout lock.
 process.on("disconnect", () => process.exit(1));
 process.once("message", (message) => {
   if (message !== "start") process.exit(1);
@@ -40,8 +40,8 @@ process.once("message", (message) => {
 
 /**
  * A separate process group in the same Unix session preserves the controlling terminal. Spawn the
- * returned command with IPC and send "start" once its PID is recorded; call restore() after it
- * exits to return the terminal to the original foreground group.
+ * returned command with IPC. If the caller owns a checkout lock, record the PID before sending
+ * "start". Call restore() after exit to return the terminal to its original foreground group.
  */
 export function prepareForegroundCommand(command: string, args: string[]) {
   const library = process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6";

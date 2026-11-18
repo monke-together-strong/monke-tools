@@ -41,7 +41,8 @@ export interface CreateOxlintConfigOptions extends OxlintConfig {
   frameworks?: FrameworkScopes;
   /**
    * Directory holding the config, whose package manifests are checked for framework dependencies.
-   * Defaults to the nearest directory at or above the working directory that contains `.git`.
+   * Defaults to the closest directory at or above the working directory that contains `.git`.
+   * Outside a Git checkout, defaults to the working directory.
    */
   root?: string;
   /** Files receiving framework-neutral test policy, including test helpers. */
@@ -157,7 +158,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       // Negated branches are often clearest for guard clauses and explicit definedness checks.
       "no-negated-condition": "off",
       "no-nested-ternary": "off",
-      // Declaration order is a readability choice; TypeScript catches unsafe temporal-dead-zone access.
+      // Leave declaration order to the author. TypeScript checks direct access before initialization.
       "no-use-before-define": ["error", { classes: false, functions: false, variables: false }],
       "no-warning-comments": "off",
       // Read and validate environment variables through a centralized configuration boundary.
@@ -179,8 +180,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
       "sort-keys": "off",
-      // Optional-result functions exit early with a bare `return`, which this rule rejects.
-      // noImplicitReturns already rejects falling off the end.
+      // Allow a bare guard return in a function that otherwise returns a value.
       "typescript/consistent-return": "off",
       "typescript/explicit-module-boundary-types": "off",
       "typescript/no-extraneous-class": ["error", { allowWithDecorator: true }],
@@ -208,9 +208,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "unicorn/no-array-reduce": "off",
       "unicorn/no-negated-condition": "off",
       "unicorn/no-nested-ternary": "off",
-      // Optional-result functions can end only with `return undefined`: noImplicitReturns rejects
-      // falling off the end, and no-useless-return rejects a final bare `return`. This rule flags
-      // `return undefined` unless the return type is annotated.
+      // Allow `return undefined` with an inferred return type. `noImplicitReturns` can require an
+      // explicit return, and `no-useless-return` rejects a final bare `return`.
       "unicorn/no-useless-undefined": "off",
       ...rules
     },

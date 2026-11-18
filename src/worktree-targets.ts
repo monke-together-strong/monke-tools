@@ -119,7 +119,7 @@ export function resolveLocalWorktreeTarget(
       (target) => samePath(target.path, selected.path) && target.branch === selected.branch
     );
   } catch {
-    // A stale or missing worktree has no resolvable target.
+    // A checkout can disappear while the picker is open. The caller can choose again.
   }
 
   return resolvedTarget;

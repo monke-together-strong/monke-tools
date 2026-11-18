@@ -82,7 +82,6 @@ export interface SwingOptions {
   codex?: boolean;
 }
 
-/** Navigate with the Clack-backed interactive Swing picker used by the real CLI. */
 export async function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOptions = {}) {
   const home = getMonkeHome(runtime);
 
@@ -373,7 +372,7 @@ async function resolveStoredTarget(
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {
       throw new MonkeError(
-        `Worktree or Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn ${target.session} instead.`
+        `No worktree or Session named "${target.session}" exists for ${rootSourceRoot}. Run mt spawn ${target.session} to create it.`
       );
     }
   }

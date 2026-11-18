@@ -1,6 +1,3 @@
-Tegami publishes versioned, non-private workspace packages. Today that is
-`@monke-together-strong/oxc-config` alone. A change to one of those packages must include a
-`.tegami/` release entry naming that package with its version impact. The `monke-tools` CLI is
-released through its own bundle workflow, so its changes never add a `.tegami/` entry.
-Put the release-note body under a Markdown heading (e.g. `## Fix configuration`) after the YAML
-frontmatter.
+For a change to a published workspace package, add a `.tegami/` release entry
+naming the package and its version impact. Put the release notes under a Markdown
+heading after the YAML frontmatter, such as `## Fix configuration`.

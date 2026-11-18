@@ -99,7 +99,7 @@ describe("shell navigation", () => {
     expect(readFileSync(directivePath, "utf-8")).toBe(worktreeRoot);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain(
-      `Spawned or updated session banana\nSwitched to ${worktreeRoot}`
+      `Spawned or updated session banana\nRequested shell switch to ${worktreeRoot}`
     );
   });
 
@@ -137,7 +137,7 @@ describe("shell navigation", () => {
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
     expect(result.stderr).toContain(
-      "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter."
+      "Shell integration is configured but inactive. Restart your shell or run mt through the shell integration."
     );
   });
 
@@ -170,7 +170,7 @@ describe("shell navigation", () => {
       const worktreeRoot = getExpectedWorktreePath(monkeHome, repoRoot, "banana");
       expect(result.stdout).toBe(`${worktreeRoot}\n`);
       expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-      expect(result.stderr).toContain("Enable automatic switching with: mt shell install");
+      expect(result.stderr).toContain("Run mt shell install to enable automatic switching.");
     } finally {
       chmodSync(startupFile, 0o600);
     }
@@ -324,7 +324,7 @@ apps:
 
     expect(readFileSync(startupFile, "utf-8")).toContain("monke-tools shell integration");
     expect(existsSync(path.join(shellHome, ".zshrc"))).toBeFalsy();
-    expect(result.stderr).toContain("Shell integration is configured but not active");
+    expect(result.stderr).toContain("Shell integration is configured but inactive");
   });
 
   it("leaves startup files untouched on shell install for an unsupported current shell", () => {

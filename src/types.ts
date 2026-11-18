@@ -7,20 +7,16 @@ export interface Runtime {
   readonly env: Record<string, string | undefined>;
   /** Run a command with the runtime environment. */
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
-  /** Run a command without blocking independent startup work. */
   execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
   /** Optional injected activation boundary used to prove atomic failure behavior. */
   readonly installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
   readonly platform: NodeJS.Platform;
-  /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
-  /** Official Release catalog and asset download boundary. */
   readonly releaseDistribution: ReleaseDistribution;
   select: (prompt: SelectPrompt) => Promise<string>;
   /** Optional injected boundary invoked immediately after a Session checkpoint is persisted. */
   readonly sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
-  /** Whether status output is connected to an interactive terminal. */
   readonly stderrIsTTY: boolean;
   /** Identity compiled into this mt executable. */
   readonly toolBuildIdentity: string;
@@ -125,7 +121,6 @@ export interface ExternalRepoConfig {
   pathEnv: string;
 }
 
-/** A deterministic Resource value declared by one repo in monke.yml. */
 export interface ResourceValueConfig {
   /** Uppercase environment variable name written to the owning checkout's root .env. */
   env: string;
@@ -133,7 +128,6 @@ export interface ResourceValueConfig {
   literal: string;
 }
 
-/** A dynamic Resource command declared by one repo in monke.yml. */
 export interface ResourceCommandConfig {
   acquire?: "automatic" | "explicit";
   /** Lowercase command label used as the Resource command namespace. */

@@ -70,7 +70,7 @@ describe("single-repo sessions", () => {
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toBe(
-      `Spawned or updated session banana\nSwitch to ${worktreeRoot}\nEnable automatic switching with: mt shell install\n`
+      `Spawned or updated session banana\nSwitch to ${worktreeRoot}\nRun mt shell install to enable automatic switching.\n`
     );
     expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe(

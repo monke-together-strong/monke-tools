@@ -8,23 +8,19 @@ monke-tools uses a shell adapter to make successful **Spawn** and **Swing** oper
 
 `Swing` follows Worktrunk's navigation model rather than Git's branch-switching model. It navigates to existing Session worktrees and ordinary linked Git worktrees for branch-name targets, and never changes which branch an existing worktree has checked out. Pull request targets are the one exception: explicit pull request targets (`mt swing pr:<n>` or a pull request URL) fetch the PR head, create the Session branch and Session worktree through session-branch spawn when missing, and refuse to navigate on every explicit pull request swing when the local Session branch diverged from the PR head. Plain branch-name targets, Swing picker selections, and `-` Previous Swing targets do not re-fetch PR heads. Users continue to spawn ordinary sessions with `mt spawn`.
 
-The first Shell integration supports bash and zsh only. `vpr install:local` installs it idempotently for the user's current supported shell as part of the **Local install refresh**, reports the selected startup file whether it changed or was already current, and asks the user to restart that shell. Unsupported current shells receive manual guidance and no startup-file changes. Explicit commands remain available to repair or inspect the integration without reinstalling skills or rebuilding the binary:
-
-```sh
-mt shell install
-mt shell init bash
-mt shell init zsh
-```
+The first shell integration supports Bash and Zsh. A **Local install refresh**
+configures the current supported shell. `mt shell install` and `mt shell init`
+let users repair or inspect the integration independently of skills and builds.
 
 The directive protocol supports only directory changes. It does not include Worktrunk's arbitrary shell execution directive. Like Worktrunk, the shell adapter honors a non-empty directory directive regardless of the `mt` process's exit status and then returns the original nonzero status. A directory-change failure replaces the status only when `mt` itself succeeded. This lets a teardown operation move the parent shell out of a worktree it removed while still reporting a later Cleanup-command failure.
 
-CLI output for these operations goes through a semantic `mt` logger built on `picocolors`. The logger exposes intent-level methods such as `success`, `warning`, `hint`, `info`, and `error`, inspired by Worktrunk's styling layer. It routes all output through `Runtime.writeStdout` and `Runtime.writeStderr`, never through `console.log`.
-
-Status messages go to stderr. Primary data and parseable command output stay on stdout. This keeps CLI output testable through `createRuntime({ onStdout, onStderr })`, avoids global console monkeypatching in tests, preserves stdout for machine-readable data and paths, centralizes color and no-color behavior, keeps shell-integration messages predictable, and avoids accidental extra newlines or mixed status/data output.
+Use one runtime-backed logger for navigation status and styling. Status goes to
+stderr. Data such as a target path goes to stdout for callers to read. Tests can
+inspect either stream through the runtime.
 
 monke-tools reports navigation honestly:
 
-- When an **Active shell adapter** accepts the request, it reports that it switched to the target checkout.
+- When an **Active shell adapter** accepts the request, it reports that it requested a switch to the target checkout; the shell changes directory after `mt` exits.
 - When shell integration is configured but inactive for the current invocation, it reports the target path and explains that the shell must be restarted or `mt` must be invoked through the shell adapter.
 - When shell integration is not configured, it reports the target path and explains how to configure automatic switching.
 
@@ -44,10 +40,5 @@ monke-tools reports navigation honestly:
 
 ## Consequences
 
-Human users get `mt spawn` and `mt swing` behavior that matches the workflow expectation: after success, the shell lands in the relevant Session worktree for `mt spawn` and in the resolved Source checkout, Session worktree, or ordinary linked Git worktree for `mt swing` when integration is active.
-
-Automation that invokes the binary without shell integration will receive an explicit target path and guidance instead of a misleading "switched" message.
-
-Agents and non-interactive subprocess callers cannot rely on shell integration to mutate their host process working directory. They should read the target path from command output or run follow-up work with an explicit working directory.
-
-Tests can assert status and data output separately through `Runtime` sinks, and future commands have one place to enforce color, no-color, newline, and stdout/stderr policy.
+Automation that calls the binary directly can read the target path on stdout and
+use it as the working directory for follow-up commands.

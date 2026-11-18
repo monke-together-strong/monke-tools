@@ -242,8 +242,7 @@ export default function ({ previous }) {
 `,
       name: "single-repo-resource-command-retained-input",
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
-      // Exercise the resource-literal interpolation syntax as YAML data.
-      // oxlint-disable-next-line no-template-curly-in-string
+      // oxlint-disable-next-line no-template-curly-in-string -- The Resource config interpolates this YAML value.
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
 

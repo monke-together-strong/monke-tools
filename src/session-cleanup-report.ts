@@ -55,7 +55,7 @@ const messages: Record<SessionCleanupReason, string> = {
     "The owned worktree is already removed; its Source and registrations were verified.",
   "owned-worktrees-gone": "All owned worktrees are already removed; Session finalization remains.",
   "ownership-conflict":
-    "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
+    "Session ownership conflicts with another record or an overlapping Git worktree. Inspect the paths in the report before retrying Cleanup.",
   "recent-worktree":
     "Ancestry or matching merged work provides completion evidence, but the worktree must have a verified age of at least one day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
@@ -65,7 +65,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "resource-state-unverified": "Retained Checkout resource records could not be read.",
   "source-checkout": "Source checkouts cannot be removed.",
   "source-missing":
-    "A member's recorded Source checkout no longer exists; Chop cannot run and the state is retained.",
+    "A member's Source checkout is missing. Restore it at its recorded path before retrying Cleanup.",
   "state-changed-during-inspection": "Session state changed during inspection; inspect again.",
   "unchanged-branch": "The branch has no commits outside the verified default branch."
 };
@@ -74,7 +74,6 @@ type CheckStatus = "passed" | "blocked" | "unknown" | "not-checked" | "not-neede
 
 export interface CleanupCheckReport {
   code: SessionCleanupReason | null;
-  /** Collected facts behind the status, such as the paths that make a worktree dirty. */
   details?: string[];
   message: string;
   status: CheckStatus;
@@ -217,10 +216,7 @@ function memberReport(
   };
 }
 
-/**
- * JSON and text share this projection, including checks skipped by the collector. It formats the
- * inspection's decision and never decides again.
- */
+/** Render JSON and text from the same inspection decision, including checks the collector skipped. */
 export function createSessionCleanupReport(
   { decision, snapshot }: SessionCleanupInspection,
   execution: SessionCleanupExecution = NOT_ATTEMPTED,

@@ -1,12 +1,6 @@
-# Proof Asset Review
+# Review proof assets
 
-The Evidence Gate decides whether a final screenshot or video is uploadable;
-automated assertions and file-validity checks do not.
-
-## Evidence Gate
-
-1. List the views and states the diff changes and the behavior each carries.
-   This list, not the assets already in hand, sets what the PR must show.
+1. List every changed view and state and the behavior the reviewer should see.
 2. Map each asset to the entries it proves, then inspect the exact final file
    that will be uploaded.
    - Screenshot: inspect at original resolution.
@@ -22,9 +16,5 @@ automated assertions and file-validity checks do not.
    - sensitive content is visible
    - the final state appears too briefly to evaluate
 
-5. When an entry cannot be captured, write that where its asset would have gone.
-   An unevidenced entry left silent reads as covered.
-
-Completion criterion: every listed view and state has a passing asset or a
-stated reason it has none, each asset's claim is directly visible in the
-inspected upload candidate, and no rejection condition applies.
+5. Before publishing, account for every listed view and state with an inspected,
+   passing asset or a reason it could not be captured.

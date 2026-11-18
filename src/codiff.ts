@@ -14,7 +14,6 @@ export const MINIMUM_CODIFF_VERSION_TEXT = MINIMUM_CODIFF_VERSION.join(".");
 const CODIFF_CASK = "nkzw-tech/tap/codiff";
 const INSTALL_CODIFF = `brew install --cask --require-sha ${CODIFF_CASK}`;
 
-/** Verify Codiff while independent Diff discovery continues. */
 export async function verifyCodiffAsync(runtime: Runtime) {
   const executable = resolveCodiff(runtime);
   const result = await runtime.execAsync(executable, ["--version"], { allowFailure: true });
@@ -32,7 +31,7 @@ export async function verifyCodiffRangeSupport(runtime: Runtime, executable: str
     !help.stdout.includes("desktop-source-v1")
   ) {
     throw new MonkeError(
-      `Codiff at ${executable} does not advertise safe range forwarding. Use a launcher with desktop-source-v1 range support; no comparison was opened.`
+      `Codiff at ${executable} does not support commit ranges. Use a Codiff release with range support or rerun with --adapter ms.`
     );
   }
 
@@ -51,7 +50,7 @@ export async function verifyCodiffRangeSupport(runtime: Runtime, executable: str
 
   if (result.exitCode !== 0 || !parsed.success || !parsed.data.sources.includes("range")) {
     throw new MonkeError(
-      `Codiff at ${executable} does not advertise safe range forwarding. Use a launcher with desktop-source-v1 range support; no comparison was opened.`
+      `Codiff at ${executable} does not support commit ranges. Use a Codiff release with range support or rerun with --adapter ms.`
     );
   }
 }
@@ -77,7 +76,7 @@ export function reconcileCodiff(
 
   if (brew === null) {
     throw new MonkeError(
-      `Homebrew is unavailable. Install Codiff ${minimumVersionText} or newer manually, then retry with: mt install-dependencies`
+      `Homebrew is unavailable. Install Codiff ${minimumVersionText} or newer, then run mt install-dependencies again.`
     );
   }
 
@@ -121,7 +120,7 @@ export function reconcileCodiff(
 
   if (installedVersion === null || compareVersions(installedVersion, minimumVersion) < 0) {
     throw new MonkeError(
-      `Codiff ${minimumVersionText} or newer is required after Homebrew reconciliation`
+      `Homebrew finished, but mt could not verify Codiff ${minimumVersionText} or newer. Check which codiff is on PATH, then run mt install-dependencies again.`
     );
   }
 }
@@ -152,7 +151,6 @@ function sameExecutable(left: string, right: string) {
   }
 }
 
-/** Map one comparison plan to Codiff's public CLI contract. */
 export function launchCodiff(runtime: Runtime, executable: string, plan: ComparisonPlan) {
   const sourceArgs =
     plan.kind === "branch-working-tree"
@@ -211,7 +209,7 @@ function validateCodiffVersion(runtime: Runtime, result: ExecResult) {
 
 function parseCodiffResult(result: ExecResult) {
   const plainOutput = `${result.stdout}\n${result.stderr}`.replaceAll(
-    // oxlint-disable-next-line no-control-regex -- External CLI output may contain ANSI color codes.
+    // oxlint-disable-next-line no-control-regex -- Strip ANSI color codes before parsing the Codiff version.
     /\u001B\[[0-?]*[ -/]*[@-~]/gu,
     ""
   );

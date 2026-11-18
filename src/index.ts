@@ -33,7 +33,6 @@ import { runSwing } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 import { runUpdate } from "./update.ts";
 
-/** Run the Monke Tools CLI. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()) {
   const program = createProgram(runtime);
   let installationCommand = false;
@@ -62,7 +61,7 @@ export async function runCliAsync(argv: string[], runtime = createRuntime()) {
 }
 
 function createProgram(runtime: Runtime) {
-  // Subcommands copy these at .command() time, so every subcommand below must be declared after.
+  // Commander copies parser settings into subcommands at declaration time. Configure the parent first.
   const program = new Command()
     .name("mt")
     .version(runtime.toolBuildIdentity)
@@ -111,12 +110,14 @@ function createProgram(runtime: Runtime) {
   const diff = program
     .command("diff")
     .enablePositionalOptions()
-    .description("Review this Checkout; explicit sources bypass remembered-base selection")
+    .description(
+      "Review changes in the selected checkout. An explicit comparison bypasses the remembered Diff base"
+    )
     .argument(
       "[targets...]",
       "ref, base..head, base...head, #PR, pr <number|branch>, mr <number>, or review URL"
     )
-    .option("-p, --pick")
+    .option("-p, --pick", "choose a Diff base or review only local changes")
     .option("--adapter <adapter>", "one-off adapter selection (codiff or ms)")
     .option("--path <checkout>", "select an existing Checkout, including a nested directory")
     .option("--working-tree", "review only staged, unstaged, and untracked changes")
@@ -221,17 +222,17 @@ function createProgram(runtime: Runtime) {
 
   program
     .command("cleanup")
-    .argument("[targets...]", "Only inspect these session-member or unowned worktree paths")
+    .argument("[targets...]", "Limit Cleanup to the Sessions or worktrees at these paths")
     .description(
-      "Clean eligible retained Sessions across discovered Sources; preserve local branches"
+      "Remove eligible Sessions across known Source checkouts and preserve local branches"
     )
     .option(
       "--source <repo>",
-      "Discover additional Source checkouts without restricting Session scope; repeatable",
+      "Discover an additional Source checkout. Repeat to discover more",
       (source: string, sources: string[]) => [...sources, source],
       []
     )
-    .option("--dry-run", "Inspect without changes; report Sessions that would clean")
+    .option("--dry-run", "Report what Cleanup would remove without making changes")
     .option("--json", "Write a versioned JSON report to stdout")
     .option("--eligible", "Hide skipped Sessions in human output")
     .option(
@@ -244,7 +245,7 @@ function createProgram(runtime: Runtime) {
     )
     .option(
       "--recover-with <command>",
-      "Run an audited resource recovery command from each Source; requires targets"
+      "Run a recovery command from the Source checkout. Requires explicit worktree targets"
     )
     .action((targets, options) =>
       runCleanup(runtime, {
@@ -417,7 +418,7 @@ function createProgram(runtime: Runtime) {
 
   skills
     .command("update")
-    .description("Update all imported skills and open one complete comparison")
+    .description("Update imported skills and review changes in a single comparison")
     .option("--repo", "Pin and advance imports declared in this repo's monke.yml")
     .option("--project", "Update the clone-local registry and its skill projections")
     .addOption(new Option("--adapter <adapter>").choices(["codiff", "ms"]))
@@ -472,7 +473,7 @@ function createProgram(runtime: Runtime) {
 
   skills
     .command("restore")
-    .description("Restore this repo's pinned imports without moving commits")
+    .description("Restore this repo's imports at their pinned commits")
     .option("--repo", "Restore the imports declared in monke.yml")
     .action((options) => runSkillsRegistry(runtime, { action: "restore" }, false, options.repo));
 

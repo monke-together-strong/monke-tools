@@ -5,19 +5,15 @@ description: Open visual diffs with mt. Use only when the user asks to see, revi
 
 # Monke diff
 
-Each run opens a window on the user's screen. Don't open one just to present
-finished work, and never from delegated tasks, subagents, or automations.
+Use `mt diff --help` to choose the comparison and `mt diff configure` to set the
+machine's adapter. Codiff opens on the user's screen. Run this skill only in
+the user's thread in response to their visual diff request. Monke See prints
+a review URL. Give that URL to the user.
 
-`mt diff` owns comparison selection. Use `mt diff --help` for sources and flags;
-`--pick` chooses a comparison base.
-
-Save the adapter preference with `mt diff configure --adapter <codiff|ms>`.
-
-For "last N hours/days plus dirty changes", resolve the oldest included first-parent
-commit's parent to an immutable base SHA, then run
-`mt diff --branch <base-sha> --path <checkout>`. With no included commits,
-use `--working-tree`. Refresh keeps the base
-fixed while updating HEAD and dirty changes; it does not slide the time window.
+For "last N hours or days plus dirty changes", find the oldest included
+first-parent commit and resolve its parent to a SHA. Run
+`mt diff --branch <base-sha> --path <checkout>`. With no included commits, use
+`--working-tree`. To move the time window, resolve a new base and run again.
 
 For Monke or Codiff installation and dependency recovery, read
 [Monke installation](../monke-install/SKILL.md).

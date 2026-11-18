@@ -9,7 +9,7 @@ import { hashReleaseGuidance } from "../src/release-guidance.ts";
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
 
-/** Relative links share the same Markdown parsing rules for packaging and adoption. */
+/** Extract relative link destinations and source offsets for inventory checks and link rewrites. */
 export function relativeMarkdownLinks(source: string) {
   const links: { destination: string; end: number; line: number; raw: string; start: number }[] =
     [];
@@ -34,7 +34,7 @@ export function relativeMarkdownLinks(source: string) {
     try {
       destination = decodeURIComponent(destination);
     } catch {
-      // A literal percent sign can occur in a local filename.
+      // Keep the raw destination for filenames with a literal percent sign.
     }
 
     links.push({
@@ -49,7 +49,7 @@ export function relativeMarkdownLinks(source: string) {
   return links;
 }
 
-/** Check relative Markdown file links against the release's guidance inventory. */
+/** Check file and directory targets against the packaged inventory. Ignore heading fragments. */
 export async function checkSkillLinks(root: string) {
   const files = Object.keys(hashReleaseGuidance(root));
   const targets = new Set(files);

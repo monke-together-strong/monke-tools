@@ -15,13 +15,12 @@ gh pr edit 123 --repo owner/repo --body-file /tmp/pr-body.md \
 	--attach ./screenshot.png --attach ./demo.mp4
 ```
 
-Local Markdown references are rewritten to uploaded URLs; unreferenced files are
-appended. HTML image paths are not rewritten. A video reference such as
-`![](./demo.mp4)` must stand alone in a paragraph to become a player.
+Use Markdown references for assets in the body. Put a video reference such as
+`![](./demo.mp4)` in its own paragraph for inline playback.
 
 Supported formats: PNG, JPEG, GIF, WebP, SVG, MP4, MOV, and WebM. Images are limited
 to 10 MB; videos to 10 MB on Free plans or 100 MB on paid plans. Prefer H.264 MP4
 for browser compatibility.
 
-A partial upload failure can still publish successful attachments before exiting
-nonzero. Retry only the failed files.
+If some uploads failed, check the published body before retrying. Retry only
+the failed files on the existing item.

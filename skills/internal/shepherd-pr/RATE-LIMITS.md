@@ -9,8 +9,7 @@ mechanical fixes are routine.
 
 - Routine: record CodeRabbit as unavailable for this head; its review is
   resolved.
-- Needs care: in a clean PR checkout, review the whole PR with
-  `coderabbit review --agent --deep --committed --fresh --base <PR base>`; a
-  CLI review costs one slot whatever its scope or depth. Handle its findings under Address
-  feedback. If the CLI is rate limited too, record CodeRabbit as unavailable
-  for this head.
+- Needs care. In a clean PR checkout, review the whole PR with
+  `coderabbit review --agent --deep --committed --fresh --base <PR base>`.
+  Follow [Address feedback](SKILL.md#address-feedback) for the findings.
+  If the CLI is also rate limited, record CodeRabbit as unavailable for this head.

@@ -7,7 +7,6 @@ import type { WorktreeEntry } from "./git.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
-/** Recheck all discovered repositories before a checkout can be removed. */
 export function assertNoOverlappingCheckouts(
   runtime: Runtime,
   sources: string[],
@@ -32,7 +31,6 @@ export function assertNoOverlappingCheckouts(
   }
 }
 
-/** Reject a locked Git worktree registration. */
 export function assertWorktreeUnlocked(entry: WorktreeEntry) {
   if (entry.locked === null) {
     return;
@@ -42,7 +40,6 @@ export function assertWorktreeUnlocked(entry: WorktreeEntry) {
   throw new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
 }
 
-/** Validate that a recorded absolute path is the canonical Source checkout for its repository. */
 export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: string) {
   if (!path.isAbsolute(sourceRoot) || !existsSync(sourceRoot)) {
     throw new MonkeError(`Recorded Source checkout does not exist at canonical path ${sourceRoot}`);
@@ -73,7 +70,10 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
   }
 }
 
-/** Run shared structural and lock checks, plus cleanliness unless force was requested. */
+/**
+ * A caller can authorize preserved edits. Hidden index entries still block removal without explicit
+ * force.
+ */
 export function preflightWorktreeRemoval(
   runtime: Runtime,
   sourceRoot: string,
@@ -101,8 +101,8 @@ export function preflightWorktreeRemoval(
   const forceGitRemoval = hasInitializedSubmodules(runtime, worktree.path);
 
   if (forceGitRemoval) {
-    // Git needs an internal force flag for initialized submodules. Revalidate
-    // cleanliness immediately before authorizing that structural workaround.
+    // Git requires --force for initialized submodules. Recheck cleanliness before granting
+    // that flag so it cannot discard changes found during the submodule check.
     assertCleanWorktree(runtime, worktree.path);
   }
 
@@ -147,7 +147,6 @@ export function validateRegisteredWorktreeForRemoval(
   return entry;
 }
 
-/** Reject staged, modified, or untracked files in a worktree. */
 function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
   const status = runtime.exec(
     "git",

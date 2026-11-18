@@ -19,7 +19,6 @@ import type { CopyConflict } from "./non-clobbering-copy.ts";
 import { samePath } from "./path-identity.ts";
 import type { Runtime, SessionRepoState } from "./types.ts";
 
-/** The permitted content-checkout changes carried into a Session worktree during preparation. */
 export interface DirtySnapshot {
   source: CheckoutSource;
   trackedPatch: string;
@@ -61,7 +60,6 @@ function dirtySnapshotHasContent(snapshot: DirtySnapshot) {
   return snapshot.trackedPatch.length > 0 || snapshot.untrackedPaths.length > 0;
 }
 
-/** An interrupted carry must not silently switch donor checkout or base commit. */
 function assertDirtyCarrySource(source: CheckoutSource, state: SessionRepoState | undefined) {
   if (state?.dirtyCarryStatus !== "pending" || !state.dirtyCarrySource) {
     return;

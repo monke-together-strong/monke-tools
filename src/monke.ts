@@ -60,7 +60,6 @@ import {
 } from "./worktree-preparation.ts";
 import type { PreparedWorktree, WorktreePlan } from "./worktree-preparation.ts";
 
-/** Options controlling how `mt spawn` chooses source content. */
 export type SpawnOptions =
   | {
       /** Whether dirty source state is copied into newly created Session worktrees. */
@@ -84,7 +83,6 @@ type SpawnSourcePlan =
   | { attempt: "fresh" | "resume"; from?: string; mode: "default-branch" };
 
 export interface SpawnRunOptions {
-  /** Open the Root repo's Session worktree in Codex after it is ready. */
   codex?: boolean;
 }
 
@@ -125,7 +123,6 @@ export async function runSpawn(
 ) {
   const { context, home } = resolveSpawnContext(runtime, session);
 
-  // The locked spawn throws unless every repo materialized, so reaching here means success.
   const rootWorktreePath = await withGlobalLockAsync(home, () =>
     spawnSessionLocked({
       home,
@@ -473,7 +470,6 @@ function resolveSpawnSourcePlan(
   );
 }
 
-/** Validate that a retained Session permits the requested Spawn source policy. */
 export function assertSpawnSourcePolicy(
   home: string,
   rootSourceRoot: string,
@@ -705,7 +701,6 @@ async function spawnWithoutConfig(
   );
 }
 
-/** The Spawn source policy that Session state records and `retainedSpawnOptions` reads back. */
 function spawnSourceState(sourcePlan: SpawnSourcePlan) {
   return {
     copyDirty: sourcePlan.mode === "current-head" ? sourcePlan.copyDirty : undefined,
@@ -750,7 +745,7 @@ function loadSpawnGraph(
   return loadResolvedGraph(runtime, rootSourceRoot);
 }
 
-/** A missing ref means read that repo's Source checkout; all ref-backed reads share one adapter. */
+/** Without a pinned ref, read configuration and files from the Source checkout. */
 function loadGraphAtRefs(
   runtime: Runtime,
   rootSourceRoot: string,
@@ -900,7 +895,6 @@ export function loadResolvedGraphForSession(
   );
 }
 
-/** Install or verify runtime dependencies used by mt. */
 export function runInstallDependencies(runtime: Runtime) {
   reconcileCodiff(runtime, minimumCodiffVersionForRuntime(runtime));
   createLogger(runtime).success("Verified monke-tools runtime dependencies");
@@ -917,14 +911,12 @@ function minimumCodiffVersionForRuntime(runtime: Runtime) {
 }
 
 export interface MaterializeOptions {
-  /** Adopt the invoking Ordinary worktree as the Root repo's Session worktree. */
   adopt?: boolean;
 }
 
 export const ADOPTION_CONSEQUENCES =
   "mt chop now removes this worktree with its Session, and default mt cleanup removes it once its work is preserved. Cleanup also stops process trees attached to it that are more than a day old.";
 
-/** Materialize through the dependency-gated Session lifecycle scheduler. */
 export async function runMaterialize(runtime: Runtime, options: MaterializeOptions = {}) {
   const request = resolveMaterializeRequest(runtime, options);
   await withGlobalLockAsync(request.home, async () => {

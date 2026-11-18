@@ -1,7 +1,7 @@
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-/** Replace import state atomically using a fresh, exclusively created temporary file. */
+/** Readers see either the previous state or the complete replacement. */
 export function writeSkillImportState(file: string, content: string) {
   const directory = mkdtempSync(path.join(path.dirname(file), ".monke-skill-import-"));
 

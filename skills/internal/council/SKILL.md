@@ -11,7 +11,7 @@ direction and approach. If the user's instructions name council members, use
 those. Otherwise convene:
 
 - Claude Opus 5.5 (`xhigh`)
-- Codex GPT-6.1 Sol (`xhigh`)
+- Codex GPT-6.2 Sol (`xhigh`)
 
 In T3 Code, use `orchestrator_capabilities` to resolve the models, then
 `delegate_task` to start one delegate per model in parallel. Elsewhere, use

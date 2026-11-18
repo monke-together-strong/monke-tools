@@ -57,8 +57,8 @@ acquire_installation_lock() {
     sleep 0.05
   done
 
-  printf 'Timed out waiting for lock at %s\n' "$INSTALLATION_LOCK" >&2
-  printf 'If no installation is running, remove that stale lock or its .reclaim marker and retry\n' >&2
+  printf 'Timed out waiting for the installation lock at %s. Wait for the other installation to finish and retry.\n' "$INSTALLATION_LOCK" >&2
+  printf 'If no installation is running, remove the stale lock or its .reclaim marker and retry.\n' >&2
   exit 1
 }
 
@@ -117,7 +117,7 @@ if [ -f "$ROOT_DIR/monke.yml" ]; then
 fi
 
 if ! capture_source_state; then
-  printf 'Source checkout changed while Local provenance was being captured; rerun vpr install:local\n' >&2
+  printf 'Source checkout changed while the installer was reading its Git state. Rerun vpr install:local.\n' >&2
   exit 1
 fi
 SOURCE_COMMIT=$CAPTURED_SOURCE_COMMIT
@@ -149,7 +149,7 @@ bun build --compile \
 chmod +x "$STAGED_MT"
 cleanup_old_bun_builds
 
-# Generated imports are ignored by Git; validate them again before activation.
+# The Git snapshot excludes generated imports, so restore the pinned copies again before activation.
 if [ -f "$ROOT_DIR/monke.yml" ]; then
   (cd "$ROOT_DIR" && bun run src/index.ts skills restore --repo)
 fi
@@ -157,7 +157,7 @@ fi
 if ! capture_source_state ||
   [ "$CAPTURED_SOURCE_COMMIT" != "$SOURCE_COMMIT" ] ||
   [ "$CAPTURED_SOURCE_SNAPSHOT" != "$SOURCE_SNAPSHOT" ]; then
-  printf 'Source checkout changed while the Local tool install was compiling; rerun vpr install:local\n' >&2
+  printf 'Source checkout changed while the Local tool install was running. Rerun vpr install:local.\n' >&2
   exit 1
 fi
 

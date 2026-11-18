@@ -4,9 +4,8 @@ import path from "node:path";
 
 import { afterAll } from "vite-plus/test";
 
-// Fixtures put their fake viewers ahead of `process.env.PATH`. When a fixture's bin directory is
-// gone (for example, a timed-out test still running after `afterEach` deleted its sandbox), lookup
-// would otherwise fall through to the developer's real Codiff or Monke See and open it.
+// A timed-out test can outlive its fixture's viewer shims. Block PATH lookup from reaching the
+// developer's real Codiff or Monke See after the fixture directory is removed.
 const guardDirectory = mkdtempSync(path.join(tmpdir(), "monke-test-viewer-guard-"));
 
 for (const viewer of ["codiff", "ms"]) {

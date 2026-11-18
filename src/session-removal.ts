@@ -48,7 +48,6 @@ export interface SessionAction {
 }
 
 export interface SessionRemovalTarget {
-  /** Session states that may claim this Session's worktrees. */
   allStates: SessionState[];
   state: SessionState;
 }
@@ -66,7 +65,6 @@ export interface SessionRemovalOptions {
   recoveryCommand?: string;
 }
 
-/** Tracks the current step, the action whose effect may have happened, and completed actions. */
 export class SessionRemovalProgress {
   attempted: SessionAction | undefined;
   readonly completed: SessionAction[] = [];
@@ -97,7 +95,6 @@ export class SessionRemovalProgress {
   }
 }
 
-/** Caller checks at fixed points of Session removal. Chop supplies none. */
 export interface SessionRemovalChecks {
   /** Runs once the action is the current step; throwing stops removal before its effect. */
   beforeEffect?: (action: SessionAction, progress: SessionRemovalProgress) => void;
@@ -109,25 +106,21 @@ export interface SessionRemovalChecks {
    * `progress`.
    */
   prepareMember?: (repo: SessionRepoState, progress: SessionRemovalProgress) => void;
-  /** Rechecks the caller's own evidence each time removal revalidates a member. */
   revalidateMember?: (repo: SessionRepoState) => void;
 }
 
 export type SessionRemovalResult =
   | { completed: SessionAction[]; outcome: "removed" }
   | {
-      /** The action whose effect may have happened when removal stopped. */
       attempted: SessionAction | undefined;
       cause: unknown;
       completed: SessionAction[];
-      /** The step removal was on when it stopped. */
       current: SessionAction;
       /** "not-started" means no effect was attempted. */
       outcome: "failed" | "not-started";
       /** What a retry still has to do; undefined before planning or when retry inspection failed. */
       remaining: SessionAction[] | undefined;
       retryInspectionFailure?: string;
-      /** Cleanup obligations a retry runs again. */
       retryObligations: SessionAction[] | undefined;
     };
 
@@ -146,7 +139,6 @@ interface SessionRepoPreflight {
   repo: SessionRepoState;
 }
 
-/** Keep the invoking member last, otherwise keep the Root member last. */
 function sessionRemovalRank(
   repo: Pick<SessionRepoState, "sourceRoot" | "worktreePath">,
   invocationPath: string,
@@ -472,7 +464,6 @@ function memberRevalidation(repo: SessionRepoState): SessionAction {
   return { sourceRoot: repo.sourceRoot, step: "revalidation", worktreePath: repo.worktreePath };
 }
 
-/** Archived files and retained HEADs must still exist when their worktree is removed. */
 function assertPreservedWorkKept(
   runtime: Runtime,
   member: PlannedMember,
@@ -500,7 +491,6 @@ function assertPreservedWorkKept(
 /** Report `run` as `action`: `before` checks run first, and only then may `run` take effect. */
 type Effect = (action: SessionAction, run: () => void, before?: () => void) => void;
 
-/** Run recorded Cleanup obligations while Session worktrees are still available. */
 function runCleanupObligations(
   runtime: Runtime,
   home: string,

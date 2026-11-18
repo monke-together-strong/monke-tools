@@ -115,7 +115,6 @@ type RawRepoConfig = z.output<typeof RawRepoConfigSchema>;
 
 type RawResources = z.output<typeof ResourcesSchema>;
 
-/** Alternate repo-content readers used when resolving a Session graph. */
 export interface LoadResolvedGraphOptions {
   /** Check whether a repo-relative path exists in the same content source as config. */
   pathExists?: (sourceRoot: string, relativePath: string) => boolean;
@@ -123,7 +122,6 @@ export interface LoadResolvedGraphOptions {
   readRepoConfig?: (sourceRoot: string) => string;
 }
 
-/** Load the resolved Session graph from repo configuration. */
 export function loadResolvedGraph(
   runtime: Runtime,
   rootSourceRoot: string,
@@ -190,7 +188,9 @@ function loadRepoConfig(
   options: Required<LoadResolvedGraphOptions>
 ) {
   if (visiting.has(sourceRoot)) {
-    throw new MonkeError(`Dependency cycles are not supported: ${sourceRoot}`);
+    throw new MonkeError(
+      `Dependency cycle includes ${sourceRoot}. Update the external declarations in monke.yml to break the cycle.`
+    );
   }
 
   const cached = cache.get(sourceRoot);

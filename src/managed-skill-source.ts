@@ -42,7 +42,7 @@ interface AdoptionPlan {
   slug: string;
 }
 
-/** Inventory file digests, executable bits, directories, and link targets without following links. */
+/** Compare copies by file bytes, executable permissions, and literal symlink targets. */
 function skillInventory(root: string) {
   const entries = new Map<string, string>();
 
@@ -57,7 +57,7 @@ function skillInventory(root: string) {
         visit(file);
       } else if (stat.isFile()) {
         const digest = new Bun.CryptoHasher("sha256").update(readFileSync(file)).digest("hex");
-        // oxlint-disable-next-line no-bitwise -- Executable permissions are part of delivered behavior.
+        // oxlint-disable-next-line no-bitwise -- Compare recorded executable bits so duplicate detection works even when running as root.
         entries.set(relative, `file:${Boolean(stat.mode & 0o111)}:${digest}`);
       } else if (stat.isSymbolicLink()) {
         entries.set(relative, `symlink:${readlinkSync(file)}`);

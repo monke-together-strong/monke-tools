@@ -104,7 +104,6 @@ describe("guidance transaction recovery", () => {
       },
       (from, to) => {
         if (from === fixture.target("alpha")) {
-          // An interruption after retiring the skill must leave its converted bytes available.
           convertedBytes = fs.readFileSync(reference, "utf-8");
         }
 

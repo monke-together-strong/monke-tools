@@ -53,18 +53,14 @@ const GlobalMonkeConfigSchema = z.strictObject({
   version: z.literal(1, { error: "must be 1" })
 });
 
-/** Built-in Agent skill roots supported by monke-tools. */
 export type BuiltInSkillInstallTargetKind = z.output<typeof BuiltInSkillInstallTargetKindSchema>;
 
-/** One stored Skill install target in the current Skill install preference. */
 export type SkillInstallTargetPreference = z.output<typeof SkillInstallTargetPreferenceSchema>;
 
 export type SkillInstallTargetKind = SkillInstallTargetPreference["kind"];
 
-/** The current set of Agent skill roots selected for Distributed skill installation. */
 export type SkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
 
-/** Versioned machine-local monke-tools configuration. */
 export type GlobalMonkeConfig = z.output<typeof GlobalMonkeConfigSchema>;
 
 /** Load versioned Global monke config from `config.yml`, returning defaults when absent. */
@@ -78,7 +74,6 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
   return parseOwnedYamlFile(configPath, GlobalMonkeConfigSchema);
 }
 
-/** Save versioned Global monke config to `config.yml` under the monke home directory. */
 export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
   const configPath = getGlobalConfigPath(home);
   const parsed = unwrapBoundaryResult(GlobalMonkeConfigSchema.safeParse(config), configPath);

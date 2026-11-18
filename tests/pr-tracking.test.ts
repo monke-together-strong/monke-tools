@@ -449,7 +449,7 @@ printf '${prUrl(661)}\\n'`
       "--provider",
       "codex",
       "--model",
-      "gpt-6.1-sol",
+      "gpt-6.2-sol",
       sandbox.source,
       `This thread runs post-merge for ${prUrl(3)}. Follow ${sandbox.skill} for it. Its checkout was ${sandbox.worktree}.`
     ]);

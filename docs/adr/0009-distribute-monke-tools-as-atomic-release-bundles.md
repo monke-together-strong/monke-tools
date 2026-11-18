@@ -6,7 +6,10 @@ The publication workflow records the newest stable monke-tools release in a smal
 
 V1 exposes only `mt update` and `mt update --check`. It retains one predecessor, serializes installation mutations without locking ordinary commands, and omits exact-version selection, force repair, channels, passive checks, mirrors, rollback, and a Homebrew installation method for `mt`. Codiff remains an external minimum-compatible runtime dependency managed through Homebrew on macOS rather than a pinned Release bundle component. The detailed command, installer, release, failure, and provenance contract is recorded in [issue #130](https://github.com/monke-together-strong/monke-tools/issues/130).
 
-Mainline release validation relies on full tests at the pull-request boundary. The `main` workflow runs `vp check`, builds both platform bundles, executes artifact smoke checks, and validates archives, manifests, and checksums before publishing; it does not repeat the full unit-test suite. This keeps routine publication fast while accepting that direct pushes to `main` receive static and artifact validation only.
+Run the full test suite at the pull-request boundary. Before publication, the
+[release workflow](../../.github/workflows/publish.yml) verifies the bundles and
+runs the [mainline checks](../../.github/workflows/verify-mainline.yml). Limiting
+direct pushes to static and artifact validation keeps routine publication fast.
 
 ## Considered Options
 

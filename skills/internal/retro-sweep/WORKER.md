@@ -10,9 +10,15 @@ A **friction point** is a moment where the work went off course: a user correcti
 
 ## 1. Skim every unit
 
-Read the `messages` view of each unit's thread and each of its sidechats with `t3_thread_read` (`limit: 40`, `maxCharsPerItem: 1000`), paging to the end. Items with `visibility: "inherited"` replay a fork's parent, and items updated before the window precede it: read both for context, and record friction only from the rest. Note each friction point's position.
+Read each unit's thread and sidechats with `t3_thread_read` in the `messages`
+view. Start at `afterPosition: -1` and page with `nextPosition` until the end.
+Use inherited messages and messages outside the window for context. Record
+only in-window friction and its position.
 
-When the parent supplies context only, read just its tail before the sidechat's fork. Bisect `afterPosition` with `limit: 1` on the `messages` view for the first message whose `runId` ordinal exceeds `fork_run`'s, then read the 10 messages before it; reads page forward only, so start about 50 positions earlier.
+When the parent supplies context only, read up to 10 messages through the
+sidechat's fork. Use the `recentRuns` ordinals to locate the boundary by
+position. If you cannot locate the fork, report the missing parent context as
+a coverage gap.
 
 **Done when** every unit thread and sidechat is read to its last page (a context-only parent to its fork), or marked skipped with the reason it was unreadable.
 

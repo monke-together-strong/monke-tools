@@ -46,7 +46,6 @@ export function hashReleaseGuidance(bundleRoot: string) {
   return Object.fromEntries([...hashes].toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
-/** Require the same sorted Release guidance paths and hashes on both sides. */
 export function assertReleaseGuidanceHashes(
   expected: Record<string, string>,
   actual: Record<string, string>
@@ -62,7 +61,6 @@ export function assertReleaseGuidanceHashes(
   }
 }
 
-/** List added, modified, removed, or unsupported Release guidance entries. */
 export function findChangedReleaseGuidancePaths(
   bundleRoot: string,
   expected: Record<string, string>

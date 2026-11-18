@@ -29,7 +29,6 @@ export function configureCliParser<T extends ConfigurableCliParser>(program: T) 
   return program;
 }
 
-/** Render one failure at an executable boundary. */
 export function reportCliFailure(error: Error | string) {
   if (error instanceof CommanderError && error.exitCode === 0) {
     return;

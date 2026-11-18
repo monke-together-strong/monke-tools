@@ -2,7 +2,6 @@ import { lstatSync, mkdirSync, readdirSync, readlinkSync, symlinkSync } from "no
 import type { Stats } from "node:fs";
 import path from "node:path";
 
-/** One source entry reached while copying, with the stats already resolved. */
 export interface CopySourceEntry {
   /** Path of the entry relative to the root of this copy operation. */
   relativePath: string;
@@ -11,14 +10,12 @@ export interface CopySourceEntry {
   targetPath: string;
 }
 
-/** A source entry whose target path already holds unmergeable Session-local content. */
 export interface CopyConflict extends CopySourceEntry {
   targetStat: Stats;
 }
 
-/** The caller-supplied decisions that distinguish one non-clobbering copy from another. */
 export interface NonClobberingCopyPolicy {
-  /** Handle a target path that already exists and is not a directory to merge into. */
+  /** Called when the target exists and the source and target cannot merge as directories. */
   onConflict: (conflict: CopyConflict) => void;
   /** Handle a source path that disappeared between listing and copying. */
   onMissingSource: (sourcePath: string) => void;

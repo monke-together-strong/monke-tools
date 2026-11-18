@@ -23,12 +23,10 @@ export function describeSessionBranchMismatch(session: string, branch: string | 
   return branch === null ? "is detached" : `is on branch ${branch} instead of ${session}`;
 }
 
-/** A resolved default branch candidate for one source repo. */
 export interface DefaultBranchRef {
   branch: "main" | "master";
   /** Full Git ref, such as `refs/remotes/origin/main`. */
   ref: string;
-  /** Whether the selected ref is remote-tracking or local. */
   source: "origin" | "local";
 }
 
@@ -276,10 +274,11 @@ export function resolveDefaultBranchRef(
     }
   }
 
-  throw new MonkeError(`Could not resolve a default branch ref for ${sourceRoot}`);
+  throw new MonkeError(
+    `No main or master branch found for ${sourceRoot}. Check the local branches and the origin remote.`
+  );
 }
 
-/** A Spawn start point: the ref recorded as the Diff base and the commit it resolved to. */
 export interface PinnedStartRef {
   /** Commit the Session branch starts from. */
   pinnedRef: string;
@@ -297,9 +296,8 @@ const SHARED_REF_PATTERN = /^refs\/(?:heads|remotes|tags)\//u;
 const START_REF_FETCH_REF = "refs/monke/spawn-start";
 
 /**
- * Resolve a Spawn start point after refreshing origin. A local name wins over a same-named origin
- * branch. Refs the default fetch skips, such as tags on commits outside origin's branches, are
- * fetched directly. Throws when nothing resolves.
+ * A local name wins over a same-named origin branch. Fetch the requested ref directly when the
+ * normal origin fetch misses it. Throws if neither lookup resolves.
  */
 export function resolveStartRef(
   runtime: Runtime,
@@ -380,7 +378,6 @@ function resolveCommit(runtime: Runtime, sourceRoot: string, revision: string) {
   return commit.exitCode === 0 ? commit.stdout.trim() : undefined;
 }
 
-/** Return the canonical Session worktree path for one repo under Monke home. */
 export function getExpectedWorktreePath(home: string, sourceRoot: string, session: string) {
   return path.join(home, "worktrees", path.basename(sourceRoot), session);
 }

@@ -38,7 +38,6 @@ import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { unwrapBoundaryResult } from "./validation.ts";
 
-/** Directory name monke-tools owns inside each selected Agent skill root. */
 const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
 const SHARED_SKILL_SOURCE_FOLDERS = ["internal", "imported"] as const;
@@ -60,17 +59,12 @@ const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string }[] = [
   { kind: "custom", label: "Custom" }
 ];
 
-/** A Skill install target resolved to an Agent skill root on disk. */
 export interface ResolvedSkillInstallTarget {
-  /** Concrete Agent skill root directory on disk. */
   agentSkillRoot: string;
-  /** Configured target kind that produced this resolved root. */
   kind: SkillInstallTargetKind;
-  /** Managed monke-tools namespace path inside the Agent skill root. */
   namespacePath: string;
 }
 
-/** Explicit publication destination for a project-local skill collection. */
 export interface SkillPublicationScope {
   homeDirectory: string;
   preference: SkillInstallPreference;
@@ -82,7 +76,6 @@ export interface ExplicitSkillTargetSelection {
   customTargetPath?: string;
 }
 
-/** Resolve stored Skill install target preferences into concrete Agent skill root paths. */
 export function resolveSkillInstallTargets(options: {
   homeDirectory: string;
   preference: SkillInstallPreference;
@@ -306,7 +299,6 @@ function resolveTargetsByKey(
   );
 }
 
-/** Reconcile selected Agent skill roots with the monke-tools Skill source tree. */
 export function reconcileSkillNamespaces(options: {
   cwd: string;
   environment?: Record<string, string | undefined>;
@@ -540,7 +532,6 @@ export function skillPublicationPaths(
   return paths;
 }
 
-/** Normalize one custom Agent skill root path for storage in Global monke config. */
 function normalizeCustomSkillRoot(options: { homeDirectory: string; input: string }) {
   const trimmed = options.input.trim();
 
@@ -788,7 +779,7 @@ const FlatSkillLinkSchema = z.strictObject({
     .refine(
       (name) =>
         name !== "." && name !== ".." && !name.includes("\0") && path.basename(name) === name,
-      "Skill names must be single directory names"
+      "A Skill slug must be a single directory name"
     ),
   sourcePath: z.string().min(1)
 });
@@ -838,7 +829,7 @@ function discoverFlatSkillLinks(skillSourceTree: string) {
 
       if (links.has(entry.name)) {
         throw new MonkeError(
-          `Cannot flatten duplicate Skill name ${entry.name} from ${skillSourceTree}`
+          `Duplicate Skill slug ${entry.name} in ${skillSourceTree}. Resolve the duplicate folders before publishing skills.`
         );
       }
 

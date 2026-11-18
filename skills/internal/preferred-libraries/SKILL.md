@@ -3,25 +3,25 @@ name: preferred-libraries
 description: Preferred JavaScript and TypeScript project tooling and external libraries by capability. Use when setting up a new project or choosing or replacing libraries, CLI parsing, runtime validation, or generic utilities; default to listed tools when they fit.
 ---
 
-# Preferred Libraries
+# Preferred libraries
 
 Before adding or proposing an external JavaScript or TypeScript library, or writing a custom implementation that a listed library would cover, check this registry.
 
 Use the listed default unless an exception applies. Completion requires one of these outcomes: use the listed library, follow an existing project standard, state that no listed library fits, or run the fresh comparison the user asked for.
 
-## Project Tooling
+## Project tooling
 
 - `vite-plus`: Use Vite+ as the default toolchain for new JavaScript and TypeScript projects. Scaffold with `vp create`, keep formatter and linter settings in `vite.config.ts`, and use `vp check` for formatting, linting, and type checking.
 - `@monke-together-strong/oxc-config`: Use as the default TypeScript, Oxfmt, and Oxlint config for new team-owned JavaScript and TypeScript projects.
 
-## CLI And Terminal UX
+## CLI and terminal UX
 
-- `commander`: Use for command definitions, subcommands, options, help text, and CLI argument parsing. Follow the [WIP Commander, extra-typings, and Zod boundary reference](references/commander-extra-typings-zod-boundary.md).
-- `@commander-js/extra-typings`: Use with Commander in TypeScript to infer action arguments and options instead of maintaining duplicate types; keep its major and minor version aligned with Commander.
+- `commander`: Use for command definitions, subcommands, options, help text, and CLI argument parsing. Follow the [Commander, extra-typings, and Zod boundary reference](references/commander-extra-typings-zod-boundary.md).
+- `@commander-js/extra-typings`: Use with Commander in TypeScript to infer action arguments and options instead of maintaining duplicate types.
 - `@clack/prompts`: Use for interactive terminal prompts, confirmations, selectors, spinners, and human-friendly CLI flows.
 - `picocolors`: Use for lightweight terminal color formatting.
 
-## React UI And Styling
+## React UI and styling
 
 - `shadcn/ui`: Use as the default source for ownable, styled React components.
 - `@base-ui/react`: Use as the default primitive layer for accessible React UI behavior, including shadcn-style components that need low-level primitives.
@@ -29,11 +29,11 @@ Use the listed default unless an exception applies. Completion requires one of t
 - `cn`: Use to merge Tailwind class names instead of `clsx` + `tailwind-merge`.
 - `@hugeicons/react`: Use with `@hugeicons/core-free-icons` for React icons instead of `lucide-react`. In shadcn projects, set `iconLibrary` to `hugeicons` in `components.json` so added components import Hugeicons.
 
-## Keyboard Shortcuts And Interaction
+## Keyboard shortcuts and interaction
 
 - `@tanstack/react-hotkeys`: Use for React keyboard shortcut systems, especially command-heavy apps that need type-safe shortcut strings, cross-platform `Mod` handling, scoped hotkeys, sequences, shortcut recording/display, or key-state tracking. For non-React code, use the relevant TanStack framework adapter or the core `@tanstack/hotkeys` package directly.
 
-## App Data And Routing
+## App data and routing
 
 - `@tanstack/react-query`: Use for async server state, caching, request deduplication, mutations, invalidation, pagination, and background refetching in React apps.
 - `@tanstack/react-router`: Use for typed React routing, route loaders, search params, nested routes, and route-centric app structure.
@@ -42,16 +42,16 @@ Use the listed default unless an exception applies. Completion requires one of t
 
 - [`oRPC`](https://orpc.dev/): Use as the default for end-to-end type-safe TypeScript APIs, including RPC, contract-first development, and OpenAPI-compatible endpoints.
 
-## Database Access
+## Database access
 
 - `drizzle-orm`: Use as the default ORM/query builder when the project needs lightweight typed database access, SQL visibility, migrations, edge/serverless friendliness, or a small dependency footprint. Use `drizzle-kit` alongside it when schema migrations or introspection are needed.
 - `prisma`: Use when the project benefits from a generated client, Prisma schema workflow, broad database tooling, introspection, or a more batteries-included ORM experience.
 
-## File Storage
+## File storage
 
 - [`files-sdk`](https://files-sdk.dev/): Use as the default interface when storing files in an external object or blob store and the application benefits from one API across providers.
 
-## Data And Utilities
+## Data and utilities
 
 - `zod`: Use for runtime validation and typed parsing of untrusted config, persisted state, manifests, subprocess output, requests, and API data instead of casts or custom structural validators. Derive input and output types from schemas.
 - `@sindresorhus/is`: Use for runtime type predicates and assertion functions that narrow values and check common invariants. Keep full payload validation in `zod` and domain-specific predicates local.

@@ -5,50 +5,46 @@ description: Use mt when creating, navigating, resuming, or removing worktrees a
 
 # Monke worktrees and Sessions
 
-Use `mt spawn <session>` for isolated repo work. The session name is also its
-branch name: choose a name that follows repo rules and keep it consistent with
-the Session. Use `mt <command> --help` for flags.
+Use the Session name as its branch name. Follow the repo's branch naming rules.
+Run `mt <command> --help` for flags.
 
 ## Create and resume work
 
-Spawn starts from the invoking checkout's `HEAD` and carries its edits; dependencies
-use their source checkouts. `--no-dirty` requires clean checkouts. `-m` starts from
-default branches without carrying edits. `--from <ref>` starts the root repo from a
-branch, tag, or commit without carrying edits; the branch or tag may exist only on
-origin. Dependencies start from default branches. Existing worktrees retain their contents.
-Source checkouts provide configuration and seed files.
+Run `mt spawn feature/search` for isolated work. By default, the root starts at
+the invoking checkout's `HEAD` and dependencies start from their Source
+checkouts. Existing worktrees retain their contents. Source checkouts provide
+local configuration and seed files.
 
-After failure, use the reported retry command from the recorded checkout. A created
-worktree is not ready until materialization succeeds.
+When you need an explicit base, run `mt spawn feature/search --from origin/main`.
+A branch or tag may exist only on `origin`.
 
-To materialize an Ordinary worktree, run `mt materialize --adopt` inside it.
-The worktree keeps its path and becomes the Root repo's Session worktree for its
-current branch. Dependencies get Session worktrees under Monke home. Chop and
-Cleanup can then remove the adopted worktree as part of Session removal.
+After a failure, run the reported retry command from the checkout it names.
+Wait for materialization to succeed before using the new Session.
 
-Use `mt swing <target>` to navigate to a Session or worktree; `^` selects source
-and `-` selects the previous target. Shell navigation requires the installed shell
-adapter. For setup or repair, read [Monke installation](../monke-install/SKILL.md).
+To adopt an Ordinary worktree, run `mt materialize --adopt` inside it.
+The worktree keeps its path. Dependencies get Session worktrees under Monke home.
 
-Use `mt swing pr:<number>` or a PR URL for same-repo PRs. Diverged local heads block
-navigation; resolve the divergence without discarding work. Fork PRs are unsupported.
+## Navigate
 
-For authoring `monke.yml` or resource modules, read
-[Monke configuration](../monke-config/SKILL.md).
+Use `mt swing feature/search` for an existing Session or worktree, `mt swing ^`
+for its Source checkout, and `mt swing -` for the previous target. For shell
+adapter setup or repair, read [Monke installation](../monke-install/SKILL.md).
 
-For acquiring, using, releasing, or recovering checkout resources, read
-[resource commands](../../references/internal/RESOURCES.md).
+Use `mt swing pr:123` or a PR URL for a same-repo PR. Swing can materialize its
+Session when needed. If a local head has diverged, preserve that work before
+resolving the divergence.
 
 ## Release and remove
 
-A Session member selects the whole Session for Chop. From source, provide an explicit
-target. [Clear reproducible generated changes](../../references/internal/CLEANUP_RECOVERY.md#generated-output)
-in each member; remaining dirty files block removal. Ignored files are deleted with the worktree.
-Use `--force` only when discarding that work is authorized. Preserve local branches.
+To use or release allocations, follow the
+[resource procedure](../../references/internal/RESOURCES.md).
 
-Preview global Cleanup with `mt cleanup --dry-run` before running `mt cleanup`;
-positional worktree paths restrict cleanup targets. Repeatable `--source <repo>`
-options add repositories to discovery without restricting Session selection.
+A Session member selects the whole Session for Chop. From the Source checkout,
+name the Session explicitly. Before removing it,
+[clear reproducible generated changes](../../references/internal/CLEANUP_RECOVERY.md#generated-output)
+in each member and preserve the remaining work.
+
+Preview global Cleanup with `mt cleanup --dry-run` before running `mt cleanup`.
 Cleanup may stop old attached processes and skips Sessions with recently active
-ones. For archives, missing or ordinary worktrees,
-and failed teardown, read [cleanup recovery](../../references/internal/CLEANUP_RECOVERY.md).
+ones. For archives, missing or Ordinary worktrees, or failed teardown, follow
+[cleanup recovery](../../references/internal/CLEANUP_RECOVERY.md).

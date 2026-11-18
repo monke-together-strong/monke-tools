@@ -1,7 +1,5 @@
 # Commander, extra-typings, and Zod boundary
 
-> **Status: WIP SLOP**
-
 Use this pattern for a TypeScript CLI that accepts structured runtime input.
 
 ## Responsibilities
@@ -28,6 +26,8 @@ import {
   type OutputConfiguration,
 } from "@commander-js/extra-typings";
 import * as z from "zod";
+
+class AppError extends Error {}
 
 const ConfigSchema = z.strictObject({
   sourceRoot: z.string().min(1),
@@ -77,11 +77,31 @@ function formatCliFailure(error: unknown): string {
   return String(error);
 }
 
+function parseJson(text: string, label: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (cause) {
+    if (!(cause instanceof SyntaxError)) throw cause;
+    throw new AppError(`Invalid JSON in ${label}: ${cause.message}`);
+  }
+}
+
+function parseBoundaryValue<T extends z.ZodType>(
+  schema: T,
+  value: unknown,
+  label: string,
+): z.output<T> {
+  const result = schema.safeParse(value);
+  if (result.success) return result.data;
+  throw new AppError(`Invalid ${label}:\n${z.prettifyError(result.error)}`);
+}
+
 const program = configureCliParser(new Command())
   .requiredOption("--config <path>")
   .action(async (options) => {
-    const raw: unknown = JSON.parse(await readFile(options.config, "utf8"));
-    await run(ConfigSchema.parse(raw));
+    const text = await readFile(options.config, "utf8");
+    const config = parseBoundaryValue(ConfigSchema, parseJson(text, options.config), options.config);
+    process.stdout.write(`${config.sourceRoot} (concurrency ${config.concurrency})\n`);
   });
 
 try {
@@ -100,9 +120,8 @@ when a command owns subcommands but none was selected: with `exitOverride()`, th
 message is only the placeholder `(outputHelp)`, not the help text Commander already sent to
 `writeErr`.
 
-`ConfigSchema.parse(raw)` returns `z.output<typeof ConfigSchema>`, so no duplicate `Config`
-interface or cast is needed. Annotating the input `unknown` records that it has not yet crossed the
-boundary.
+The boundary returns `z.output<typeof ConfigSchema>`. JSON enters as `unknown` until
+the schema validates it.
 
 Configure the root parser before declaring any subcommand. `.command()` copies the parent's output
 configuration and exit callback at creation time, so a subcommand declared first writes its own
@@ -124,35 +143,12 @@ Await that boundary rather than installing a process-level `uncaughtException` h
 Throw and let errors bubble to the one handler. Catching an error only to reformat and rethrow it
 buys nothing.
 
-**Use `safeParse()` only when a failure produces a value; use `parse()` when a failure produces an
-error.** Falling back to a default, degrading to partial data, or returning `null` are real
-recoveries that `parse()` cannot express. Checking `success` and then throwing is not — that is
-the handler's job.
+Use `parse()` when the handler can report the Zod error as it is. Use
+`safeParse()` when the boundary must recover or identify a specific input that
+the handler cannot reconstruct.
 
-Give the handler two classes of failure to tell apart:
-
-- An `AppError` — the single class the application throws for expected failures — carries a
-  message written for the user. Print the message alone.
-- Anything else is a bug. Print the stack, or nobody can debug it.
-
-That distinction is the whole job of such a class. A marker class nothing tests with `instanceof` is
-`Error` with a longer name.
-
-Wrap a boundary in a helper when the failure needs a label the handler cannot reconstruct — which
-file, which subprocess, which upstream response. One helper keeps each call site to a single line
-and still names the source:
-
-```ts
-export function parseBoundaryValue<T extends z.ZodType>(
-  schema: T,
-  value: unknown,
-  label: string,
-): z.output<T> {
-  const result = schema.safeParse(value);
-  if (result.success) return result.data;
-  throw new AppError(`Invalid ${label}:\n${z.prettifyError(result.error)}`);
-}
-```
+Label a boundary when the handler cannot identify the failing file, subprocess,
+or upstream response. Use the same label for malformed input and schema errors.
 
 The global `ZodError` branch then catches only schemas that bypassed the helper.
 

@@ -24,9 +24,8 @@ export function configureTestGitEnvironment() {
     }
   }
 
-  // Unsetting these restores normal lookup, including ~/.gitconfig and XDG config.
-  // The owned global config also disables default XDG ignore/attributes files at
-  // global priority, so repository-local settings and explicit test overrides win.
+  // Git falls back to user config when these variables are unset. The fixture also disables
+  // default XDG ignore and attributes files so repo settings and explicit test overrides win.
   process.env.GIT_CONFIG_GLOBAL = globalConfigPath;
   process.env.GIT_CONFIG_SYSTEM = devNull;
   process.env.GIT_ATTR_NOSYSTEM = "1";

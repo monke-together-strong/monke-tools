@@ -30,7 +30,6 @@ export function inspectCleanupObligations(
   };
 }
 
-/** One repo's Cleanup obligations, read from its canonical Checkout resource record. */
 export function inspectRepoCleanupObligations(
   store: CheckoutResourceStore,
   state: SessionState,

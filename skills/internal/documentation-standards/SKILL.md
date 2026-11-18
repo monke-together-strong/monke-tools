@@ -82,8 +82,11 @@ changes, as separate findings.
   repository, so keep references contained in that directory.
 - Consolidate related new ADRs when they record one decision. When trimming an
   ADR, keep the decision and its reasons; cut inventories of changed code.
+- Put parallel items such as files, options, or cases in a list, and keep
+  paragraphs for reasoning that connects ideas.
 - Follow the established audience, terminology, and structure. Apply
-  [technical-writing](../../imported/technical-writing/SKILL.md) to prose and
+  [technical-writing](../../imported/technical-writing/SKILL.md) to text you
+  write or correct and
   [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to agent-facing
   documents.
 

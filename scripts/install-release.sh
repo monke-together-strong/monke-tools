@@ -15,7 +15,7 @@ case "${1:-}" in
       skills/references
     do
       if [ ! -e "$BUNDLE_ROOT/$required_path" ]; then
-        printf 'Release bundle entry is missing: %s\n' "$required_path" >&2
+        printf 'Release bundle entry is missing: %s. Unpack or rebuild the complete bundle and retry.\n' "$required_path" >&2
         exit 1
       fi
     done

@@ -29,7 +29,6 @@ type Gate =
       readonly sha: string;
     };
 
-/** Reads one GitHub REST endpoint and parses its JSON body. */
 type GhApi = <T>(endpoint: string, schema: z.ZodType<T>) => Promise<T>;
 
 interface WaitOptions {
@@ -38,7 +37,6 @@ interface WaitOptions {
   readonly timeoutMs: number;
 }
 
-/** A failed `gh` call; the wait retries it once the gate has been read successfully. */
 class GhError extends Error {
   constructor(message: string) {
     super(message);
@@ -94,11 +92,11 @@ async function waitForGate(gate: Gate, options: WaitOptions): Promise<GateResult
     let result: PollResult;
 
     try {
-      // oxlint-disable-next-line no-await-in-loop -- Each check follows the previous one.
+      // oxlint-disable-next-line no-await-in-loop -- Wait for each response before deciding whether to poll again.
       result = await pollGate(gate, options.gh);
       reachable = true;
     } catch (cause) {
-      // A bad repo or missing auth fails on the first read; later errors are transient.
+      // Surface the first GitHub error. After a successful read, retry GitHub errors until the deadline.
       if (!(cause instanceof GhError) || !reachable) {
         throw cause;
       }
@@ -114,7 +112,7 @@ async function waitForGate(gate: Gate, options: WaitOptions): Promise<GateResult
       return { detail: result.detail, status: "timed_out" };
     }
 
-    // oxlint-disable-next-line no-await-in-loop -- The interval separates checks.
+    // oxlint-disable-next-line no-await-in-loop -- Wait between pending checks without sleeping past the deadline.
     await Bun.sleep(Math.min(options.intervalMs, deadline - Date.now()));
   }
 }
@@ -220,8 +218,8 @@ function failedSuffix(failedJobs: readonly string[]): string {
 }
 
 /**
- * Railway posts `pending` before starting a deployment. A `success` without a `pending` for the
- * same deployment means Railway skipped it, as when a failed check blocks deployment.
+ * Railway posts `pending` before a deployment starts. Require that evidence before accepting
+ * `success`. Railway explicitly reports `No deployment needed` for a path-based skip.
  */
 async function pollRailway(
   gate: Extract<Gate, { kind: "railway" }>,

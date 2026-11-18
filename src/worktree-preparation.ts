@@ -26,7 +26,6 @@ import {
 import type { DirtySnapshot } from "./session-dirty-carry.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 
-/** Where Worktree preparation takes a missing Session worktree's content from. */
 export type WorktreeSource =
   /** A missing Session branch starts at the content checkout's HEAD; `copyDirty` carries its edits. */
   | { copyDirty: boolean; mode: "current-head" }
@@ -51,7 +50,6 @@ export interface WorktreePlan {
   sourceRoot: string;
 }
 
-/** A Prepared worktree, ready for Repo materialization. */
 export interface PreparedWorktree {
   worktreePath: string;
 }
@@ -145,9 +143,8 @@ export function planWorktreePreparation(
 }
 
 /**
- * Create or validate one Session worktree, apply its pending dirty carry, copy missing Seed
- * material, and reconcile project skills. `onWorktreeReady` receives the repo state before seeding
- * starts. Returns that state, the Prepared worktree, and any Preparation warnings.
+ * `onWorktreeReady` runs after worktree creation and dirty carry, before seeding. Callers can
+ * persist that progress so a seed or skill projection failure can resume.
  */
 export async function prepareWorktree(
   runtime: Runtime,
@@ -156,7 +153,6 @@ export async function prepareWorktree(
     home: string;
     onWorktreeReady?: (state: SessionRepoState) => void;
     plan: WorktreePlan;
-    /** Configured Seed paths copied in addition to the discovered local files. */
     seedPaths: readonly string[];
     session: string;
   }
@@ -333,7 +329,6 @@ async function ensureSessionWorktree(
   return { created: true, path: expectedPath };
 }
 
-/** Create the Session branch and worktree at a pinned start commit. */
 async function createFreshSessionWorktree(
   runtime: Runtime,
   home: string,

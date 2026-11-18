@@ -1,6 +1,6 @@
 # Third-party notices
 
-monke-tools redistributes the guidance listed below under its upstream licenses. The inventory follows `skills.lock.json`. License terms and Impeccable's upstream attribution notice follow the inventory.
+monke-tools redistributes the guidance listed below under its upstream licenses. The inventory follows the import recipes in `monke.yml`. License terms and Impeccable's upstream attribution notice follow the inventory.
 
 ## Inventory
 

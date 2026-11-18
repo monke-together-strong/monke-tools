@@ -1049,7 +1049,6 @@ export function release({owner, outputs}) {
     }
   );
 
-  // Failure classification ignores dirty state; one dirty row proves diagnostics survive it.
   it.each([
     { dirty: false, expected: "authentication", stderr: "gh auth login" },
     { dirty: true, expected: "authentication", stderr: "gh auth login" },
@@ -1282,7 +1281,7 @@ export function release({owner, outputs}) {
         expect(existsSync(repo.worktreePath)).toBeTruthy();
       }
 
-      // Real execution may create its lock, but no Session or Git files change on a skip.
+      // Ignore Monke home here because execution can create its lock there.
       const after = files(f.cwd);
       expect({ ...after, home: before.home }).toStrictEqual(before);
     },
@@ -1902,7 +1901,6 @@ export function release({owner, outputs}) {
       ...state,
       repos: state.repos.filter((repo) => repo.sourceRoot === f.root)
     });
-    // Present but unverifiable: no longer a Git repository.
     rmSync(path.join(missing, ".git"), { force: true, recursive: true });
     const result = await f.run();
     expect(result.report.sessions.find((row) => row.session === state.session)?.outcome).toBe(

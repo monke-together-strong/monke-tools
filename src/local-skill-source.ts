@@ -455,7 +455,6 @@ async function discoverLocalGuidance(
   return { discovered, linkedSkills, root };
 }
 
-/** Refresh a command or linked source and publish it through the existing import materializer. */
 export async function updateLocalSkillSource(options: {
   executeCommand?: boolean;
   recipe: SkillImportRecipe;

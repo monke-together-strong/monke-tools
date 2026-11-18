@@ -3,8 +3,6 @@
 monke-tools manages workspace Sessions across a root repo and its dependencies,
 and distributes shared and personal agent guidance across Consumer repos.
 This file and the references below form one glossary, split by domain area.
-They contain terms and relationships; tool usage belongs in the
-[internal skills](skills/internal).
 
 ## Domain references
 
@@ -19,7 +17,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Checkout**: One local working copy of a repo: a Source checkout, Session worktree, or Ordinary worktree.
 
-**Session**: A named local workspace instance that spans one source repo and any dependency repos using the same branch-aligned identity. _Avoid_: Branch, environment, sandbox
+**Session**: A named local workspace for one **Root repo** and its **Dependency repos**. Its name is the branch it expects in each participating worktree. _Avoid_: Branch, environment, sandbox
 
 **Source checkout**: The original working copy in a Git clone, shared as the source for its linked worktrees. A **Session** is created from one. _Avoid_: Main worktree, root worktree
 
@@ -29,9 +27,9 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Root repo**: The source repo from which a session was requested and whose dependency graph defines the session scope. _Avoid_: Main repo, parent repo
 
-**Dependency repo**: Another repo declared by the root repo that must be materialized into the same session. _Avoid_: External repo, child repo
+**Dependency repo**: A repo reachable through the **Root repo**'s declared dependencies, directly or through another dependency. It participates in the same **Session**. _Avoid_: External repo, child repo
 
-**Session state**: The persisted record of which repos belong to a session, where their worktrees live, and which ports were assigned. _Avoid_: Cache, registry entry
+**Session state**: The persisted record of a **Session**'s members, worktree paths, port assignments, and lifecycle progress. _Avoid_: Cache, registry entry
 
 **Consumer repo**: A repo whose developer or agent uses monke-tools as a local workflow tool.
 
@@ -39,13 +37,13 @@ Historical decisions live in [docs/adr](docs/adr).
 
 ## Repo configuration
 
-**App**: A configured app directory inside one repo whose env file participates in managed rewrites.
+**App**: A named directory in a repo's configuration that can receive port mappings in its env file.
 
 **Managed env file**: The env file inside an app whose mapped variables monke-tools rewrites.
 
-**Seed path**: A repo-relative file or directory copied into a newly spawned session worktree.
+**Seed path**: A configured repo-relative file or directory used to fill missing content during **Worktree preparation**.
 
-**Seed material**: The source-checkout files copied into a newly spawned session worktree before env rewrites, including discovered env files, local agent files, root `PR.md` and `monke.yml`, and configured Seed paths.
+**Seed material**: Files from the **Source checkout** used to fill missing content in a **Session worktree** during **Worktree preparation**.
 
 **Bootstrap command**: A repo-scoped shell command run after env syncing to prepare a materialized worktree.
 
@@ -61,9 +59,9 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Assigned port**: The concrete numeric port chosen for a port key within one session. _Avoid_: Port key, reserved port
 
-**Port reservation**: The persisted numeric block a repo owns so future sessions can allocate stable assigned ports from it. _Avoid_: Port range, sticky ports
+**Port reservation**: The persisted block of port numbers from which a repo allocates **Assigned ports** to Sessions. _Avoid_: Port range, sticky ports
 
-**Baseline port**: A numeric port already present in the managed env files of a repo's **Source checkout**; that repo's new **Assigned ports** avoid it.
+**Baseline port**: A port read from a **Local mapping**'s env variable in a repo's **Source checkout**. New assignments for that repo avoid these ports.
 
 ## Operations
 
@@ -71,28 +69,24 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
-**Setup**: Preparation of a Source checkout or Session worktree's static configuration, separate from live resource acquisition. _Avoid_: Materialize, bootstrap
+**Setup**: Reconciliation of a checkout's project skill links and, where configured, its dependency paths and deterministic resource values. _Avoid_: Materialize, bootstrap
 
 **Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target performs **Session removal**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
 **Cleanup**: The operation that inspects retained Sessions across all Root repos and removes **Cleanup-eligible Sessions** through **Session removal**. _Avoid_: Delete session, prune repos
 
-**Swing**: The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
+**Swing**: The operation that selects a checkout of the invoking checkout's repo and requests shell navigation to it. An explicit PR target can create its **Session worktree** after the PR head is validated.
 
 **Diff**: The operation that presents a requested Git comparison for one checkout through its selected **Diff adapter**.
 
 ## Relationships and distinctions
 
-- Each Checkout resource belongs to one Source checkout or Session worktree,
-  independently of other checkouts in the same Session.
-- A Session belongs to one Root repo. Each participating repo contributes one
-  Session worktree and one Session-state entry. The Session uses a shared branch
-  name across repos; it is the workspace instance, not the Git ref.
+- Each participating repo contributes one Session worktree and one entry in
+  Session state. The same repo can participate in different Sessions.
 - An App belongs to one repo and may have multiple Local mappings. A Port key
   has one owner across the session graph. Local mappings consume that repo's
   keys; External mappings consume dependency-owned keys.
 - Each Assigned port belongs to one Port key in a Session. A repo's Port
   reservation survives **Session removal** for future allocations.
-- Setup prepares static checkout wiring; Materialize also prepares Session
-  worktrees and runs bootstrap. Consumer repo describes tool usage, while Root repo and
-  Dependency repo describe membership in a particular Session.
+- Consumer repo describes tool usage. Root repo and Dependency repo describe
+  membership in a particular Session.

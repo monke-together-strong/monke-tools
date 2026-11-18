@@ -21,8 +21,7 @@ including `docs/research/` and `docs/explorations/`, unless requested.
 ## Audit changed tests
 
 When creating a PR whose diff adds or changes tests, run
-[test audit](../test-audit/SKILL.md) in cleanup mode on those test files, then
-continue here.
+[test audit](../test-audit/SKILL.md) in cleanup mode on those test files.
 
 ## Review branch documentation, comments, and terminology
 
@@ -87,10 +86,8 @@ template or unexpected in a way that affects review.
   with the behavior it demonstrates. Use matched, labeled before/after pairs for
   comparisons and group multiple screenshots by claim. Number workflow states.
   Choose side-by-side or stacked layouts based on readability.
-- For correctness that requires deployment, include `## Post-Merge Verification`
-  with any environment, deployment gate, and concrete checks that root
-  `POST_MERGE.md` does not already cover. When it is absent, read the Source
-  checkout's root `POST_MERGE.md` if git ignores it there.
+- For deployment-dependent correctness, add any extra verification using
+  the [post-merge contract](../post-merge/SKILL.md#load-the-contracts).
 
 ## Publish and verify
 
@@ -102,8 +99,8 @@ mt prs create --thread <owning-thread-id> --checkout <PR-checkout> -- \
   --base <base> --head <branch> --title <title> --body-file <body-file>
 ```
 
-If registration fails after creation, follow its recovery command for the
-existing PR.
+If creation fails, check whether the PR exists before retrying. Use the
+reported `mt prs track` command when registration fails after creation.
 Outside T3 Code, use `gh pr create`. Update existing PRs with `gh pr edit`.
 Use draft only when requested. If the user requests CodeRabbit ignore the PR,
 post exactly `@coderabbitai ignore` as a PR comment.

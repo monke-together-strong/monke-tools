@@ -74,34 +74,25 @@ const LockMetadataSchema = z.object({
 
 const LockTimestampSchema = z.number();
 
-/** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
-  /** Machine architecture override used by platform behavior tests. */
   architecture?: string;
-  /** Current working directory used by command execution. */
   cwd?: string;
   /** Environment overrides merged over the process environment. */
   env?: Record<string, string | undefined>;
-  /** Optional injected activation boundary used by failure-behavior tests. */
+  /** Runs at activation checkpoints for failure injection. */
   installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
-  /** Operating system override used by platform behavior tests. */
   platform?: NodeJS.Platform;
-  /** Official Release boundary override used by update behavior tests. */
   releaseDistribution?: ReleaseDistribution;
-  /** Optional injected Session checkpoint boundary used by interruption tests. */
+  /** Runs after a Session checkpoint is persisted. */
   sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
-  /** Status-output TTY override used by presentation behavior tests. */
   stderrIsTTY?: boolean;
-  /** Compiled Tool build identity override used by installation behavior tests. */
   toolBuildIdentity?: string;
-  /** Versioned install root override used by installation behavior tests. */
   toolInstallRoot?: string;
   /** Output sinks for embedding the CLI. */
   writeStderr?: (text: string) => void;
   writeStdout?: (text: string) => void;
 }
 
-/** Create the default runtime adapter around the current process. */
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   // oxlint-disable-next-line node/no-process-env -- This adapter centralizes access to the process environment.
   const runtimeEnv = { ...process.env, ...options.env };
@@ -721,7 +712,7 @@ function handleCompletedCommand(
 ) {
   const stdout = result.stdout.toString();
   const stderr = result.stderr.toString();
-  // Bun (through 1.4.4) returns null after a timeout or signal, despite the numeric type.
+  // Bun 1.4.4 can return null on timeout or signal. Runtime.exec always returns a numeric exit code.
   const exitCode = result.exitCode ?? -1;
 
   if (result.exitedDueToTimeout === true) {
@@ -729,9 +720,7 @@ function handleCompletedCommand(
       return { exitCode: -1, stderr, stdout, timedOut: true };
     }
 
-    throw new MonkeError(
-      `Failed to run ${formatCommand(command, args)}: spawnSync ${command} ETIMEDOUT`
-    );
+    throw new MonkeError(`Command timed out: ${formatCommand(command, args)}`);
   }
 
   if (!allowFailure && result.signalCode !== undefined) {
@@ -751,7 +740,6 @@ export function formatCommand(command: string, args: string[]) {
   return [command, ...args].join(" ");
 }
 
-/** Resolve the absolute Monke home path for this runtime. */
 export function getMonkeHome(runtime: Runtime) {
   const configuredHome = runtime.env.MONKE_HOME;
 

@@ -6,12 +6,10 @@ import type * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 
-/** Parse an application-owned YAML file and validate its runtime shape. */
 export function parseOwnedYamlFile<T extends z.ZodType>(filePath: string, schema: T) {
   return parseOwnedYamlText(readFileSync(filePath, "utf-8"), filePath, schema);
 }
 
-/** Parse application-owned YAML text and validate its runtime shape. */
 export function parseOwnedYamlText<T extends z.ZodType>(text: string, label: string, schema: T) {
   const document = parseDocument(text, {
     merge: false,
@@ -29,7 +27,6 @@ export function parseOwnedYamlText<T extends z.ZodType>(text: string, label: str
   return unwrapBoundaryResult(schema.safeParse(value), label);
 }
 
-/** Unwrap a validated boundary result and translate schema issues into application errors. */
 export function unwrapBoundaryResult<T>(result: z.ZodSafeParseResult<T>, label: string) {
   if (result.success) {
     return result.data;

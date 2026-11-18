@@ -12,7 +12,6 @@ export const SKILL_SOURCE_CANDIDATES = [
   ".cursor/skills"
 ];
 
-/** Choose one skill source folder from a checkout or installer output. */
 export function resolveSkillSourceFolder(
   directory: string,
   preserveAlias = false,
@@ -84,7 +83,6 @@ export function scanSkillSource(root: string, includeNestedSkills = false) {
   return { directories, skills };
 }
 
-/** Discover Skills without asking which agent should receive them. */
 export function discoverSourceSkills(root: string, excludedRoot?: string) {
   const skills = new Map<string, string>();
 

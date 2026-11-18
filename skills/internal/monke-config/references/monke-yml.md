@@ -1,8 +1,5 @@
 # monke.yml reference
 
-Each repo declares Session behavior, checkout resources, and published guidance
-in a root `monke.yml`. All sections are optional.
-
 Commit `monke.yml` to share it, or gitignore it in the Source checkout to keep it
 local. Spawns use the local file when their branch has none and copy it into the
 Session worktree; list gitignored resource modules in `seedPaths`.
@@ -24,7 +21,7 @@ external:
         env: DATABASE_URL
 seedPaths:
   - scripts/bootstrap.sh
-bootstrapCommand: pnpm install
+bootstrapCommand: bun install --frozen-lockfile
 ```
 
 ## Env and dependencies
@@ -35,19 +32,23 @@ bootstrapCommand: pnpm install
 
 ## Seed and bootstrap
 
-Spawn automatically copies `.env` / `.env.*`, `CLAUDE.local.md`, and `AGENTS.override.md` from any directory, plus root `.claude/settings.local.json`, `PR.md`, and `monke.yml`; don't list them. `seedPaths` copies source files or directories into session worktrees without overwriting session-local content. Missing seed paths warn; copy failures stop preparation.
+List extra local files or directories in `seedPaths`. Spawn seeds env files,
+`CLAUDE.local.md`, and `AGENTS.override.md`, plus root
+`.claude/settings.local.json`, `PR.md`, and `monke.yml` automatically. It
+preserves existing Session files.
 
 `bootstrapCommand` runs in the session worktree after env/path and deterministic resource values are written. Dynamic resource commands run afterward so their modules can use installed dependencies.
 
-Generate outputs for the actual worktree. If a generator embeds absolute paths, disable caching for that task; for example, a Turbo task generating Prisma clients should use `"cache": false`.
+If bootstrap generates files with absolute paths, disable shared caching for
+that task. For example, set `"cache": false` on a Turbo task that generates
+Prisma clients into the worktree.
 
 ## Resources
 
 `resources.values` contains literal strings with `${user}`, `${id}`, and
-`${session}` placeholders. `${id}` is a stable 32-character lowercase hex
-identifier derived from canonical Source and checkout paths, suitable for both
-Source checkouts and Session worktrees. `${session}` requires a Session.
-Deterministic values are persisted and written to root `.env`.
+`${session}` placeholders. Use `${id}` for a value that must be stable and distinct per checkout.
+Use `${session}` only for Session worktrees. Setup writes the resolved values
+to root `.env`.
 
 ```yaml
 resources:
@@ -72,7 +73,7 @@ type Owner = {
   session?: string;
 };
 
-export function acquire({ owner, previous }: {
+export function acquire({ previous }: {
   owner: Owner;
   previous: { SLOT_ID: string[] };
 }) {
@@ -80,27 +81,17 @@ export function acquire({ owner, previous }: {
   while (previous.SLOT_ID.includes(String(slot))) slot += 1;
   return { SLOT_ID: String(slot) };
 }
-
-export async function release({ owner, outputs, values }: {
-  owner: Owner;
-  outputs: { SLOT_ID: string };
-  values: Record<string, string>;
-}) {
-  // Delete only the resource identified by outputs.SLOT_ID.
-  // Use values for deterministic context, such as RESOURCE_NAME.
-}
 ```
 
-Return exactly the declared output names as nonempty strings. `previous` contains
-other retained checkouts' outputs for the same repo and command. Deterministic
-values arrive through env during acquisition; release receives them explicitly as
-`values`. Stdout/stderr are diagnostic logs. The timeout defaults to 60 seconds.
-A module without a `release` export is suitable for allocations with no external
-cleanup. Acquisition and release must be safe to retry.
+Return a nonempty string for each declared output and return only those outputs.
+`previous` contains other retained checkouts' outputs for the same repo and command.
+Acquisition receives deterministic values through the environment. For an external
+allocation, export `release({ owner, outputs, values })` and release only the
+resource identified by the recorded outputs. Make both exports safe to retry.
 
-Commands default to `acquire: automatic`, which runs after Session bootstrap.
-Use `acquire: explicit` for resources that need additional setup. For acquisition,
-execution, and retry commands, read [resource commands](../../../references/internal/RESOURCES.md).
+Automatic acquisition runs after Session bootstrap. For a resource that needs
+additional setup, choose `acquire: explicit` and follow the
+[resource procedure](../../../references/internal/RESOURCES.md).
 
 ## Cleanup
 
@@ -110,14 +101,9 @@ before worktree removal. It receives saved deterministic values, `MONKE_SESSION`
 the modules' `release` functions. A failure retains state and remaining worktrees.
 Commands must be safe to retry.
 
-Legacy default-export modules retain their recorded aggregate cleanup contract,
-including `MONKE_RESOURCE_OUTPUTS` (JSON of recorded dynamic outputs). Before
-migrating them, follow [resource commands](../../../references/internal/RESOURCES.md).
-
-A missing worktree blocks required cleanup before any repo cleanup begins.
-Restore it, or deliberately use `mt chop <session> --cleanup-from-source` after
-checking that the Source checkout's code, env and Compose configuration are safe.
-Automatic Cleanup never makes this substitution.
+For legacy default-export modules, [release allocations before migrating](../../../references/internal/RESOURCES.md).
+For a missing Session worktree, follow
+[cleanup recovery](../../../references/internal/CLEANUP_RECOVERY.md#discovery-and-recovery).
 
 ### Docker cleanup
 
@@ -130,25 +116,25 @@ resources:
 cleanupCommand: docker compose --profile '*' down
 ```
 
-Run `mt setup` before starting containers; Spawn already prepares the Session
-worktree's values. Compose reads the project name from the checkout's root `.env`.
-Session cleanup receives that same saved value. Source infrastructure teardown
-remains a repo command; `mt resources release` only releases resource allocations.
+Run `mt setup` before starting containers in a Source checkout. Spawn prepares
+the values for a Session worktree. Point Compose at the checkout's root `.env`
+so startup uses the same project name that Session cleanup receives.
 
 Match startup's Compose files and env loading, and ensure startup does not override
 the project name with `-p` or a different environment value. Enable the profiles
 the repo uses (`'*'` enables all). Preserve volumes by default. Use `--remove-orphans`
 only when all containers in the project belong to this checkout.
 
-Put application resource cleanup in resource modules, and reuse a package script for infrastructure teardown with `cleanupCommand: bun run session:cleanup`. MT releases resources before invoking that script.
-
-Apply project naming to new Sessions. Existing Sessions keep recorded commands and resource values; adding a project name to an existing Session changes the container and volume namespace. Clean up or explicitly migrate its old project before materializing the new configuration. Never suppress Docker errors with `|| true` or use source recovery blindly: failed cleanup retains state for retry.
+If migrating an existing Session to a new Compose project name, tear down or
+migrate its old project first. The project name changes the container and
+volume namespace. Let Docker failures propagate so Monke retains the failed
+teardown for retry.
 
 ## Imported guidance
 
-`skills` declares Git imports published with the repo. A `monke.yml` file can
-contain only this section. Link and installer-command sources belong to
-machine-local registries instead.
+Use `skills` to publish committed Git guidance with the repo. See
+[Monke skills](../../monke-skills/SKILL.md) to register a local link or installer
+in a machine-local registry.
 
 ```yaml
 skills:
@@ -164,29 +150,17 @@ skills:
         description: Use when editing Obsidian Markdown notes.
 ```
 
-`source` identifies a Git repository with an optional ref and subpath. `commit`
-is a full 40-character lowercase Git SHA. Restore rejects entries without a commit.
-`mt skills update --repo` pins them.
+Run `mt skills update --repo` to resolve each `source` to a commit pin before
+restoring it. To rename a skill locally, set `slug` to the local name and
+`selector` to the upstream name. Per-skill `modelInvocation` overrides the source
+default. Choose `kind: reference` for files that another skill should read
+without making them invocable.
 
-Each entry requires a nonempty `skills` list. A string uses the same upstream
-selector and local slug. Objects require `slug`. `selector` defaults to that
-slug, and `kind` defaults to `skill`. `modelInvocation` accepts `allow` or `deny`
-at source or skill level. Per-skill choices override source defaults.
-`description` overrides one skill's description. `acceptOpenClawRisks: true` on
-the source records upstream risk acceptance.
+Restore writes skills into `skills/imported/` and references into
+`skills/references/imported/`. Link to a restored reference's `MAIN.md`.
+Make changes to selection or metadata in `monke.yml`. Restore replaces local
+edits to generated files and prunes undeclared guidance.
 
-Slugs must be unique across all repo entries, including skills and references.
-
-`mt skills restore --repo` restores pinned skills into `skills/imported/` and
-references into `skills/references/imported/`. References replace `SKILL.md`
-with `MAIN.md` and remove its leading YAML frontmatter. Restore applies selection
-or override edits, replaces local edits, and prunes undeclared guidance. Monke
-adds missing ignore rules for the generated roots and local restoration state.
-
-When Monke writes recipes, it changes only the `skills` node and appends the node
-when absent. Spawn, materialize, and setup do not restore these imports.
-
-Consumers importing or linking the repo receive its own skills and one level of
-declared imports. This does not project the repo's imports into its own agents.
-Use `mt skills add <source> --project` for clone-local agent projections. See
-[Monke skills](../../monke-skills/SKILL.md) for that workflow.
+Consumers that import or link the repo receive its own skills and one level of
+declared imports. For clone-local agent links, follow
+[Project installs](../../monke-skills/SKILL.md#project-installs).

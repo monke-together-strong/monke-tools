@@ -1,14 +1,14 @@
-This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged, no backwards compatibility required.
+This repository is early in development. Propose broad changes when they improve
+maintainability. Backwards compatibility is optional.
 
-Check [./GLOSSARY.md](./GLOSSARY.md) for terminology questions.
+Use the [domain glossary](GLOSSARY.md) when naming or reviewing domain concepts.
 
 ## Essentials
 
-- Toolchain and package manager: Vite+ (`vp`) backed by Bun
-- Install: `vp install`
-- Check: `vp check`
-- Test: `vpr test` (the package script preserves the Bun runtime)
-- Follow git flow, don't create `codex/` branches
+- Install dependencies with Vite+ (`vp install`).
+- Check code changes with `vp check <changed-source-files>`.
+- Run focused tests with `vpr test <test-file>`. The package script runs Vitest under Bun.
+- Use Git Flow branch prefixes.
 - Put clean source clones created for testing under `tmp/`.
 
 ## Runtime consistency
@@ -19,18 +19,12 @@ Check [./GLOSSARY.md](./GLOSSARY.md) for terminology questions.
 
 ## Imported guidance
 
-To invoke a manual-only skill from another skill or workflow, link directly to its `SKILL.md`.
+To invoke an explicit-only skill from another skill or workflow, link directly to its `SKILL.md`.
 
 Treat `skills/imported/` and `skills/references/imported/` as upstream snapshots.
 Refresh them through the import/update tooling; do not edit their contents locally.
 Report findings against imported guidance for an upstream fix and later refresh.
 
-## Task Tracking
+## Task tracking
 
-- [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues)
-
-## Reference Repos
-
-- Worktrunk (can be referred to as `wt`) for worktrees: https://github.com/max-sixty/worktrunk
-
-Use these as implementation references when needed, clone it to `../libraries/` if not already cloned. Keep it up to date.
+Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).

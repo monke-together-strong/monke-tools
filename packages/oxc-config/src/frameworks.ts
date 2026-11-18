@@ -32,7 +32,6 @@ interface PlacedPreset {
 }
 
 interface FrameworkPresets {
-  /** Rule namespaces registered by the presets' JavaScript plugins. */
   jsPluginNamespaces: readonly string[];
   presets: (directories: string[], scopes: FrameworkScopes) => PlacedPreset[];
 }
@@ -84,9 +83,8 @@ type Manifest = z.infer<typeof manifestSchema>;
 const pnpmWorkspaceSchema = z.object({ packages: z.array(z.string()).optional() }).nullable();
 
 /**
- * Returns the nearest directory at or above `start` that contains `.git`, or `start` when none
- * does. Vite+ evaluates the config with the invoking directory, which can be a subdirectory of the
- * repository, as the working directory.
+ * Vite+ can load the config from a subdirectory. Walk up to `.git` so validation includes sibling
+ * packages. Use `start` if the directory is outside a Git checkout.
  */
 export function findRepositoryRoot(start = process.cwd()): string {
   for (let directory = start; ; directory = path.dirname(directory)) {
@@ -100,7 +98,6 @@ export function findRepositoryRoot(start = process.cwd()): string {
   }
 }
 
-/** Throws when a package depends on a framework that `scopes` neither covers nor declines. */
 export function checkFrameworkCoverage(root: string, scopes: FrameworkScopes) {
   const rootManifest = readManifest(root);
 
@@ -148,9 +145,8 @@ export function checkFrameworkCoverage(root: string, scopes: FrameworkScopes) {
 }
 
 /**
- * Applies framework presets. Repository-wide presets extend the config. Directory-scoped presets
- * become overrides, followed by a copy of the root `rules` for their plugins, because Oxlint
- * applies overrides after root rules.
+ * Oxlint applies overrides after root rules. Repeat the caller's rules after directory-scoped
+ * presets so the caller can still override them.
  */
 export function resolveFrameworks(scopes: FrameworkScopes, rules: DummyRuleMap): FrameworkConfig {
   const resolved: FrameworkConfig = { extends: [], overrides: [], settings: {} };

@@ -12,8 +12,8 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
-// Matches the model in post-merge's hand-off step; `t3 thread start` cannot also set its high effort.
-const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.1-sol"];
+// Matches the model in the post-merge skill. The fallback command selects the model without setting effort.
+const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.2-sol"];
 
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
@@ -138,7 +138,6 @@ function invocationFile(cwd: string, value: string) {
   return `${path.resolve(cwd)}${path.sep}${value}`;
 }
 
-/** Track an open PR so `mt prs poll` can hand its post-merge work back to its thread. */
 export async function runPrsTrack(
   runtime: Runtime,
   url: string,
@@ -173,7 +172,6 @@ export async function runPrsTrack(
   runtime.writeStdout(`Tracking ${record.url}\n`);
 }
 
-/** Stop tracking a PR, such as right before an agent merges it. */
 export async function runPrsUntrack(runtime: Runtime, url: string) {
   const { url: canonicalUrl } = parsePullRequestUrl(url);
   let removed: TrackedPr | undefined;
@@ -265,7 +263,7 @@ async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<stri
     return undefined;
   }
 
-  // Hand off outside the lock, since T3 can be slow, and restore the claim if the hand-off fails.
+  // Run the T3 hand-off outside the lock so a slow CLI does not block tracking.
   const failure = await handOffPostMerge(runtime, t3, pr);
 
   if (failure !== undefined) {
@@ -282,7 +280,7 @@ async function handOffPostMerge(
   t3: string,
   pr: TrackedPr
 ): Promise<string | undefined> {
-  // Post-merge is manual-only, so the message points at its installed SKILL.md.
+  // Post-merge is explicit-only in Codex, so the message points at its installed SKILL.md.
   const skill = path.join(
     getMonkeHome(runtime),
     "skill-registry",

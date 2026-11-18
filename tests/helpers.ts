@@ -40,7 +40,7 @@ const NEUTRALIZED_WORKER_ENV = {
   VISUAL: undefined
 };
 
-// Wait for the second `git worktree add` process; the test timeout bounds the wait.
+// Give the Git fixture its own timeout in case another `git worktree add` never reaches the barrier.
 const WORKTREE_ADD_BARRIER_ATTEMPTS = 2000;
 const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
 const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
@@ -55,7 +55,7 @@ afterEach(() => {
   }
 });
 
-/** Start `mt` in a detached worker process so a test can interrupt it mid-command. */
+/** Start `mt` in a separate process so interruption tests can terminate it mid-command. */
 export function spawnMonkeWorker(options: {
   args: string[];
   cwd: string;
@@ -444,9 +444,7 @@ export function runMonkeCapturingFailure(options: RunMonkeOptions) {
     cwd: options.cwd,
     encoding: "utf-8",
     env: {
-      // The worker is a real subprocess, so it needs a working base environment (HOME, TMPDIR).
-      // Clear only the variables that would otherwise make a test outcome depend on whatever the
-      // developer or CI happens to export.
+      // Keep HOME and TMPDIR for the worker. Ignore inherited Git and editor overrides.
       ...process.env,
       ...NEUTRALIZED_WORKER_ENV,
       ...options.extraEnv,

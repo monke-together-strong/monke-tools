@@ -308,7 +308,7 @@ describe("Desktop Diff", () => {
               throw new Error("unexpected picker");
             }
           })
-        ).rejects.toThrow("safe range forwarding");
+        ).rejects.toThrow("does not support commit ranges");
         expect(existsSync(log)).toBeFalsy();
       }
     }

@@ -35,7 +35,7 @@ function lint(source: string) {
     })
   );
 
-  // Standalone Oxlint must not inherit Vite+'s config loading mode.
+  // With VP_VERSION set, Oxlint expects the config to have a Vite+ `lint` field.
   const result = Bun.spawnSync([oxlint, "-c", "oxlint.config.mjs", "--format=unix", "input.ts"], {
     cwd: root,
     env: { ...process.env, OXLINT_TSGOLINT_PATH: tsgolintExecutable, VP_VERSION: undefined },

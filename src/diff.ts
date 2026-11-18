@@ -103,7 +103,6 @@ interface RememberedDiff {
   owner?: { rootSourceRoot: string; session: string };
 }
 
-/** Prepare delivery alongside repo discovery, then discover picker targets only when needed. */
 export async function runDiffInteractive(runtime: Runtime, options: DiffOptions = {}) {
   const adapter = requireDiffAdapter(
     options.adapter ?? loadGlobalMonkeConfig(getMonkeHome(runtime)).diffAdapter ?? "codiff"
@@ -166,7 +165,9 @@ function isValidRevision(runtime: Runtime, context: RepoContext, ref: string) {
 
 function validateRevision(runtime: Runtime, context: RepoContext, ref: string) {
   if (!isValidRevision(runtime, context, ref)) {
-    throw new MonkeError(`Invalid Diff revision: ${ref}`);
+    throw new MonkeError(
+      `Cannot resolve Diff revision ${ref} to a commit in ${context.worktreeRoot}. Check the ref or pass a commit SHA.`
+    );
   }
 }
 
@@ -279,7 +280,9 @@ function resolveRangeComparison(
   const head = match?.groups?.head;
 
   if (!base || !head) {
-    throw new MonkeError(`Invalid Diff range: ${target}`);
+    throw new MonkeError(
+      `Invalid Diff range ${target}. Pass both revisions as base..head or base...head.`
+    );
   }
 
   validateRevision(runtime, context, base);
@@ -377,7 +380,7 @@ async function selectDiffPlan(runtime: Runtime, remembered: RememberedDiff, opti
       return;
     }
 
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Recoverable target races reopen the picker.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- A target can change while the prompt is open. Reopen the picker if it can no longer be resolved.
     const selected = await runtime.select({
       maxItems: Math.min(choices.length, 10),
       message: "Diff base",

@@ -1,4 +1,4 @@
-# Manual-Test Handoff
+# Manual-test handoff
 
 Start the app from the PR worktree using its documented command. Verify the
 changed route or endpoint responds and leave the app running for the handoff.
@@ -11,10 +11,10 @@ access setup, and a backing file path when the test involves editing that file.
 ```markdown
 ## Manual Testing
 
-- [Selected-file reveal](http://localhost:4312/f/fixture/index.md) — Follow
-  **Relative Target**; its folder opens and the selected file scrolls into view.
-- [Live Markdown update](http://localhost:4312/f/fixture/fresh-view.md) — Edit
-  [fresh-view.md](/path/to/fresh-view.md); the open page updates.
+- Open [Selected-file reveal](http://localhost:4312/f/fixture/index.md).
+  Follow **Relative Target**. Its folder opens and the selected file scrolls into view.
+- Open [Live Markdown update](http://localhost:4312/f/fixture/fresh-view.md).
+  Edit the fixture's `fresh-view.md` file. The open page updates.
 ```
 
 The handoff is complete when the target is responding and each supplied step

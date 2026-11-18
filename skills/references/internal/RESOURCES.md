@@ -1,6 +1,6 @@
 # Resource commands
 
-Run from a Source checkout or an MT Session worktree; ordinary worktrees are unsupported.
+Run from a Source checkout or a Session worktree.
 
 1. Run `mt setup` before starting infrastructure to write dependency paths and deterministic values.
 2. Start any infrastructure required by the repo's resource modules.
@@ -8,17 +8,17 @@ Run from a Source checkout or an MT Session worktree; ordinary worktrees are uns
 4. Run `mt resources exec -- <command> [args...]` to use those allocations.
 5. Run `mt resources release` after use. It preserves the checkout and infrastructure.
 
-Spawn and Materialize acquire automatic resources after bootstrap; explicit resources
-wait for `acquire`. Configure modules using the [configuration reference](../../internal/monke-config/references/monke-yml.md#resources).
+When adding an allocation, define its module in
+[resource configuration](../../internal/monke-config/references/monke-yml.md#resources).
 
-Dynamic outputs live in MT state, not `.env`. `exec` checks required allocations,
-overrides inherited values, and blocks conflicting lifecycle operations while the
-command uses them. Keep resource use in the foreground; do not detach it.
+Access dynamic outputs through `mt resources exec`, which supplies the
+acquired values even when the caller has different values in its environment.
+Keep the command in the foreground so its allocations stay protected for as
+long as it uses them.
 
 After partial acquisition or release failure, fix the cause and rerun the same
-command. Keep recorded release modules available until release succeeds. Release
-before adding required outputs to an existing allocation.
+command. Keep recorded release modules available until release succeeds.
 
-Legacy default-export modules use their recorded aggregate cleanup command, which
-may also stop infrastructure. Release with the old scripts present before migrating
-to named `acquire`/`release` exports.
+Release legacy allocations with the old scripts present before migrating to
+named exports. Their recorded cleanup command receives dynamic outputs as the
+JSON object `MONKE_RESOURCE_OUTPUTS` and may also stop infrastructure.

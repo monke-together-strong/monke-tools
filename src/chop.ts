@@ -174,7 +174,9 @@ function resolveChopTarget(
 
   if (target === undefined) {
     if (invocation.isSourceCheckout) {
-      throw new MonkeError("mt chop from a Source checkout requires an explicit target");
+      throw new MonkeError(
+        "Choose a Session or worktree to remove. Run mt chop <target> from the Source checkout."
+      );
     }
 
     if (invocationOwner !== null) {
