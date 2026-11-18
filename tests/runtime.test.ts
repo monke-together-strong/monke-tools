@@ -191,7 +191,6 @@ describe("runtime", () => {
       const childPidPath = path.join(sandbox, "child.pid");
       const descendantPidPath = path.join(sandbox, "descendant.pid");
       const signalSentMarker = path.join(sandbox, "signal-sent");
-      const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
       const unexpectedCommandMarker = path.join(sandbox, "unexpected-command");
       const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
       write(
@@ -210,7 +209,7 @@ Bun.spawn = (...args) => {
 
 const runtime = createRuntime();
 try {
-  await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap 'exit 0' HUP INT QUIT TERM; sh -c 'trap "" HUP INT QUIT TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}]);
+  await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap 'exit 0' HUP INT QUIT TERM; sh -c 'trap "" HUP INT QUIT TERM; printf "%s" "$$" > "${descendantPidPath}"; exec sleep 60' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; wait`)}]);
 } catch {}
 await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedCommandMarker}"`)}]);
 `
@@ -235,12 +234,8 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
         worker.kill(signal);
         writeFileSync(signalSentMarker, "");
         await worker.exited;
-        await wait(1700);
-        // kill(pid, 0) also sees an exited child awaiting its parent's reap on Linux.
-        const childStatus = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(childPid)]);
-        expect(childStatus.stderr.toString()).toBe("");
-        expect(childStatus.stdout.toString().trim()).toMatch(/^(?:Z.*)?$/u);
-        expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+        await expect.poll(() => processStopped(childPid)).toBeTruthy();
+        await expect.poll(() => processStopped(descendantPid)).toBeTruthy();
         expect(existsSync(unexpectedCommandMarker)).toBeFalsy();
       } finally {
         worker.kill("SIGKILL");
@@ -253,14 +248,13 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
     const sandbox = makeTempDir("runtime-timeout-descendant");
     const childPidPath = path.join(sandbox, "child.pid");
     const descendantPidPath = path.join(sandbox, "descendant.pid");
-    const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
     const runtime = createRuntime();
 
     const resultPromise = runtime.execAsync(
       "sh",
       [
         "-c",
-        `trap 'exit 0' TERM; sh -c 'trap "" TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`
+        `trap 'exit 0' TERM; sh -c 'trap "" TERM; printf "%s" "$$" > "${descendantPidPath}"; exec sleep 60' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; wait`
       ],
       { allowFailure: true, timeoutSeconds: 0.5 }
     );
@@ -271,8 +265,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
 
     try {
       await expect(resultPromise).resolves.toMatchObject({ timedOut: true });
-      await wait(1100);
-      expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+      await expect.poll(() => processStopped(descendantPid)).toBeTruthy();
     } finally {
       killRetainedDescendant(childPid, descendantPid);
     }
@@ -284,7 +277,6 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
     const childPidPath = path.join(sandbox, "child.pid");
     const descendantPidPath = path.join(sandbox, "descendant.pid");
     const timeoutStartedMarker = path.join(sandbox, "timeout-started");
-    const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
     const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
     write(
       sandbox,
@@ -294,7 +286,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
 const runtime = createRuntime();
 await runtime.execAsync(
   "sh",
-  ["-c", ${JSON.stringify(`trap 'touch "${timeoutStartedMarker}"; exit 0' TERM; sh -c 'trap "" TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}],
+  ["-c", ${JSON.stringify(`trap 'touch "${timeoutStartedMarker}"; exit 0' TERM; sh -c 'trap "" TERM; printf "%s" "$$" > "${descendantPidPath}"; exec sleep 60' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; wait`)}],
   { allowFailure: true, timeoutSeconds: 0.5 }
 );
 `
@@ -321,8 +313,7 @@ await runtime.execAsync(
       await waitFor(() => childPid !== undefined && !isProcessRunning(childPid));
       worker.kill("SIGTERM");
       await worker.exited;
-      await wait(1700);
-      expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+      await expect.poll(() => processStopped(descendantPid)).toBeTruthy();
     } finally {
       worker.kill("SIGKILL");
       killRetainedDescendant(childPid, descendantPid);
@@ -519,6 +510,18 @@ function readPublishedPid(filePath: string) {
   const value = existsSync(filePath) ? readFileSync(filePath, "utf-8").trim() : "";
 
   return /^[1-9]\d*$/u.test(value) ? Number(value) : undefined;
+}
+
+function processStopped(pid: number | undefined) {
+  if (pid === undefined || !Number.isSafeInteger(pid) || pid < 1) {
+    throw new Error("Missing subprocess PID");
+  }
+
+  const status = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)]);
+  expect(status.stderr.toString()).toBe("");
+
+  // Linux may retain an exited child as a zombie until its parent reaps it.
+  return /^(?:Z.*)?$/u.test(status.stdout.toString().trim());
 }
 
 async function waitFor(predicate: () => boolean) {
