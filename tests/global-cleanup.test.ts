@@ -1599,37 +1599,26 @@ export function release({owner, outputs}) {
     30_000
   );
 
-  it.each([
-    { label: "", start: (worktree: string) => processIn(worktree, false) },
-    {
-      label: " whose arguments name a path ending in it",
-      start: (worktree: string) =>
-        processIn(worktree, false, `: /other${worktree} ; trap '' TERM; sleep 60 & wait`)
+  it("leaves an old process merely inside the worktree running without blocking", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/visited");
+    const [dependency] = state.repos;
+
+    if (!dependency) {
+      throw new Error("Missing dependency");
     }
-  ])(
-    "leaves an old process merely inside the worktree$label running without blocking",
-    async ({ start }) => {
-      const f = fixture();
-      const state = f.addSession("feature/visited");
-      const [dependency] = state.repos;
 
-      if (!dependency) {
-        throw new Error("Missing dependency");
-      }
-
-      const pid = start(dependency.worktreePath);
-      ageProcess(f.runtime, pid, 30);
-      const result = await f.run();
-      expect(result.error).toBeUndefined();
-      expect(alive(pid)).toBeTruthy();
-      expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
-      expect(result.report.sessions[0]?.execution.completedActions?.[0]?.step).not.toBe(
-        "process-stop"
-      );
-      expect(existsSync(dependency.worktreePath)).toBeFalsy();
-    },
-    30_000
-  );
+    const pid = processIn(dependency.worktreePath, false);
+    ageProcess(f.runtime, pid, 30);
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(alive(pid)).toBeTruthy();
+    expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
+    expect(result.report.sessions[0]?.execution.completedActions?.[0]?.step).not.toBe(
+      "process-stop"
+    );
+    expect(existsSync(dependency.worktreePath)).toBeFalsy();
+  }, 30_000);
 
   it("reports completed work, retains state, and retries the remaining worktree after removal failure", async () => {
     const f = fixture();
