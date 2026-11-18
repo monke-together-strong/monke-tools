@@ -4,6 +4,7 @@ import path from "node:path";
 import { MonkeError } from "./errors.ts";
 import { samePath } from "./path-identity.ts";
 import { findRecordedSessionOwner } from "./session-state-store.ts";
+import { shellQuote } from "./shell-quote.ts";
 import type { Runtime, SessionState } from "./types.ts";
 
 export interface WorktreeEntry {
@@ -394,7 +395,7 @@ export function assertAdoptedWorktreePresent(
     !existsSync(worktreePath)
   ) {
     throw new MonkeError(
-      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${session} from ${sourceRoot} to remove the Session`
+      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${shellQuote(session)} from ${sourceRoot} to remove the Session`
     );
   }
 }

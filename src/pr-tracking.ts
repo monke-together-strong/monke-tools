@@ -13,7 +13,7 @@ import type { Runtime } from "./types.ts";
 const T3_TIMEOUT_SECONDS = 60;
 
 // Matches the model and effort in the post-merge skill.
-const POST_MERGE_MODEL = [
+const POST_MERGE_THREAD_OPTIONS = [
   "--provider",
   "codex",
   "--model",
@@ -82,13 +82,15 @@ export async function runPrsCreate(
   }
 
   const { url } = parsePullRequestUrl(output);
+  const ghFailure = failure === undefined ? "" : `gh pr create also failed: ${failure}\n`;
 
   try {
     await runPrsTrack(runtime, url, { ...options, checkout });
   } catch (cause) {
     throw new MonkeError(
-      `Created ${url}, but post-merge tracking is incomplete: ${errorMessage(ThrownValueSchema.parse(cause))}\n` +
-        `Register this existing PR with mt prs track ${url} --thread ${shellQuote(options.thread)} --checkout ${shellQuote(checkout)}`,
+      `Created ${url}, but post-merge tracking is incomplete: ${errorMessage(ThrownValueSchema.parse(cause))}\n${
+        ghFailure
+      }Register this existing PR with mt prs track ${url} --thread ${shellQuote(options.thread)} --checkout ${shellQuote(checkout)}`,
       { cause }
     );
   }
@@ -335,7 +337,7 @@ async function handOffPostMerge(
     "start",
     "--title",
     `Verify #${pr.number}`,
-    ...POST_MERGE_MODEL,
+    ...POST_MERGE_THREAD_OPTIONS,
     pr.sourceCheckout,
     `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
   ]);

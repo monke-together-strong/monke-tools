@@ -990,7 +990,7 @@ function initializeMaterialization(
 
   if (recordedRootPath !== undefined && !samePath(recordedRootPath, context.worktreeRoot)) {
     throw new MonkeError(
-      `Session ${session} is already bound to ${recordedRootPath}; run mt materialize there, or mt chop ${session} to remove the Session`
+      `Session ${session} is already bound to ${recordedRootPath}; run mt materialize there, or mt chop ${shellQuote(session)} to remove the Session`
     );
   }
 

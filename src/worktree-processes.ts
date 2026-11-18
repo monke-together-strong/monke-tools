@@ -142,22 +142,12 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
  * prints unquoted arguments, so a path containing spaces can span tokens.
  */
 function commandReferences(command: string, worktreePath: string) {
-  const normalized = path.normalize(worktreePath);
-
-  // An earlier argument can share the prefix, such as `/wt/topic-cache` before `/wt/topic`.
-  for (
-    let index = command.indexOf(normalized);
-    index !== -1;
-    index = command.indexOf(normalized, index + 1)
-  ) {
-    const next = command[index + normalized.length];
-
-    if (next === undefined || next === path.sep || /\s/u.test(next)) {
-      return true;
-    }
-  }
-
-  return false;
+  // The path must be bounded by argument starts, `=`, quotes, or a separator; `/other/wt/topic`
+  // does not name `/wt/topic`. Later matches count too, so a prefix-sharing `/wt/topic-cache` does not hide it.
+  return new RegExp(
+    `(?:^|[\\s='"])${RegExp.escape(path.normalize(worktreePath))}(?:$|[\\s/'"])`,
+    "u"
+  ).test(command);
 }
 
 function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {
