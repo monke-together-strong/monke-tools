@@ -35,6 +35,19 @@ jobs:
       - name: Setup Mainline
         uses: ./.github/actions/setup-mainline
 
+      - name: Restore imported guidance cache
+        # Restore trusts matching guidance and its marker, so use this cache only on pushes to main.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: guidance-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        continue-on-error: true
+        with:
+          path: |
+            skills/.monke-restored.json
+            skills/imported
+            skills/references/imported
+          key: monke-tools-guidance-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('monke.yml', 'bun.lock', 'package.json', 'src/**', 'scripts/**') }}
+
       - name: Restore locked guidance
         run: bun run src/index.ts skills restore --repo
 
@@ -68,3 +81,14 @@ jobs:
 
           version="$(bun run scripts/release-bundle.ts next-version)"
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Save imported guidance cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.guidance-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        continue-on-error: true
+        with:
+          path: |
+            skills/.monke-restored.json
+            skills/imported
+            skills/references/imported
+          key: monke-tools-guidance-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('monke.yml', 'bun.lock', 'package.json', 'src/**', 'scripts/**') }}
