@@ -35,7 +35,11 @@ const SwingHistoryTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
   z.strictObject({
     /** Null when the worktree has a detached HEAD. */
-    branch: z.string().min(1).nullable(),
+    branch: z
+      .string()
+      .min(1)
+      .nullable()
+      .transform((branch) => (branch === "HEAD" ? null : branch)),
     kind: z.literal("ordinary-worktree"),
     path: z.string().min(1)
   })

@@ -352,8 +352,9 @@ describe("Swing", () => {
       "README.md": "hello\n"
     });
 
-    const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "winters-echo");
     git(repoRoot, ["worktree", "add", ...addArgs, worktreeRoot]);
+    git(repoRoot, ["tag", "winters-echo"]);
 
     const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
     const backToOrdinary = runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home });

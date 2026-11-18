@@ -51,10 +51,7 @@ export function resolveCheckoutSource(runtime: Runtime, checkoutRoot: string): C
 }
 
 interface ResolveRepoContextOptions {
-  /**
-   * Allow `sessionName: null` when a linked worktree is outside the repo's expected Session
-   * worktree directory and has no recorded owner.
-   */
+  /** Allow `sessionName: null` for a linked worktree with no recorded owner. */
   allowOrdinaryWorktree?: boolean;
   allowSessionBranchMismatch?: boolean;
   inferSessionName?: boolean;
@@ -78,7 +75,10 @@ export function resolveRepoContext(
     "--git-common-dir"
   ]).trim();
 
-  const currentBranch = runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const currentBranch = runGit(runtime, cwd, ["rev-parse", "--symbolic-full-name", "HEAD"])
+    .trim()
+    .replace(/^refs\/heads\//u, "");
+
   const sourceRoot = path.dirname(gitCommonDir);
   const isSourceCheckout = path.normalize(worktreeRoot) === path.normalize(sourceRoot);
   const shouldInferSessionName = options.inferSessionName ?? true;
@@ -120,7 +120,7 @@ function inferSessionNameForContext(
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
   let sessionName = toSessionPath(relativeSessionPath);
 
-  if (isOutsideExpectedRoot(relativeSessionPath)) {
+  if (options.allowOrdinaryWorktree || isOutsideExpectedRoot(relativeSessionPath)) {
     const owner = findRecordedSessionOwner(home, sourceRoot, worktreeRoot);
 
     if (owner !== null) {

@@ -776,7 +776,7 @@ apps: {}
 
       const gitLog = installGitShim(fixture.binDirectory, {
         afterCommand: {
-          args: "rev-parse --abbrev-ref HEAD",
+          args: "rev-parse --symbolic-full-name HEAD",
           cwd: fixture.rootWorktree,
           script: scripts[raceKind]
         }
@@ -1609,7 +1609,7 @@ apps: {}
 
     const gitLog = installGitShim(binDirectory, {
       afterCommand: {
-        args: "rev-parse --abbrev-ref HEAD",
+        args: "rev-parse --symbolic-full-name HEAD",
         cwd: fixture.worktreePath,
         script: `"$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.worktreePath)} switch -c raced >/dev/null`
       }

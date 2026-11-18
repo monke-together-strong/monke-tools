@@ -5,6 +5,7 @@ import {
   readFileSync,
   readlinkSync,
   realpathSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
@@ -218,6 +219,35 @@ describe("Local install refresh script", () => {
     expect(result.stderr).toContain("Source checkout changed while");
     expect(existsSync(monkeToolsLog)).toBeFalsy();
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+  });
+
+  it("aborts the install when an untracked file cannot be checksummed", () => {
+    const sandbox = makeTempDir("install-local-unreadable");
+
+    const checkout = createRepo(path.join(sandbox, "checkout"), {
+      "scripts/install-local.sh": installScript
+    });
+
+    symlinkSync("missing", path.join(checkout, "a-broken-link"));
+    writeFileSync(path.join(checkout, "z-readable"), "content");
+    const bunLog = path.join(sandbox, "bun.log");
+    const binDirectory = path.join(sandbox, "bin");
+    prepareInstallCompiler(binDirectory);
+
+    const result = spawnSync("sh", [path.join(checkout, "scripts/install-local.sh")], {
+      cwd: checkout,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        BUN_LOG: bunLog,
+        MONKE_HOME: path.join(sandbox, "monke-home"),
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("a-broken-link");
+    expect(existsSync(bunLog)).toBeFalsy();
   });
 
   it("activates the compiled executable through the stable symlink in the real Local refresh", () => {

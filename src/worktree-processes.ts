@@ -141,8 +141,10 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
  * prints unquoted arguments, so a path containing spaces can span tokens.
  */
 function commandReferencePattern(worktreePath: string) {
-  // The start stays unanchored to match class paths, `-javaagent:` values, and `file://` URLs.
-  return new RegExp(`${RegExp.escape(path.normalize(worktreePath))}(?:$|[\\s/])`, "u");
+  const root = RegExp.escape(path.normalize(worktreePath));
+
+  // Match standalone paths, classpath entries, option values and file URLs.
+  return new RegExp(String.raw`(?:^|[\s=:])(['"]?)(?:file://)?${root}(?:/|\1(?=$|[\s:]))`, "u");
 }
 
 function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {

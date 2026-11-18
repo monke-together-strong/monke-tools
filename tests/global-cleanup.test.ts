@@ -1394,10 +1394,14 @@ export function release({owner, outputs}) {
         processIn(
           worktree,
           false,
-          `: ${worktree}-cache ${worktree} ; trap '' TERM; sleep 60 & wait`
+          `: ${worktree}-cache "${worktree}" ; trap '' TERM; sleep 60 & wait`
         ),
       startBystander: (worktree: string) =>
-        processIn(worktree, false, `: ${worktree}-cache; trap '' TERM; sleep 60 & wait`)
+        processIn(
+          worktree,
+          false,
+          `: ${worktree}-cache /archive${worktree}/server; trap '' TERM; sleep 60 & wait`
+        )
     },
     {
       label: "a file URL under the worktree",

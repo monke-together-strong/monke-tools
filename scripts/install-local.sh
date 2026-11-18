@@ -71,16 +71,17 @@ cleanup_old_bun_builds() {
 }
 
 capture_source_state() {
-  CAPTURED_SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
-  CAPTURED_SOURCE_STATUS=$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)
-  captured_tracked_diff=$(git -C "$ROOT_DIR" diff --binary HEAD --)
+  CAPTURED_SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD) || return 1
+  CAPTURED_SOURCE_STATUS=$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal) || return 1
+  captured_tracked_diff=$(git -C "$ROOT_DIR" diff --binary HEAD --) || return 1
   # Git can quote filenames in line-delimited output. Use `-z` to get literal names.
-  # Prefix each name with `./` so cksum treats a leading dash as part of the filename.
+  git -C "$ROOT_DIR" ls-files --others --exclude-standard -z > "$untracked_names" || return 1
+  # Hash the NUL-delimited names separately from the ordered content checksums.
   captured_untracked_state=$(
     cd "$ROOT_DIR" &&
-      git ls-files --others --exclude-standard -z |
-      xargs -0 sh -c 'for file do cksum "./$file"; done' sh
-  )
+      cksum < "$untracked_names" &&
+      xargs -0 sh -c 'for file do cksum < "./$file" || exit 1; done' sh < "$untracked_names"
+  ) || return 1
   if [ "$(git -C "$ROOT_DIR" rev-parse HEAD)" != "$CAPTURED_SOURCE_COMMIT" ]; then
     return 1
   fi
@@ -111,6 +112,9 @@ acquire_installation_lock
 if [ -f "$ROOT_DIR/monke.yml" ]; then
   (cd "$ROOT_DIR" && bun run src/index.ts skills restore --repo)
 fi
+
+untracked_names=$(mktemp "${TMPDIR:-/tmp}/mt-install-untracked.XXXXXX")
+trap 'rm -f -- "$untracked_names"; release_installation_lock' 0
 
 if ! capture_source_state; then
   printf 'Source checkout changed while the installer was reading its Git state. Rerun vpr install:local.\n' >&2
