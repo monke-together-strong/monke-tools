@@ -625,7 +625,7 @@ function validateOrdinaryWorktreeTarget(
 
   if (resolved === undefined) {
     throw new MonkeError(
-      `Expected worktree ${target.path} to belong to ${rootSourceRoot} and remain ${target.branch === null ? "detached" : `on branch ${target.branch}`}`
+      `Expected worktree ${target.path} to belong to ${rootSourceRoot} and remain ${target.branch === null ? "detached" : `on branch ${target.branch}`}. Run mt swing to choose another target.`
     );
   }
 }

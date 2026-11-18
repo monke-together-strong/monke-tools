@@ -398,7 +398,7 @@ printf '${prUrl(661)}\\n'`
     expect([...sandbox.launchctl(), ...sandbox.systemctl()]).toStrictEqual([]);
   });
 
-  it("tracks a created PR when GitHub reports a later failure", async () => {
+  it("tracks a PR whose URL gh pr create prints before exiting with an error", async () => {
     const sandbox = createSandbox();
     installRecordingCommand(
       sandbox,

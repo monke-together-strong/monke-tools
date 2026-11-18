@@ -74,7 +74,8 @@ capture_source_state() {
   CAPTURED_SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
   CAPTURED_SOURCE_STATUS=$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)
   captured_tracked_diff=$(git -C "$ROOT_DIR" diff --binary HEAD --)
-  # NUL-separated names reach cksum unquoted, and `./` keeps names such as `-` from reading as options.
+  # Git can quote filenames in line-delimited output. Use `-z` to get literal names.
+  # Prefix each name with `./` so cksum treats a leading dash as part of the filename.
   captured_untracked_state=$(
     cd "$ROOT_DIR" &&
       git ls-files --others --exclude-standard -z |

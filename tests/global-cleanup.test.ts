@@ -1387,9 +1387,9 @@ export function release({owner, outputs}) {
   }
 
   it.each([
-    { label: "", start: (worktree: string) => processIn(worktree, true) },
+    { label: "a worktree path", start: (worktree: string) => processIn(worktree, true) },
     {
-      label: " after a path that shares its prefix",
+      label: "a worktree path after a longer path with the same prefix",
       start: (worktree: string) =>
         processIn(
           worktree,
@@ -1398,7 +1398,7 @@ export function release({owner, outputs}) {
         )
     },
     {
-      label: " through a file URL",
+      label: "a file URL under the worktree",
       start: (worktree: string) =>
         processIn(
           worktree,
@@ -1407,7 +1407,7 @@ export function release({owner, outputs}) {
         )
     }
   ])(
-    "stops a day-old process tree attached$label before removal and reports it",
+    "stops a process tree at least a day old before removal and reports the stop when its command contains $label",
     async ({ start }) => {
       const f = fixture();
       const state = f.addSession("feature/served");

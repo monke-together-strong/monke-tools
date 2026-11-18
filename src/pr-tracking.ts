@@ -12,7 +12,7 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
-// Matches the model and effort in the post-merge skill.
+// Keep the fallback thread options in sync with skills/internal/post-merge/SKILL.md.
 const POST_MERGE_THREAD_OPTIONS = [
   "--provider",
   "codex",
@@ -74,9 +74,9 @@ export async function runPrsCreate(
   const failure =
     created.exitCode === 0
       ? undefined
-      : created.stderr.trim() || `gh pr create exited ${created.exitCode}`;
+      : created.stderr.trim() || `exit status ${created.exitCode} with no error output`;
 
-  // gh prints the URL before a later step, such as an update or upload, can still fail.
+  // gh can print a newly created PR's URL even when it exits with an error.
   if (failure !== undefined && !PULL_REQUEST_URL.test(output)) {
     throw new MonkeError(`gh pr create failed: ${failure}`);
   }
@@ -90,13 +90,15 @@ export async function runPrsCreate(
     throw new MonkeError(
       `Created ${url}, but post-merge tracking is incomplete: ${errorMessage(ThrownValueSchema.parse(cause))}\n${
         ghFailure
-      }Register this existing PR with mt prs track ${url} --thread ${shellQuote(options.thread)} --checkout ${shellQuote(checkout)}`,
+      }Retry tracking with mt prs track ${url} --thread ${shellQuote(options.thread)} --checkout ${shellQuote(checkout)}`,
       { cause }
     );
   }
 
   if (failure !== undefined) {
-    throw new MonkeError(`Created and tracked ${url}, but gh pr create failed: ${failure}`);
+    throw new MonkeError(
+      `Created and tracked ${url}, but gh pr create failed: ${failure}\nOpen the PR to address the error.`
+    );
   }
 }
 

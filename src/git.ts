@@ -51,7 +51,10 @@ export function resolveCheckoutSource(runtime: Runtime, checkoutRoot: string): C
 }
 
 interface ResolveRepoContextOptions {
-  /** Resolve a worktree outside the Session root with no recorded owner to no Session. */
+  /**
+   * Allow `sessionName: null` when a linked worktree is outside the repo's expected Session
+   * worktree directory and has no recorded owner.
+   */
   allowOrdinaryWorktree?: boolean;
   allowSessionBranchMismatch?: boolean;
   inferSessionName?: boolean;

@@ -53,7 +53,7 @@ case "$*" in
   *"rev-parse --short=7 HEAD") printf '%s\n' 0123456 ;;
   *"status --porcelain --untracked-files=normal") ${dirty ? "printf '%s\\n' ' M src/index.ts'" : ":"} ;;
   *"diff --binary HEAD --") [ ! -f ${JSON.stringify(sourceChangedMarker)} ] || printf '%s\n' changed ;;
-  *"ls-files "*) ${untrackedFile === undefined ? ":" : `printf '%s\\0' ${JSON.stringify(path.basename(untrackedFile))}`} ;;
+  *"ls-files "*" -z"*) ${untrackedFile === undefined ? ":" : `printf '%s\\0' ${JSON.stringify(path.basename(untrackedFile))}`} ;;
   *) exit 2 ;;
 esac
 `
@@ -203,7 +203,6 @@ describe("Local install refresh script", () => {
     expect(new Set(installIdentities).size).toBe(2);
   });
 
-  // Git quotes non-ASCII names, and cksum reads dash-leading names as options or stdin.
   it.each([
     { change: "tracked" as const, label: "tracked source", name: undefined },
     ...["café.txt", "-notes.txt", "-"].map((name) => ({
