@@ -7,13 +7,36 @@ runs:
     - name: Setup Vite+
       uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
       with:
-        cache: true
+        cache: ${{ runner.os != 'Linux' }}
+        run-install: ${{ runner.os != 'Linux' }}
 
     - name: Setup Bun
+      id: bun
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
         bun-version-file: package.json
 
+    - name: Restore Bun package cache
+      if: runner.os == 'Linux'
+      id: bun-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      continue-on-error: true
+      with:
+        path: ${{ runner.temp }}/monke-tools-bun-packages
+        key: monke-tools-bun-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lock') }}
+
     - name: Install deps
       shell: bash
-      run: vp install --frozen-lockfile -- --prefer-offline
+      run: |
+        if [[ "$RUNNER_OS" == Linux ]]; then
+          export BUN_INSTALL_CACHE_DIR="$RUNNER_TEMP/monke-tools-bun-packages"
+        fi
+        vp install --frozen-lockfile -- --prefer-offline
+
+    - name: Save Bun package cache
+      if: runner.os == 'Linux' && steps.bun-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      continue-on-error: true
+      with:
+        path: ${{ runner.temp }}/monke-tools-bun-packages
+        key: monke-tools-bun-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lock') }}
