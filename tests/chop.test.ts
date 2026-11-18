@@ -519,7 +519,7 @@ apps: {}
     expect(thrown).toBeInstanceOf(Error);
 
     if (!(thrown instanceof Error)) {
-      throw new Error("expected Session Chop to fail");
+      throw new TypeError("expected Session Chop to fail");
     }
 
     expect(thrown.message).toContain(fixture.depWorktree);

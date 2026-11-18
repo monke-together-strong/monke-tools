@@ -123,7 +123,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
         runtime
       );
 
-      const failure = await operation.then(() => "", String);
+      const failure = await operation.then(() => "").catch(String);
       expect(Boolean(failure)).toBe(scenario.denied);
       expect(failure.includes(".monke-restored.json")).toBe(scenario.denied);
       const unchanged = scenario.denied || scenario.action === "restore";

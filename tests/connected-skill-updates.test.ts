@@ -425,10 +425,9 @@ describe("updates through connected local repositories", () => {
       const globalSummary = pauseCommand(f.runtime);
       const repoSummary = pauseCommand(repoRuntime);
 
-      const globalUpdate = runCliAsync(["skills", "update"], globalSummary.runtime).then(
-        () => "",
-        String
-      );
+      const globalUpdate = runCliAsync(["skills", "update"], globalSummary.runtime)
+        .then(() => "")
+        .catch(String);
 
       let repoUpdate: Promise<string> | undefined;
 
@@ -442,10 +441,9 @@ describe("updates through connected local repositories", () => {
         git(f.upstream, ["add", "."]);
         git(f.upstream, ["commit", "-m", "Advance during review"]);
         const current = git(f.upstream, ["rev-parse", "HEAD"]);
-        repoUpdate = runCliAsync(["skills", "update", "--repo"], repoSummary.runtime).then(
-          () => "",
-          String
-        );
+        repoUpdate = runCliAsync(["skills", "update", "--repo"], repoSummary.runtime)
+          .then(() => "")
+          .catch(String);
         await expect(
           Promise.race([
             repoSummary.entered.then(() => "entered"),
@@ -673,10 +671,9 @@ describe("updates through connected local repositories", () => {
         }
       };
 
-      const projectUpdate = runCliAsync(["skills", "update", "--project"], installer.runtime).then(
-        () => "",
-        String
-      );
+      const projectUpdate = runCliAsync(["skills", "update", "--project"], installer.runtime)
+        .then(() => "")
+        .catch(String);
 
       let publisherUpdate: Promise<string> | undefined;
 
@@ -691,10 +688,9 @@ describe("updates through connected local repositories", () => {
         git(f.upstream, ["add", "."]);
         git(f.upstream, ["commit", "-m", "Concurrent accepted revision"]);
         const newest = git(f.upstream, ["rev-parse", "HEAD"]);
-        publisherUpdate = runCliAsync(
-          ["skills", "update", "--repo"],
-          publisherSummary.runtime
-        ).then(() => "", String);
+        publisherUpdate = runCliAsync(["skills", "update", "--repo"], publisherSummary.runtime)
+          .then(() => "")
+          .catch(String);
         await expect(
           Promise.race([
             publisherSummary.entered.then(() => "entered"),

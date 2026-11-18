@@ -451,10 +451,10 @@ export function sanitizeSkillMetadata(value: string) {
 
 function stripTerminalEscapes(value: string) {
   return value
-    .replace(OSC_RE, "")
-    .replace(DCS_PM_APC_RE, "")
-    .replace(CSI_RE, "")
-    .replace(SIMPLE_ESC_RE, "")
-    .replace(C1_RE, "")
-    .replace(CONTROL_RE, "");
+    .replaceAll(OSC_RE, "")
+    .replaceAll(DCS_PM_APC_RE, "")
+    .replaceAll(CSI_RE, "")
+    .replaceAll(SIMPLE_ESC_RE, "")
+    .replaceAll(C1_RE, "")
+    .replaceAll(CONTROL_RE, "");
 }

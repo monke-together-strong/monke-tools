@@ -1338,17 +1338,15 @@ skillInstallPreference:
         installId: "local-second",
         monkeHome,
         sourceCheckout: candidate
-      }).then(
-        () => "accepted",
-        (cause: unknown) => errorMessage(ThrownValueSchema.parse(cause))
-      );
+      })
+        .then(() => "accepted")
+        .catch((cause: unknown) => errorMessage(ThrownValueSchema.parse(cause)));
 
       expect(outcome).toMatch(expected);
 
-      const refreshed = await runInstallSkillsLocked(runtime, candidate).then(
-        () => "accepted",
-        (cause: unknown) => errorMessage(ThrownValueSchema.parse(cause))
-      );
+      const refreshed = await runInstallSkillsLocked(runtime, candidate)
+        .then(() => "accepted")
+        .catch((cause: unknown) => errorMessage(ThrownValueSchema.parse(cause)));
 
       expect(refreshed).toMatch(expected);
       let followed = "accepted";
