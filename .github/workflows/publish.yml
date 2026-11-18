@@ -14,52 +14,13 @@ permissions:
 jobs:
   verify:
     uses: ./.github/workflows/verify-mainline.yml
-
-  prepare-release:
-    name: Select Mainline Release
-    needs: verify
-    runs-on: ubuntu-24.04
-    outputs:
-      relevant: ${{ steps.release.outputs.relevant }}
-      version: ${{ steps.release.outputs.version }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Mainline
-        uses: ./.github/actions/setup-mainline
-
-      - name: Select Mainline release
-        id: release
-        env:
-          AFTER_SHA: ${{ github.sha }}
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          if [ -z "$BEFORE_SHA" ] ||
-            [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] ||
-            ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-            relevant=true
-          else
-            relevant="$(bun run scripts/release-bundle.ts relevant \
-              --before "$BEFORE_SHA" \
-              --after "$AFTER_SHA")"
-          fi
-          printf 'relevant=%s\n' "$relevant" >> "$GITHUB_OUTPUT"
-          if [ "$relevant" != true ]; then
-            exit 0
-          fi
-
-          version="$(bun run scripts/release-bundle.ts next-version)"
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+    with:
+      select-release: true
 
   build-release:
     name: Build Release (${{ matrix.platform }})
-    needs: prepare-release
-    if: needs.prepare-release.outputs.relevant == 'true'
+    needs: verify
+    if: needs.verify.outputs.relevant == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -83,7 +44,7 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           SOURCE_COMMIT: ${{ github.sha }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           mkdir -p "$RUNNER_TEMP/release-assets"
           bun run scripts/release-bundle.ts build \
@@ -96,7 +57,7 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           SOURCE_COMMIT: ${{ github.sha }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           archive="$RUNNER_TEMP/release-assets/monke-tools-v${VERSION}-${PLATFORM}.tar.gz"
           bun run scripts/release-bundle.ts verify \
@@ -115,8 +76,8 @@ jobs:
 
   publish-release:
     name: Publish Mainline Release
-    needs: [prepare-release, build-release]
-    if: needs.prepare-release.outputs.relevant == 'true'
+    needs: [verify, build-release]
+    if: needs.verify.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -142,7 +103,7 @@ jobs:
 
       - name: Generate checksums
         env:
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           bun run scripts/release-bundle.ts checksums \
             --directory "$RUNNER_TEMP/release-assets" \
@@ -151,7 +112,7 @@ jobs:
       - name: Verify complete Release
         env:
           SOURCE_COMMIT: ${{ github.sha }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           bun run scripts/release-bundle.ts verify-assets \
             --directory "$RUNNER_TEMP/release-assets" \
@@ -162,7 +123,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ github.sha }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           tag="monke-tools-v${VERSION}"
           existing_draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
@@ -181,20 +142,20 @@ jobs:
       - name: Upload all Release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: gh release upload "monke-tools-v${VERSION}" "$RUNNER_TEMP/release-assets/"*
 
       - name: Publish immutable Release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: gh release edit "monke-tools-v${VERSION}" --draft=false
 
       - name: Publish stable Release catalog
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ github.sha }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           catalog_branch=monke-tools-release-catalog
           catalog_path="$RUNNER_TEMP/stable.tsv"

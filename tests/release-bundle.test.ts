@@ -9,7 +9,6 @@ import {
   buildReleaseBundle,
   deriveNextReleaseVersion,
   hasReleaseOwnedChanges,
-  isReleaseOwnedPath,
   verifyReleaseAssets,
   writeReleaseChecksums,
   writeStableReleaseCatalog
@@ -448,13 +447,13 @@ describe("Mainline Release selection", () => {
     ["skills/codex/example/SKILL.md", true],
     ["install.sh", true],
     [".github/workflows/publish.yml", true],
+    [".github/workflows/verify-mainline.yml", true],
     [".github/workflows/publish-packages.yml", false],
-    ["bun.lock", false],
     ["README.md", false],
     ["docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md", false],
     ["packages/oxc-config/src/oxlint.ts", false]
-  ])("classifies %s as release-owned: %s", (filePath, expected) => {
-    expect(isReleaseOwnedPath(filePath)).toBe(expected);
+  ])("reports Mainline release eligibility for %s: %s", (filePath, expected) => {
+    expect(hasReleaseOwnedChanges([filePath])).toBe(expected);
   });
 
   it("skips an unrelated workspace dependency and lockfile change", () => {

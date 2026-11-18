@@ -48,6 +48,7 @@ const ZERO_COMMIT_PATTERN = /^0{40}$/u;
 const RELEASE_INPUTS = [
   ".github/actions/setup-mainline/",
   ".github/workflows/publish.yml",
+  ".github/workflows/verify-mainline.yml",
   "install.sh",
   "LICENSE",
   "THIRD_PARTY_NOTICES.md",
@@ -82,7 +83,7 @@ interface BuildReleaseBundleOptions {
   version: string;
 }
 
-export function isReleaseOwnedPath(filePath: string) {
+function isReleaseOwnedPath(filePath: string) {
   const normalized = filePath.replaceAll("\\", "/");
 
   return RELEASE_INPUTS.some((input) =>

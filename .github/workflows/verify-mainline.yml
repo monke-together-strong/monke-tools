@@ -2,6 +2,16 @@ name: Verify Mainline
 
 on:
   workflow_call:
+    inputs:
+      select-release:
+        description: Check whether the push qualifies for a Mainline release and compute the version if it does
+        type: boolean
+        default: false
+    outputs:
+      relevant:
+        value: ${{ jobs.verify.outputs.relevant }}
+      version:
+        value: ${{ jobs.verify.outputs.version }}
 
 permissions:
   contents: read
@@ -10,11 +20,16 @@ jobs:
   verify:
     name: Check Mainline
     runs-on: ubuntu-24.04
+    outputs:
+      relevant: ${{ steps.release.outputs.relevant }}
+      version: ${{ steps.release.outputs.version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          # Release selection needs history and tags. GitHub Actions treats numeric 0 as false.
+          fetch-depth: ${{ inputs.select-release && '0' || '1' }}
           persist-credentials: false
 
       - name: Setup Mainline
@@ -29,3 +44,27 @@ jobs:
 
       - name: Check packaged skill links
         run: vpr skills:check-links
+
+      - name: Select Mainline release
+        id: release
+        if: inputs.select-release
+        env:
+          AFTER_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE_SHA" ] ||
+            [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] ||
+            ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            relevant=true
+          else
+            relevant="$(bun run scripts/release-bundle.ts relevant \
+              --before "$BEFORE_SHA" \
+              --after "$AFTER_SHA")"
+          fi
+          printf 'relevant=%s\n' "$relevant" >> "$GITHUB_OUTPUT"
+          if [ "$relevant" != true ]; then
+            exit 0
+          fi
+
+          version="$(bun run scripts/release-bundle.ts next-version)"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
