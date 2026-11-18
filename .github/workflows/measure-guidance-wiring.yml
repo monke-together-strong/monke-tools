@@ -8,7 +8,7 @@ on:
         required: true
       expected-marker:
         type: string
-        default: ''
+        default: ""
       select-release:
         description: Check whether the push qualifies for a Mainline release and compute the version if it does
         type: boolean
