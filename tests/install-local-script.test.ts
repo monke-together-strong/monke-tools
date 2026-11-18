@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -14,36 +13,14 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 import { object, string } from "zod";
 
-import { makeTempDir, writeExecutable } from "./helpers.ts";
+import { createFiles, createRepo, git, makeTempDir, writeExecutable } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const INSTALL_ID_ARGUMENT_PATTERN = /--install-id (?<identity>\S+)/u;
+const installScript = readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8");
 
-function prepareInstallFixture(
-  checkout: string,
-  binDirectory: string,
-  dirty: boolean,
-  changeDuringBuild: "tracked" | "untracked" | false = false,
-  untrackedName = "untracked.txt"
-) {
-  const sourceChangedMarker = path.join(checkout, ".source-changed-during-build");
-  mkdirSync(path.join(checkout, "scripts"), { recursive: true });
-  mkdirSync(path.join(checkout, "src"), { recursive: true });
-  writeFileSync(
-    path.join(checkout, "scripts", "install-local.sh"),
-    readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-    "utf-8"
-  );
-  chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
-  writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
-
-  const untrackedFile =
-    changeDuringBuild === "untracked" ? path.join(checkout, untrackedName) : undefined;
-
-  if (untrackedFile !== undefined) {
-    writeFileSync(untrackedFile, "before\n", "utf-8");
-  }
-
+function prepareInstallFixture(checkout: string, binDirectory: string, dirty: boolean) {
+  createFiles(checkout, { "scripts/install-local.sh": installScript, "src/index.ts": "" });
   writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
@@ -52,12 +29,15 @@ case "$*" in
   *"rev-parse HEAD") printf '%s\n' 0123456789abcdef0123456789abcdef01234567 ;;
   *"rev-parse --short=7 HEAD") printf '%s\n' 0123456 ;;
   *"status --porcelain --untracked-files=normal") ${dirty ? "printf '%s\\n' ' M src/index.ts'" : ":"} ;;
-  *"diff --binary HEAD --") [ ! -f ${JSON.stringify(sourceChangedMarker)} ] || printf '%s\n' changed ;;
-  *"ls-files "*" -z"*) ${untrackedFile === undefined ? ":" : `printf '%s\\0' ${JSON.stringify(path.basename(untrackedFile))}`} ;;
+  *"diff "*|*"ls-files "*) : ;;
   *) exit 2 ;;
 esac
 `
   );
+  prepareInstallCompiler(binDirectory);
+}
+
+function prepareInstallCompiler(binDirectory: string, changedFile?: string) {
   writeExecutable(
     path.join(binDirectory, "bun"),
     `#!/bin/sh
@@ -82,8 +62,7 @@ set -eu
 printf '%s\n' "$*" >> "$MONKE_TOOLS_LOG"
 EOF
 /bin/chmod +x "$outfile"
-${changeDuringBuild === "tracked" ? `/usr/bin/touch ${JSON.stringify(sourceChangedMarker)}` : ""}
-${untrackedFile === undefined ? "" : `printf 'after\\n' > ${JSON.stringify(untrackedFile)}`}
+${changedFile === undefined ? "" : `printf 'after\\n' > ${JSON.stringify(changedFile)}`}
 `
   );
 }
@@ -204,19 +183,23 @@ describe("Local install refresh script", () => {
   });
 
   it.each([
-    { change: "tracked" as const, label: "tracked source", name: undefined },
-    ...["café.txt", "-notes.txt", "-"].map((name) => ({
-      change: "untracked" as const,
-      label: `untracked ${name}`,
-      name
-    }))
-  ])("aborts before activation when $label changes during compilation", ({ change, name }) => {
+    { label: "tracked source", name: "src/index.ts" },
+    ...["café.txt", "-notes.txt", "-"].map((name) => ({ label: `untracked ${name}`, name }))
+  ])("aborts before activation when $label changes during compilation", ({ name }) => {
     const sandbox = makeTempDir("install-local-source-change");
-    const checkout = path.join(sandbox, "checkout");
+
+    const checkout = createRepo(path.join(sandbox, "checkout"), {
+      "scripts/install-local.sh": installScript,
+      "src/index.ts": ""
+    });
+
     const binDirectory = path.join(sandbox, "bin");
     const monkeHome = path.join(sandbox, "monke-home");
     const monkeToolsLog = path.join(sandbox, "monke-tools.log");
-    prepareInstallFixture(checkout, binDirectory, false, change, name);
+    const changedFile = path.join(checkout, name);
+    git(checkout, ["config", "core.quotePath", "true"]);
+    writeFileSync(changedFile, "before\n", "utf-8");
+    prepareInstallCompiler(binDirectory, changedFile);
 
     const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
       cwd: checkout,

@@ -32,6 +32,7 @@ import {
   materializedRepoState,
   read,
   readSingleYamlFile,
+  readSpawnHintArguments,
   runMonke,
   runMonkeCapturingFailure,
   write
@@ -1132,6 +1133,7 @@ apps:
   it("rejects -m when retrying an incomplete spawn --from", () => {
     const sandbox = makeTempDir("single-repo-from-retry");
     const home = path.join(sandbox, "home");
+    const session = "tagged'branch";
 
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/package.json": "{}\n",
@@ -1147,14 +1149,30 @@ apps:
 
     git(repoRoot, ["tag", "v1"]);
 
-    expect(() =>
-      runMonke({ args: ["spawn", "tagged", "--from", "v1"], cwd: repoRoot, monkeHome: home })
-    ).toThrow("mt spawn 'tagged' --from 'v1'");
-    expect(() =>
-      runMonke({ args: ["spawn", "tagged", "-m"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(
-      "incomplete Spawn using the pinned start ref v1; retry with mt spawn 'tagged' --from 'v1'"
-    );
+    const failed = runMonkeCapturingFailure({
+      args: ["spawn", session, "--from", "v1"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(
+      readSpawnHintArguments(
+        failed.error?.message.match(/^Retry: (?<command>.+)$/mu)?.groups?.command
+      )
+    ).toStrictEqual(["spawn", session, "--from", "v1"]);
+
+    const retry = runMonkeCapturingFailure({
+      args: ["spawn", session, "-m"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(retry.error?.message).toContain("incomplete Spawn using the pinned start ref v1");
+    expect(
+      readSpawnHintArguments(
+        retry.error?.message.match(/retry with (?<command>.+)$/u)?.groups?.command
+      )
+    ).toStrictEqual(["spawn", session, "--from", "v1"]);
   });
 
   it("retains a failed fresh spawn -m preparation at its pinned ref for retry", () => {

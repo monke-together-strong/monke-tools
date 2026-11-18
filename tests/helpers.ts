@@ -149,6 +149,22 @@ export function git(cwd: string, args: string[], env?: Record<string, string>) {
   return result.stdout.trim();
 }
 
+export function readSpawnHintArguments(command: string | undefined) {
+  if (!command?.startsWith("mt spawn ")) {
+    throw new Error("Expected an mt spawn command in the hint");
+  }
+
+  const result = spawnSync("/bin/sh", ["-c", `mt() { printf '%s\\n' "$@"; }\n${command}`], {
+    encoding: "utf-8"
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Could not run Spawn hint: ${result.stderr}`);
+  }
+
+  return result.stdout.trimEnd().split("\n");
+}
+
 /** Backdate a linked worktree's creation marker so ancestry-only Cleanup proof applies. */
 export function ageWorktree(worktreePath: string, days = 2) {
   const then = new Date(Date.now() - days * 24 * 60 * 60 * 1000);

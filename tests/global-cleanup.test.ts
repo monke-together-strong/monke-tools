@@ -1395,7 +1395,9 @@ export function release({owner, outputs}) {
           worktree,
           false,
           `: ${worktree}-cache ${worktree} ; trap '' TERM; sleep 60 & wait`
-        )
+        ),
+      startBystander: (worktree: string) =>
+        processIn(worktree, false, `: ${worktree}-cache; trap '' TERM; sleep 60 & wait`)
     },
     {
       label: "a file URL under the worktree",
@@ -1408,7 +1410,7 @@ export function release({owner, outputs}) {
     }
   ])(
     "stops a process tree at least a day old before removal and reports the stop when its command contains $label",
-    async ({ start }) => {
+    async ({ start, startBystander }) => {
       const f = fixture();
       const state = f.addSession("feature/served");
       const [dependency] = state.repos;
@@ -1419,6 +1421,12 @@ export function release({owner, outputs}) {
 
       const pid = start(dependency.worktreePath);
       ageProcess(f.runtime, pid, 2);
+      const bystanders = startBystander ? [startBystander(dependency.worktreePath)] : [];
+
+      for (const bystander of bystanders) {
+        ageProcess(f.runtime, bystander, 2);
+      }
+
       let descendants: number[] = [];
       await expect
         .poll(() => {
@@ -1438,6 +1446,7 @@ export function release({owner, outputs}) {
         expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
       }
 
+      expect(bystanders.filter((bystander) => !alive(bystander))).toStrictEqual([]);
       expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
       expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
         sourceRoot: dependency.sourceRoot,

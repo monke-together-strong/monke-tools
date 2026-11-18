@@ -23,6 +23,7 @@ import {
   installCodexUrlOpenShim,
   installWindowsCmdShim,
   makeTempDir,
+  readSpawnHintArguments,
   runMonke,
   runMonkeAsync,
   runMonkeCapturingFailure,
@@ -287,7 +288,7 @@ describe("Swing", () => {
     ).rejects.toThrow(/Unknown selection: missing/u);
   });
 
-  it("fails clearly during swing when the Session does not exist", () => {
+  it("suggests a runnable Spawn command when the Session does not exist", () => {
     const sandbox = makeTempDir("swing-missing");
     const home = path.join(sandbox, "home");
 
@@ -295,9 +296,22 @@ describe("Swing", () => {
       "README.md": "hello\n"
     });
 
-    expect(() => runMonke({ args: ["swing", "missing"], cwd: repoRoot, monkeHome: home })).toThrow(
-      `No worktree or Session named "missing" exists for ${repoRoot}. Run mt spawn 'missing' to create it.`
+    const session = "missing'branch";
+
+    const result = runMonkeCapturingFailure({
+      args: ["swing", session],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(result.error?.message).toContain(
+      `No worktree or Session named "${session}" exists for ${repoRoot}.`
     );
+
+    const hint = result.error?.message.match(/Run (?<command>mt spawn .+) to create it\./u)?.groups
+      ?.command;
+
+    expect(readSpawnHintArguments(hint)).toStrictEqual(["spawn", session]);
   });
 
   it("treats @ inside Session names as ordinary branch text during swing", () => {
@@ -318,9 +332,19 @@ describe("Swing", () => {
   });
 
   it.each([
-    { label: "on a branch", worktreeArgs: ["winters-echo"] },
-    { label: "with a detached HEAD", worktreeArgs: ["--detach", "HEAD"] }
-  ])("swings away from and back to an Ordinary worktree $label", ({ worktreeArgs }) => {
+    {
+      addArgs: ["-b", "winters-echo"],
+      expected: "on branch winters-echo",
+      label: "on its recorded branch",
+      switchArgs: ["--detach"]
+    },
+    {
+      addArgs: ["--detach"],
+      expected: "detached",
+      label: "when it is still detached",
+      switchArgs: ["-c", "winters-echo"]
+    }
+  ])("returns to an Ordinary worktree $label", ({ addArgs, expected, switchArgs }) => {
     const sandbox = makeTempDir("swing-ordinary-worktree");
     const home = path.join(sandbox, "home");
 
@@ -329,8 +353,7 @@ describe("Swing", () => {
     });
 
     const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
-    git(repoRoot, ["branch", "winters-echo"]);
-    git(repoRoot, ["worktree", "add", worktreeRoot, ...worktreeArgs]);
+    git(repoRoot, ["worktree", "add", ...addArgs, worktreeRoot]);
 
     const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
     const backToOrdinary = runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home });
@@ -338,6 +361,18 @@ describe("Swing", () => {
     expect(result.stdout).toBe(`${repoRoot}\n`);
     expect(backToOrdinary.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
+
+    runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
+    git(worktreeRoot, ["switch", ...switchArgs]);
+
+    const stale = runMonkeCapturingFailure({
+      args: ["swing", "-"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(stale.error?.message ?? "").toContain(`remain ${expected}`);
+    expect(stale.stdout).toBe("");
   });
 
   it("toggles to the Previous Swing target scoped by Root repo with swing dash", () => {
