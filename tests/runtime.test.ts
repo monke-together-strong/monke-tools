@@ -4,7 +4,13 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { createRuntime, findExecutable, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
+import {
+  createRuntime,
+  findExecutable,
+  isProcessRunning,
+  withGlobalLock,
+  withGlobalLockAsync
+} from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 describe(findExecutable, () => {
@@ -488,27 +494,41 @@ await runtime.execAsync(
     mkdirSync(home, { recursive: true });
     writeFileSync(
       lockPath,
-      JSON.stringify({ acquiredAt: Date.now() - 86_400_000, pid: process.pid }),
+      JSON.stringify({ acquiredAt: Date.now() - 86_400_000, pid: process.ppid }),
       "utf-8"
     );
 
+    const started = Date.now();
     expect(() => withGlobalLock(home, () => "acquired")).toThrow(/Timed out waiting for lock/u);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(5000);
     expect(existsSync(lockPath)).toBeTruthy();
   }, 7000);
 
-  it("preserves a valid live pid in withGlobalLock when another metadata field is invalid", () => {
+  it("withGlobalLockAsync preserves a live process's lock when acquiredAt is invalid", async () => {
     const sandbox = makeTempDir("runtime-live-mixed-lock");
     const home = path.join(sandbox, "home");
     const lockPath = path.join(home, "lock");
     const staleTime = new Date(Date.now() - 86_400_000);
 
     mkdirSync(home, { recursive: true });
-    writeFileSync(lockPath, JSON.stringify({ acquiredAt: "invalid", pid: process.pid }), "utf-8");
+    const contents = JSON.stringify({ acquiredAt: "invalid", pid: process.ppid });
+    writeFileSync(lockPath, contents, "utf-8");
     utimesSync(lockPath, staleTime, staleTime);
 
-    expect(() => withGlobalLock(home, () => "acquired")).toThrow(/Timed out waiting for lock/u);
-    expect(existsSync(lockPath)).toBeTruthy();
-  }, 7000);
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout"] }).setTimerTickMode("nextTimerAsync");
+
+    try {
+      const started = Date.now();
+      await expect(withGlobalLockAsync(home, async () => "acquired")).rejects.toThrow(
+        /Timed out waiting for lock/u
+      );
+      expect(Date.now() - started).toBeGreaterThanOrEqual(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(readFileSync(lockPath, "utf-8")).toBe(contents);
+  });
 });
 
 function readPublishedPid(filePath: string) {
