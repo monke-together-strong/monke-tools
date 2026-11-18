@@ -829,7 +829,7 @@ function discoverFlatSkillLinks(skillSourceTree: string) {
 
       if (links.has(entry.name)) {
         throw new MonkeError(
-          `Duplicate Skill slug ${entry.name} in ${skillSourceTree}. Resolve the duplicate folders before publishing skills.`
+          `Cannot flatten duplicate Skill name ${entry.name} from ${skillSourceTree}`
         );
       }
 

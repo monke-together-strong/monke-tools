@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
-import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import { findRecordedSessionOwner } from "./session-state-store.ts";
+import { shellQuote } from "./shell-quote.ts";
 import type { Runtime, SessionState } from "./types.ts";
 
 export interface WorktreeEntry {
@@ -51,7 +51,8 @@ export function resolveCheckoutSource(runtime: Runtime, checkoutRoot: string): C
 }
 
 interface ResolveRepoContextOptions {
-  allowExternalSessionWorktree?: boolean;
+  /** Allow `sessionName: null` for a linked worktree with no recorded owner. */
+  allowOrdinaryWorktree?: boolean;
   allowSessionBranchMismatch?: boolean;
   inferSessionName?: boolean;
 }
@@ -74,7 +75,10 @@ export function resolveRepoContext(
     "--git-common-dir"
   ]).trim();
 
-  const currentBranch = runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const currentBranch = runGit(runtime, cwd, ["rev-parse", "--symbolic-full-name", "HEAD"])
+    .trim()
+    .replace(/^refs\/heads\//u, "");
+
   const sourceRoot = path.dirname(gitCommonDir);
   const isSourceCheckout = path.normalize(worktreeRoot) === path.normalize(sourceRoot);
   const shouldInferSessionName = options.inferSessionName ?? true;
@@ -85,17 +89,10 @@ export function resolveRepoContext(
       throw new MonkeError("Unable to infer the current session without a Monke home");
     }
 
-    sessionName = inferSessionNameForContext(
-      runtime,
-      home,
-      sourceRoot,
-      worktreeRoot,
-      currentBranch,
-      {
-        allowExternalSessionWorktree: options.allowExternalSessionWorktree ?? false,
-        allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false
-      }
-    );
+    sessionName = inferSessionNameForContext(home, sourceRoot, worktreeRoot, currentBranch, {
+      allowOrdinaryWorktree: options.allowOrdinaryWorktree ?? false,
+      allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false
+    });
   }
 
   return {
@@ -110,13 +107,12 @@ export function resolveRepoContext(
 }
 
 function inferSessionNameForContext(
-  runtime: Runtime,
   home: string,
   sourceRoot: string,
   worktreeRoot: string,
   branch: string,
   options: {
-    allowExternalSessionWorktree: boolean;
+    allowOrdinaryWorktree: boolean;
     allowSessionBranchMismatch: boolean;
   }
 ) {
@@ -124,17 +120,13 @@ function inferSessionNameForContext(
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
   let sessionName = toSessionPath(relativeSessionPath);
 
-  if (isOutsideExpectedRoot(relativeSessionPath)) {
+  if (options.allowOrdinaryWorktree || isOutsideExpectedRoot(relativeSessionPath)) {
     const owner = findRecordedSessionOwner(home, sourceRoot, worktreeRoot);
 
     if (owner !== null) {
       sessionName = owner.session;
-    } else if (options.allowExternalSessionWorktree) {
-      createLogger(runtime).warning(
-        `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`
-      );
-
-      return branch;
+    } else if (options.allowOrdinaryWorktree) {
+      return null;
     } else {
       throw new MonkeError(
         branch === "HEAD"
@@ -406,7 +398,7 @@ export function assertAdoptedWorktreePresent(
     !existsSync(worktreePath)
   ) {
     throw new MonkeError(
-      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${session} from ${sourceRoot} to remove the Session`
+      `Adopted Session worktree ${worktreePath} is missing; run mt chop ${shellQuote(session)} from ${sourceRoot} to remove the Session`
     );
   }
 }

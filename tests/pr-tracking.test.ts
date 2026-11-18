@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
+import { parseArgs } from "node:util";
 
 import { describe, expect, it } from "vite-plus/test";
 
@@ -398,6 +399,39 @@ printf '${prUrl(661)}\\n'`
     expect([...sandbox.launchctl(), ...sandbox.systemctl()]).toStrictEqual([]);
   });
 
+  it("tracks a PR whose URL gh pr create prints before exiting with an error", async () => {
+    const sandbox = createSandbox();
+    installRecordingCommand(
+      sandbox,
+      "gh",
+      `printf '${prUrl(661)}\\n'\necho "pull request update failed" >&2\nexit 1`
+    );
+
+    await expect(
+      mt(
+        sandbox,
+        [
+          "prs",
+          "create",
+          "--thread",
+          "thread-661",
+          "--checkout",
+          sandbox.worktree,
+          "--",
+          "--title",
+          "One rule"
+        ],
+        "darwin"
+      )
+    ).rejects.toThrow(
+      `Created and tracked ${prUrl(661)}, but gh pr create failed: pull request update failed`
+    );
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toBe(
+      `${prUrl(661)}\tthread thread-661\tcheckout ${sandbox.worktree}\n`
+    );
+    expect(sandbox.launchctl().some(([command]) => command === "bootstrap")).toBeTruthy();
+  });
+
   it("tracks a PR with its thread and checkout until it is untracked", async () => {
     const sandbox = createSandbox();
     await track(sandbox, 7);
@@ -441,15 +475,32 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
       `Started a thread for post-merge of ${prUrl(3)}\n`
     );
-    expect(t3Calls()[1]).toStrictEqual([
+    const calls = t3Calls();
+    expect(calls.map((call) => call.slice(0, 2))).toStrictEqual([
+      ["thread", "send"],
+      ["thread", "start"]
+    ]);
+
+    const { positionals, values } = parseArgs({
+      allowPositionals: true,
+      args: calls[1] ?? [],
+      options: {
+        model: { type: "string" },
+        option: { multiple: true, type: "string" },
+        provider: { type: "string" },
+        title: { type: "string" }
+      }
+    });
+
+    expect({ ...values }).toStrictEqual({
+      model: "gpt-6.2-sol",
+      option: ["effort=high"],
+      provider: "codex",
+      title: "Verify #3"
+    });
+    expect(positionals).toStrictEqual([
       "thread",
       "start",
-      "--title",
-      "Verify #3",
-      "--provider",
-      "codex",
-      "--model",
-      "gpt-6.2-sol",
       sandbox.source,
       `This thread runs post-merge for ${prUrl(3)}. Follow ${sandbox.skill} for it. Its checkout was ${sandbox.worktree}.`
     ]);

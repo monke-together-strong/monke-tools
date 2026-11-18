@@ -125,12 +125,11 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
   return {
     scannedAt,
     treesUnder(worktreePath) {
+      const reference = commandReferencePattern(worktreePath);
+
       const inside = processes
         .filter((candidate) => containsPath(worktreePath, candidate.cwd))
-        .map((candidate) => ({
-          ...candidate,
-          attached: commandReferences(candidate.command, worktreePath)
-        }));
+        .map((candidate) => ({ ...candidate, attached: reference.test(candidate.command) }));
 
       return groupTrees(inside);
     }
@@ -141,17 +140,11 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
  * The working directory proves presence. Only a path in a command line marks it as attached. `ps`
  * prints unquoted arguments, so a path containing spaces can span tokens.
  */
-function commandReferences(command: string, worktreePath: string) {
-  const normalized = path.normalize(worktreePath);
-  const index = command.indexOf(normalized);
+function commandReferencePattern(worktreePath: string) {
+  const root = RegExp.escape(path.normalize(worktreePath));
 
-  if (index === -1) {
-    return false;
-  }
-
-  const next = command[index + normalized.length];
-
-  return next === undefined || next === path.sep || /\s/u.test(next);
+  // Match standalone paths, classpath entries, option values and file URLs.
+  return new RegExp(String.raw`(?:^|[\s=:])(['"]?)(?:file://)?${root}(?:/|\1(?=$|[\s:]))`, "u");
 }
 
 function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {

@@ -1303,7 +1303,7 @@ external:
     expect(failed.stderr).toContain(
       `Prepared Root repo Session worktree: ${getExpectedWorktreePath(home, root, "quiescent")}`
     );
-    expect(failed.stderr).toContain("Retry: mt spawn quiescent");
+    expect(failed.stderr).toContain("Retry: mt spawn 'quiescent'");
     expect(failed.stdout).toBe("");
     expect(existsSync(codexOpenLog)).toBeFalsy();
 
@@ -1639,7 +1639,7 @@ external:
         cwd: root,
         monkeHome: home
       })
-    ).toThrow(/re-run mt spawn default-failure -m/u);
+    ).toThrow(/re-run mt spawn 'default-failure' -m/u);
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "default-failure");
     const rootWorktree = getExpectedWorktreePath(home, root, "default-failure");

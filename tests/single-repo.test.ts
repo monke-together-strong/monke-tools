@@ -32,6 +32,7 @@ import {
   materializedRepoState,
   read,
   readSingleYamlFile,
+  readSpawnHintArguments,
   runMonke,
   runMonkeCapturingFailure,
   write
@@ -179,7 +180,7 @@ describe("single-repo sessions", () => {
       "Session materialization failed after all runnable work settled."
     );
     expect(result.error?.message).toContain(`Prepared Root repo Session worktree: ${worktreeRoot}`);
-    expect(result.error?.message).toContain("Retry: mt spawn banana");
+    expect(result.error?.message).toContain("Retry: mt spawn 'banana'");
     expect(result.stderr).not.toContain("Spawned or updated session banana");
     expect(result.stderr).not.toContain(`Switch to ${worktreeRoot}`);
     expect(result.stdout).toBe("");
@@ -766,7 +767,7 @@ describe("single-repo sessions", () => {
       monkeHome: home
     });
 
-    expect(retry.error?.message).toContain("Retry: mt spawn fresh -m");
+    expect(retry.error?.message).toContain("Retry: mt spawn 'fresh' -m");
     expect(loadSessionState(home, repoRoot, "fresh").spawnSource).toBe("default-branch");
   });
 
@@ -1132,6 +1133,7 @@ apps:
   it("rejects -m when retrying an incomplete spawn --from", () => {
     const sandbox = makeTempDir("single-repo-from-retry");
     const home = path.join(sandbox, "home");
+    const session = "tagged'branch";
 
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/package.json": "{}\n",
@@ -1147,14 +1149,30 @@ apps:
 
     git(repoRoot, ["tag", "v1"]);
 
-    expect(() =>
-      runMonke({ args: ["spawn", "tagged", "--from", "v1"], cwd: repoRoot, monkeHome: home })
-    ).toThrow("mt spawn tagged --from 'v1'");
-    expect(() =>
-      runMonke({ args: ["spawn", "tagged", "-m"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(
-      "incomplete Spawn using the pinned start ref v1; retry with mt spawn tagged --from 'v1'"
-    );
+    const failed = runMonkeCapturingFailure({
+      args: ["spawn", session, "--from", "v1"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(
+      readSpawnHintArguments(
+        failed.error?.message.match(/^Retry: (?<command>.+)$/mu)?.groups?.command
+      )
+    ).toStrictEqual(["spawn", session, "--from", "v1"]);
+
+    const retry = runMonkeCapturingFailure({
+      args: ["spawn", session, "-m"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(retry.error?.message).toContain("incomplete Spawn using the pinned start ref v1");
+    expect(
+      readSpawnHintArguments(
+        retry.error?.message.match(/retry with (?<command>.+)$/u)?.groups?.command
+      )
+    ).toStrictEqual(["spawn", session, "--from", "v1"]);
   });
 
   it("retains a failed fresh spawn -m preparation at its pinned ref for retry", () => {
@@ -1404,7 +1422,7 @@ apps: {}
 
     expect(() =>
       runMonke({ args: ["spawn", "retained-main", "-m"], cwd: repoRoot, monkeHome: home })
-    ).toThrow(/Retry: mt spawn retained-main -m/u);
+    ).toThrow(/Retry: mt spawn 'retained-main' -m/u);
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retained-main");
     write(worktreeRoot, "allow-bootstrap", "yes\n");
@@ -1474,7 +1492,7 @@ apps: {}
         cwd: repoRoot,
         monkeHome: home
       })
-    ).toThrow(/Retry: mt spawn retained-clean --no-dirty/u);
+    ).toThrow(/Retry: mt spawn 'retained-clean' --no-dirty/u);
 
     write(repoRoot, "README.md", "dirty\n");
     write(getExpectedWorktreePath(home, repoRoot, "retained-clean"), "allow-bootstrap", "yes\n");
