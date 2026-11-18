@@ -418,7 +418,9 @@ printf '${prUrl(661)}\\n'`
         "--title",
         "One rule"
       ])
-    ).rejects.toThrow("pull request update failed");
+    ).rejects.toThrow(
+      `Created and tracked ${prUrl(661)}, but gh pr create failed: pull request update failed`
+    );
     await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(661));
   });
 

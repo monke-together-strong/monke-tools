@@ -53,7 +53,7 @@ case "$*" in
   *"rev-parse --short=7 HEAD") printf '%s\n' 0123456 ;;
   *"status --porcelain --untracked-files=normal") ${dirty ? "printf '%s\\n' ' M src/index.ts'" : ":"} ;;
   *"diff --binary HEAD --") [ ! -f ${JSON.stringify(sourceChangedMarker)} ] || printf '%s\n' changed ;;
-  *"ls-files --others --exclude-standard -z") ${untrackedFile === undefined ? ":" : `printf '%s\\0' ${JSON.stringify(path.basename(untrackedFile))}`} ;;
+  *"ls-files "*) ${untrackedFile === undefined ? ":" : `printf '%s\\0' ${JSON.stringify(path.basename(untrackedFile))}`} ;;
   *) exit 2 ;;
 esac
 `
