@@ -1,4 +1,4 @@
-name: Measure Pinned Guidance Reuse
+name: Qualify Mainline Guidance Cache
 
 on:
   push:
@@ -9,114 +9,18 @@ permissions:
 
 jobs:
   seed:
-    if: >-
-      github.repository == 'monke-together-strong/monke-tools' &&
-      github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118'
-    runs-on: ubuntu-24.04
-    outputs:
-      marker: ${{ steps.snapshot.outputs.marker }}
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-mainline
-
-      - name: Restore pinned guidance from scratch
-        id: snapshot
-        run: |
-          test ! -e skills/.monke-restored.json
-          TIMEFORMAT='Cold seed restore wall seconds %R'
-          time bun run src/index.ts skills restore --repo
-          vpr skills:check-links
-          printf 'marker=%s\n' "$(sha256sum skills/.monke-restored.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-
-      - name: Save the isolated snapshot
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            skills/.monke-restored.json
-            skills/imported
-            skills/references/imported
-          key: monke-tools-guidance-trial-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Fetch and pack the exact locked Git objects
-        run: python3 .github/measurements/guidance-packs.py . "$RUNNER_TEMP/guidance-packs" "$RUNNER_TEMP/pack-seed" seed
-
-      - name: Save the isolated Git packs
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/guidance-packs
-          key: monke-tools-guidance-trial-packs-${{ github.run_id }}-${{ github.run_attempt }}
+    uses: ./.github/workflows/measure-guidance-wiring.yml
+    with:
+      variant: cold
 
   replay:
     needs: seed
     strategy:
       fail-fast: false
       matrix:
-        source: [upstream, snapshot, packs]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-mainline
-
-      - name: Restore the isolated guidance snapshot
-        if: matrix.source == 'snapshot'
-        id: snapshot
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            skills/.monke-restored.json
-            skills/imported
-            skills/references/imported
-          key: monke-tools-guidance-trial-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-on-cache-miss: true
-
-      - name: Restore the isolated Git packs
-        if: matrix.source == 'packs'
-        id: packs
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/guidance-packs
-          key: monke-tools-guidance-trial-packs-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-on-cache-miss: true
-
-      - name: Materialize from the independently verified Git objects
-        if: matrix.source == 'packs'
-        env:
-          CACHE_HIT: ${{ steps.packs.outputs.cache-hit }}
-        run: |
-          test "$CACHE_HIT" = true
-          test ! -e skills/.monke-restored.json
-          TIMEFORMAT='Git pack validation and restore wall seconds %R'
-          time python3 .github/measurements/guidance-packs.py . "$RUNNER_TEMP/guidance-packs" "$RUNNER_TEMP/pack-consumer" warm
-
-      - name: Restore the guidance normally
-        if: matrix.source != 'packs'
-        env:
-          SOURCE: ${{ matrix.source }}
-          CACHE_HIT: ${{ steps.snapshot.outputs.cache-hit }}
-          GIT_TRACE2_EVENT: ${{ runner.temp }}/guidance-git-trace.jsonl
-        run: |
-          if [ "$SOURCE" = snapshot ]; then
-            test "$CACHE_HIT" = true
-          else
-            test ! -e skills/.monke-restored.json
-          fi
-          TIMEFORMAT='Normal guidance restore wall seconds %R'
-          time bun run src/index.ts skills restore --repo
-          if [ "$SOURCE" = snapshot ] && grep -Eq '"remote-https"|"git-remote-https"' "$GIT_TRACE2_EVENT"; then
-            printf 'The warm snapshot contacted upstream Git\n' >&2
-            exit 1
-          fi
-
-      - name: Verify the materialized bytes and links
-        env:
-          EXPECTED_MARKER: ${{ needs.seed.outputs.marker }}
-        run: |
-          printf '%s  skills/.monke-restored.json\n' "$EXPECTED_MARKER" | sha256sum -c -
-          vpr skills:check-links
-          vp check
+        variant: [hit, repair, gated]
+    uses: ./.github/workflows/measure-guidance-wiring.yml
+    with:
+      variant: ${{ matrix.variant }}
+      expected-marker: ${{ needs.seed.outputs.marker }}
+      select-release: ${{ matrix.variant == 'hit' }}

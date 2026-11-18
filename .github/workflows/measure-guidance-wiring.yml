@@ -1,0 +1,156 @@
+name: Qualify imported guidance cache
+
+on:
+  workflow_call:
+    inputs:
+      variant:
+        type: string
+        required: true
+      expected-marker:
+        type: string
+        default: ''
+      select-release:
+        description: Check whether the push qualifies for a Mainline release and compute the version if it does
+        type: boolean
+        default: false
+    outputs:
+      marker:
+        value: ${{ jobs.verify.outputs.marker }}
+      relevant:
+        value: ${{ jobs.verify.outputs.relevant }}
+      version:
+        value: ${{ jobs.verify.outputs.version }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Check Mainline
+    if: >-
+      github.repository == 'monke-together-strong/monke-tools' &&
+      github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118'
+    runs-on: ubuntu-24.04
+    outputs:
+      marker: ${{ steps.audit.outputs.marker }}
+      relevant: ${{ steps.release.outputs.relevant }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          # Release selection needs history and tags. GitHub Actions treats numeric 0 as false.
+          fetch-depth: ${{ inputs.select-release && '0' || '1' }}
+          persist-credentials: false
+
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
+
+      - name: Restore imported guidance cache
+        # Restore trusts matching guidance and its marker, so use this cache only on pushes to main.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118' && inputs.variant != 'gated'
+        id: guidance-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        continue-on-error: true
+        with:
+          path: |
+            skills/.monke-restored.json
+            skills/imported
+            skills/references/imported
+          key: monke-tools-guidance-wiring-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('monke.yml', 'bun.lock', 'package.json', 'src/**', 'scripts/**') }}
+
+      - name: Assert cache state and prepare the repair case
+        env:
+          VARIANT: ${{ inputs.variant }}
+          CACHE_HIT: ${{ steps.guidance-cache.outputs.cache-hit }}
+        run: |
+          case "$VARIANT" in
+            cold)
+              test "$CACHE_HIT" != true
+              test ! -e skills/.monke-restored.json
+              ;;
+            gated)
+              test -z "$CACHE_HIT"
+              test ! -e skills/.monke-restored.json
+              ;;
+            hit|repair)
+              test "$CACHE_HIT" = true
+              test -f skills/.monke-restored.json
+              ;;
+          esac
+          if [ "$VARIANT" = repair ]; then
+            printf '\nCorrupted cached guidance test fixture.\n' >> skills/imported/impeccable/SKILL.md
+          fi
+
+      - name: Restore locked guidance
+        env:
+          VARIANT: ${{ inputs.variant }}
+          GIT_TRACE2_EVENT: ${{ runner.temp }}/guidance-git-trace.jsonl
+        run: |
+          TIMEFORMAT='Pinned guidance restore seconds %R'
+          time bun run src/index.ts skills restore --repo
+          fetches="$(grep -Ec '"child_class":"remote-https"' "$GIT_TRACE2_EVENT" || true)"
+          printf 'Upstream Git fetches %s\n' "$fetches"
+          case "$VARIANT" in
+            hit) test "$fetches" -eq 0 ;;
+            repair) test "$fetches" -eq 1 ;;
+            cold|gated) test "$fetches" -gt 1 ;;
+          esac
+
+      - name: Check
+        # PR CI owns the full unit suite; see docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md.
+        run: vp check
+
+      - name: Check packaged skill links
+        run: vpr skills:check-links
+
+      - name: Select Mainline release
+        id: release
+        if: inputs.select-release
+        env:
+          AFTER_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE_SHA" ] ||
+            [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] ||
+            ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            relevant=true
+          else
+            relevant="$(bun run scripts/release-bundle.ts relevant \
+              --before "$BEFORE_SHA" \
+              --after "$AFTER_SHA")"
+          fi
+          printf 'relevant=%s\n' "$relevant" >> "$GITHUB_OUTPUT"
+          if [ "$relevant" != true ]; then
+            exit 0
+          fi
+
+          version="$(bun run scripts/release-bundle.ts next-version)"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Save imported guidance cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118' && inputs.variant != 'gated' && steps.guidance-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        continue-on-error: true
+        with:
+          path: |
+            skills/.monke-restored.json
+            skills/imported
+            skills/references/imported
+          key: monke-tools-guidance-wiring-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('monke.yml', 'bun.lock', 'package.json', 'src/**', 'scripts/**') }}
+
+      - name: Audit generated guidance payload
+        id: audit
+        env:
+          EXPECTED_MARKER: ${{ inputs.expected-marker }}
+        run: |
+          marker="$(sha256sum skills/.monke-restored.json | cut -d ' ' -f 1)"
+          printf 'marker=%s\n' "$marker" >> "$GITHUB_OUTPUT"
+          if [ -n "$EXPECTED_MARKER" ]; then
+            test "$marker" = "$EXPECTED_MARKER"
+          fi
+          test -z "$(git ls-files skills/.monke-restored.json skills/imported skills/references/imported)"
+          git diff --exit-code
+          tar -cf "$RUNNER_TEMP/guidance-payload.tar" skills/.monke-restored.json skills/imported skills/references/imported
+          python3 .github/measurements/guidance-payload.py "$RUNNER_TEMP/guidance-payload.tar"
