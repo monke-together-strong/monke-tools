@@ -24,6 +24,7 @@ import {
   getSessionStateFilePath,
   loadSessionState
 } from "./session-state-store.ts";
+import { shellQuote } from "./shell-quote.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
@@ -33,7 +34,8 @@ const SwingHistoryTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("source") }),
   z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
   z.strictObject({
-    branch: z.string().min(1),
+    /** Null when the worktree has a detached HEAD. */
+    branch: z.string().min(1).nullable(),
     kind: z.literal("ordinary-worktree"),
     path: z.string().min(1)
   })
@@ -86,7 +88,7 @@ export async function runSwing(runtime: Runtime, rawTarget?: string, options: Sw
   const home = getMonkeHome(runtime);
 
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
-    allowExternalSessionWorktree: true,
+    allowOrdinaryWorktree: true,
     allowSessionBranchMismatch: true
   });
 
@@ -372,7 +374,7 @@ async function resolveStoredTarget(
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {
       throw new MonkeError(
-        `No worktree or Session named "${target.session}" exists for ${rootSourceRoot}. Run mt spawn ${target.session} to create it.`
+        `No worktree or Session named "${target.session}" exists for ${rootSourceRoot}. Run mt spawn ${shellQuote(target.session)} to create it.`
       );
     }
   }
@@ -547,26 +549,21 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
     return { kind: "source" };
   }
 
-  if (!context.sessionName) {
-    throw new MonkeError("Unable to infer the current worktree for Previous Swing target history");
+  if (
+    context.sessionName !== null &&
+    samePath(
+      context.worktreeRoot,
+      getRecordedSessionWorktreePath(home, context.sourceRoot, context.sessionName)
+    )
+  ) {
+    return { kind: "session", session: context.sessionName };
   }
 
-  const expectedPath = getRecordedSessionWorktreePath(
-    home,
-    context.sourceRoot,
-    context.sessionName
-  );
-
-  return samePath(context.worktreeRoot, expectedPath)
-    ? {
-        kind: "session",
-        session: context.sessionName
-      }
-    : {
-        branch: context.sessionName,
-        kind: "ordinary-worktree",
-        path: context.worktreeRoot
-      };
+  return {
+    branch: context.currentBranch === "HEAD" ? null : context.currentBranch,
+    kind: "ordinary-worktree",
+    path: context.worktreeRoot
+  };
 }
 
 function getRecordedSessionWorktreePath(home: string, rootSourceRoot: string, session: string) {
@@ -628,7 +625,7 @@ function validateOrdinaryWorktreeTarget(
 
   if (resolved === undefined) {
     throw new MonkeError(
-      `Expected worktree ${target.path} to belong to ${rootSourceRoot} and remain on branch ${target.branch}`
+      `Expected worktree ${target.path} to belong to ${rootSourceRoot} and remain ${target.branch === null ? "detached" : `on branch ${target.branch}`}`
     );
   }
 }

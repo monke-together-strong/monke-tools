@@ -398,6 +398,30 @@ printf '${prUrl(661)}\\n'`
     expect([...sandbox.launchctl(), ...sandbox.systemctl()]).toStrictEqual([]);
   });
 
+  it("tracks a created PR when GitHub reports a later failure", async () => {
+    const sandbox = createSandbox();
+    installRecordingCommand(
+      sandbox,
+      "gh",
+      `printf '${prUrl(661)}\\n'\necho "pull request update failed" >&2\nexit 1`
+    );
+
+    await expect(
+      mt(sandbox, [
+        "prs",
+        "create",
+        "--thread",
+        "thread-661",
+        "--checkout",
+        sandbox.worktree,
+        "--",
+        "--title",
+        "One rule"
+      ])
+    ).rejects.toThrow("pull request update failed");
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(661));
+  });
+
   it("tracks a PR with its thread and checkout until it is untracked", async () => {
     const sandbox = createSandbox();
     await track(sandbox, 7);
@@ -450,6 +474,8 @@ printf '${prUrl(661)}\\n'`
       "codex",
       "--model",
       "gpt-6.2-sol",
+      "--option",
+      "effort=high",
       sandbox.source,
       `This thread runs post-merge for ${prUrl(3)}. Follow ${sandbox.skill} for it. Its checkout was ${sandbox.worktree}.`
     ]);

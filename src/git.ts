@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
-import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import { findRecordedSessionOwner } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
@@ -51,7 +50,8 @@ export function resolveCheckoutSource(runtime: Runtime, checkoutRoot: string): C
 }
 
 interface ResolveRepoContextOptions {
-  allowExternalSessionWorktree?: boolean;
+  /** Resolve a worktree outside the Session root with no recorded owner to no Session. */
+  allowOrdinaryWorktree?: boolean;
   allowSessionBranchMismatch?: boolean;
   inferSessionName?: boolean;
 }
@@ -85,17 +85,10 @@ export function resolveRepoContext(
       throw new MonkeError("Unable to infer the current session without a Monke home");
     }
 
-    sessionName = inferSessionNameForContext(
-      runtime,
-      home,
-      sourceRoot,
-      worktreeRoot,
-      currentBranch,
-      {
-        allowExternalSessionWorktree: options.allowExternalSessionWorktree ?? false,
-        allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false
-      }
-    );
+    sessionName = inferSessionNameForContext(home, sourceRoot, worktreeRoot, currentBranch, {
+      allowOrdinaryWorktree: options.allowOrdinaryWorktree ?? false,
+      allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false
+    });
   }
 
   return {
@@ -110,13 +103,12 @@ export function resolveRepoContext(
 }
 
 function inferSessionNameForContext(
-  runtime: Runtime,
   home: string,
   sourceRoot: string,
   worktreeRoot: string,
   branch: string,
   options: {
-    allowExternalSessionWorktree: boolean;
+    allowOrdinaryWorktree: boolean;
     allowSessionBranchMismatch: boolean;
   }
 ) {
@@ -129,12 +121,8 @@ function inferSessionNameForContext(
 
     if (owner !== null) {
       sessionName = owner.session;
-    } else if (options.allowExternalSessionWorktree) {
-      createLogger(runtime).warning(
-        `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`
-      );
-
-      return branch;
+    } else if (options.allowOrdinaryWorktree) {
+      return null;
     } else {
       throw new MonkeError(
         branch === "HEAD"

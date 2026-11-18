@@ -12,8 +12,15 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
-// Matches the model in the post-merge skill. The fallback command selects the model without setting effort.
-const POST_MERGE_MODEL = ["--provider", "codex", "--model", "gpt-6.2-sol"];
+// Matches the model and effort in the post-merge skill.
+const POST_MERGE_MODEL = [
+  "--provider",
+  "codex",
+  "--model",
+  "gpt-6.2-sol",
+  "--option",
+  "effort=high"
+];
 
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
@@ -57,11 +64,24 @@ export async function runPrsCreate(
   const files = resolvePrFileArgs(runtime.cwd, args);
 
   const created = await runtime.execAsync("gh", ["pr", "create", ...files.args], {
+    allowFailure: true,
     cwd: checkout,
     stdin: files.stdin ? await Bun.stdin.text() : undefined
   });
 
-  const { url } = parsePullRequestUrl(created.stdout.trim());
+  const output = created.stdout.trim();
+
+  const failure =
+    created.exitCode === 0
+      ? undefined
+      : created.stderr.trim() || `gh pr create exited ${created.exitCode}`;
+
+  // gh prints the URL before a later step, such as an update or upload, can still fail.
+  if (failure !== undefined && !PULL_REQUEST_URL.test(output)) {
+    throw new MonkeError(`gh pr create failed: ${failure}`);
+  }
+
+  const { url } = parsePullRequestUrl(output);
 
   try {
     await runPrsTrack(runtime, url, { ...options, checkout });
@@ -71,6 +91,10 @@ export async function runPrsCreate(
         `Register this existing PR with mt prs track ${url} --thread ${shellQuote(options.thread)} --checkout ${shellQuote(checkout)}`,
       { cause }
     );
+  }
+
+  if (failure !== undefined) {
+    throw new MonkeError(`Created and tracked ${url}, but gh pr create failed: ${failure}`);
   }
 }
 

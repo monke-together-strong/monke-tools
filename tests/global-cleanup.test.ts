@@ -1386,43 +1386,58 @@ export function release({owner, outputs}) {
     return state.length > 0 && !state.startsWith("Z");
   }
 
-  it("stops a day-old attached process tree before removal and reports it", async () => {
-    const f = fixture();
-    const state = f.addSession("feature/served");
-    const [dependency] = state.repos;
-
-    if (!dependency) {
-      throw new Error("Missing dependency");
+  it.each([
+    { label: "", start: (worktree: string) => processIn(worktree, true) },
+    {
+      label: " after a path that shares its prefix",
+      start: (worktree: string) =>
+        processIn(
+          worktree,
+          false,
+          `: ${worktree}-cache ${worktree} ; trap '' TERM; sleep 60 & wait`
+        )
     }
+  ])(
+    "stops a day-old process tree attached$label before removal and reports it",
+    async ({ start }) => {
+      const f = fixture();
+      const state = f.addSession("feature/served");
+      const [dependency] = state.repos;
 
-    const pid = processIn(dependency.worktreePath, true);
-    ageProcess(f.runtime, pid, 2);
-    let descendants: number[] = [];
-    await expect
-      .poll(() => {
-        descendants = host
-          .exec("pgrep", ["-P", String(pid)], { allowFailure: true })
-          .stdout.split("\n")
-          .filter(Boolean)
-          .map(Number);
+      if (!dependency) {
+        throw new Error("Missing dependency");
+      }
 
-        return descendants.length;
-      })
-      .toBeGreaterThan(0);
-    const result = await f.run();
-    expect(result.error).toBeUndefined();
+      const pid = start(dependency.worktreePath);
+      ageProcess(f.runtime, pid, 2);
+      let descendants: number[] = [];
+      await expect
+        .poll(() => {
+          descendants = host
+            .exec("pgrep", ["-P", String(pid)], { allowFailure: true })
+            .stdout.split("\n")
+            .filter(Boolean)
+            .map(Number);
 
-    for (const member of [pid, ...descendants]) {
-      expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
-    }
+          return descendants.length;
+        })
+        .toBeGreaterThan(0);
+      const result = await f.run();
+      expect(result.error).toBeUndefined();
 
-    expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
-    expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
-      sourceRoot: dependency.sourceRoot,
-      step: "process-stop"
-    });
-    expect(existsSync(dependency.worktreePath)).toBeFalsy();
-  }, 30_000);
+      for (const member of [pid, ...descendants]) {
+        expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
+      }
+
+      expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
+      expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
+        sourceRoot: dependency.sourceRoot,
+        step: "process-stop"
+      });
+      expect(existsSync(dependency.worktreePath)).toBeFalsy();
+    },
+    30_000
+  );
 
   it("retains every Session member when a child spawns during shutdown", async () => {
     const f = fixture();

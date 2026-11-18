@@ -526,17 +526,19 @@ function formatSpawnPolicy(options: SpawnOptions) {
 }
 
 function formatSpawnRetryCommand(session: string, options: SpawnOptions) {
+  const command = `mt spawn ${shellQuote(session)}`;
+
   if (options.mode === "default-branch") {
     return options.from === undefined
-      ? `mt spawn ${session} -m`
-      : `mt spawn ${session} --from ${shellQuote(options.from)}`;
+      ? `${command} -m`
+      : `${command} --from ${shellQuote(options.from)}`;
   }
 
   if (options.mode === "current-head" && !options.copyDirty) {
-    return `mt spawn ${session} --no-dirty`;
+    return `${command} --no-dirty`;
   }
 
-  return `mt spawn ${session}`;
+  return command;
 }
 
 /** Memoize start refs so graph loading and worktree creation use the same pinned commit. */

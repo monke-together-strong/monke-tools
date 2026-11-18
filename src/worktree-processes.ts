@@ -143,15 +143,21 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
  */
 function commandReferences(command: string, worktreePath: string) {
   const normalized = path.normalize(worktreePath);
-  const index = command.indexOf(normalized);
 
-  if (index === -1) {
-    return false;
+  // An earlier argument can share the prefix, such as `/wt/topic-cache` before `/wt/topic`.
+  for (
+    let index = command.indexOf(normalized);
+    index !== -1;
+    index = command.indexOf(normalized, index + 1)
+  ) {
+    const next = command[index + normalized.length];
+
+    if (next === undefined || next === path.sep || /\s/u.test(next)) {
+      return true;
+    }
   }
 
-  const next = command[index + normalized.length];
-
-  return next === undefined || next === path.sep || /\s/u.test(next);
+  return false;
 }
 
 function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {

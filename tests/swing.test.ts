@@ -296,7 +296,7 @@ describe("Swing", () => {
     });
 
     expect(() => runMonke({ args: ["swing", "missing"], cwd: repoRoot, monkeHome: home })).toThrow(
-      `No worktree or Session named "missing" exists for ${repoRoot}. Run mt spawn missing to create it.`
+      `No worktree or Session named "missing" exists for ${repoRoot}. Run mt spawn 'missing' to create it.`
     );
   });
 
@@ -317,8 +317,11 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
 
-  it("allows the current Session worktree to live outside Monke home during swing with a warning", () => {
-    const sandbox = makeTempDir("swing-external-worktree");
+  it.each([
+    { label: "on a branch", worktreeArgs: ["winters-echo"] },
+    { label: "with a detached HEAD", worktreeArgs: ["--detach", "HEAD"] }
+  ])("swings away from and back to an Ordinary worktree $label", ({ worktreeArgs }) => {
+    const sandbox = makeTempDir("swing-ordinary-worktree");
     const home = path.join(sandbox, "home");
 
     const repoRoot = createRepo(path.join(sandbox, "root"), {
@@ -327,16 +330,13 @@ describe("Swing", () => {
 
     const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
     git(repoRoot, ["branch", "winters-echo"]);
-    git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
+    git(repoRoot, ["worktree", "add", worktreeRoot, ...worktreeArgs]);
 
     const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
-    const backToExternal = runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home });
+    const backToOrdinary = runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home });
 
     expect(result.stdout).toBe(`${repoRoot}\n`);
-    expect(backToExternal.stdout).toBe(`${worktreeRoot}\n`);
-    expect(result.stderr).toContain(
-      `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`
-    );
+    expect(backToOrdinary.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
 
@@ -634,7 +634,7 @@ apps:
       "Session materialization failed after all runnable work settled."
     );
     expect(result.error?.message).toContain(`Prepared Root repo Session worktree: ${worktreeRoot}`);
-    expect(result.error?.message).toContain(`Retry: mt spawn ${prBranch}`);
+    expect(result.error?.message).toContain(`Retry: mt spawn '${prBranch}'`);
     expect(result.stdout).toBe("");
     expect(result.stderr).not.toContain(`Moved Swing target to ${worktreeRoot}`);
     expect(result.stderr).not.toContain(`Opened Codex workspace: ${worktreeRoot}`);
