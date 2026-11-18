@@ -1,4 +1,4 @@
-name: Qualify Mainline Bun Cache
+name: Measure Pinned Guidance Reuse
 
 on:
   push:
@@ -8,116 +8,115 @@ permissions:
   contents: read
 
 jobs:
-  cold:
+  seed:
     if: >-
       github.repository == 'monke-together-strong/monke-tools' &&
       github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118'
     runs-on: ubuntu-24.04
+    outputs:
+      marker: ${{ steps.snapshot.outputs.marker }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
         with:
           persist-credentials: false
-      - name: Set up with the production composite
-        uses: ./.github/actions/setup-mainline
-      - name: Check the installed workspace
-        run: |
-          git diff --exit-code -- bun.lock
-          vp check
 
-  warm:
-    needs: cold
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
+      - uses: ./.github/actions/setup-mainline
+
+      - name: Restore pinned guidance from scratch
+        id: snapshot
+        run: |
+          test ! -e skills/.monke-restored.json
+          TIMEFORMAT='Cold seed restore wall seconds %R'
+          time bun run src/index.ts skills restore --repo
+          vpr skills:check-links
+          printf 'marker=%s\n' "$(sha256sum skills/.monke-restored.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Save the isolated snapshot
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          persist-credentials: false
-      - name: Set up with the production composite
-        uses: ./.github/actions/setup-mainline
-      - name: Check the installed workspace
-        run: |
-          git diff --exit-code -- bun.lock
-          vp check
+          path: |
+            skills/.monke-restored.json
+            skills/imported
+            skills/references/imported
+          key: monke-tools-guidance-trial-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
 
-  macos:
-    if: >-
-      github.repository == 'monke-together-strong/monke-tools' &&
-      github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
+      - name: Fetch and pack the exact locked Git objects
+        run: python3 .github/measurements/guidance-packs.py . "$RUNNER_TEMP/guidance-packs" "$RUNNER_TEMP/pack-seed" seed
+
+      - name: Save the isolated Git packs
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          persist-credentials: false
-      - name: Set up with the production composite
-        uses: ./.github/actions/setup-mainline
-      - name: Check the installed workspace
-        run: |
-          git diff --exit-code -- bun.lock
-          vp check
+          path: ${{ runner.temp }}/guidance-packs
+          key: monke-tools-guidance-trial-packs-${{ github.run_id }}-${{ github.run_attempt }}
 
-  service:
-    if: >-
-      github.repository == 'monke-together-strong/monke-tools' &&
-      github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118'
+  replay:
+    needs: seed
     strategy:
       fail-fast: false
       matrix:
-        failure: [unavailable, hard-failure]
+        source: [upstream, snapshot, packs]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
         with:
           persist-credentials: false
-      - name: Prepare an isolated cache fault
-        run: |
-          cat > "$RUNNER_TEMP/mock-bun-cache.cjs" <<'EOF'
-          const entry = process.argv[1] ?? "";
-          if (entry.includes("/_actions/actions/cache/")) {
-            const mode = process.env.BUN_CACHE_REHEARSAL_FAILURE;
-            console.log("Isolated cache fault injection: " + mode);
-            if (mode === "hard-failure") {
-              throw new Error("Injected cache action process failure");
-            }
-            process.env.ACTIONS_RESULTS_URL = "http://127.0.0.1:1/";
-            process.env.ACTIONS_CACHE_URL = "http://127.0.0.1:1/";
-          }
-          EOF
-      - name: Set up with the production composite and an unavailable cache
-        uses: ./.github/actions/setup-mainline
+
+      - uses: ./.github/actions/setup-mainline
+
+      - name: Restore the isolated guidance snapshot
+        if: matrix.source == 'snapshot'
+        id: snapshot
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            skills/.monke-restored.json
+            skills/imported
+            skills/references/imported
+          key: monke-tools-guidance-trial-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+
+      - name: Restore the isolated Git packs
+        if: matrix.source == 'packs'
+        id: packs
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/guidance-packs
+          key: monke-tools-guidance-trial-packs-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+
+      - name: Materialize from the independently verified Git objects
+        if: matrix.source == 'packs'
         env:
-          NODE_OPTIONS: --require=${{ runner.temp }}/mock-bun-cache.cjs
-          BUN_CACHE_REHEARSAL_FAILURE: ${{ matrix.failure }}
-      - name: Check the installed workspace
+          CACHE_HIT: ${{ steps.packs.outputs.cache-hit }}
         run: |
-          git diff --exit-code -- bun.lock
+          test "$CACHE_HIT" = true
+          test ! -e skills/.monke-restored.json
+          TIMEFORMAT='Git pack validation and restore wall seconds %R'
+          time python3 .github/measurements/guidance-packs.py . "$RUNNER_TEMP/guidance-packs" "$RUNNER_TEMP/pack-consumer" warm
+
+      - name: Restore the guidance normally
+        if: matrix.source != 'packs'
+        env:
+          SOURCE: ${{ matrix.source }}
+          CACHE_HIT: ${{ steps.snapshot.outputs.cache-hit }}
+          GIT_TRACE2_EVENT: ${{ runner.temp }}/guidance-git-trace.jsonl
+        run: |
+          if [ "$SOURCE" = snapshot ]; then
+            test "$CACHE_HIT" = true
+          else
+            test ! -e skills/.monke-restored.json
+          fi
+          TIMEFORMAT='Normal guidance restore wall seconds %R'
+          time bun run src/index.ts skills restore --repo
+          if [ "$SOURCE" = snapshot ] && grep -Eq '"remote-https"|"git-remote-https"' "$GIT_TRACE2_EVENT"; then
+            printf 'The warm snapshot contacted upstream Git\n' >&2
+            exit 1
+          fi
+
+      - name: Verify the materialized bytes and links
+        env:
+          EXPECTED_MARKER: ${{ needs.seed.outputs.marker }}
+        run: |
+          printf '%s  skills/.monke-restored.json\n' "$EXPECTED_MARKER" | sha256sum -c -
+          vpr skills:check-links
           vp check
-
-  mismatch:
-    needs: warm
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
-        with:
-          persist-credentials: false
-      - name: Change the manifest with the original lockfile
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          package = Path("package.json")
-          manifest = json.loads(package.read_text())
-          manifest["dependencies"]["yaml"] = "2.7.0"
-          package.write_text(json.dumps(manifest, indent=2) + "\n")
-          PY
-
-      - name: Try the production composite with the inconsistent manifest
-        id: setup
-        uses: ./.github/actions/setup-mainline
-        continue-on-error: true
-
-      - name: Require failure and an unchanged lockfile
-        env:
-          OUTCOME: ${{ steps.setup.outcome }}
-        run: |
-          test "$OUTCOME" = failure
-          git diff --exit-code -- bun.lock
