@@ -1,0 +1,124 @@
+name: Measure Bun Package Cache
+
+on:
+  push:
+    branches: [feature/measure-bun-package-cache-20261118]
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    if: >-
+      github.repository == 'monke-together-strong/monke-tools' &&
+      github.ref == 'refs/heads/feature/measure-bun-package-cache-20261118'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
+        with:
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          cache: false
+          run-install: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        id: bun
+        with:
+          bun-version-file: package.json
+          no-cache: true
+
+      - name: Set the trial package cache path
+        shell: bash
+        run: printf 'BUN_INSTALL_CACHE_DIR=%s\n' "$RUNNER_TEMP/monke-tools-bun-cache-trial" >> "$GITHUB_ENV"
+
+      - name: Measure frozen install with an empty package cache
+        shell: bash
+        run: |
+          test -z "$(ls -A "$BUN_INSTALL_CACHE_DIR" 2>/dev/null || true)"
+          test ! -e node_modules
+          TIMEFORMAT='Cold frozen install wall seconds %R'
+          time vp install --frozen-lockfile -- --prefer-offline
+          git diff --exit-code -- bun.lock
+          du -sh "$BUN_INSTALL_CACHE_DIR"
+
+      - name: Save the isolated trial cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: monke-tools-bun-cache-trial-v1-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lock') }}
+
+  replay:
+    needs: seed
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+        cache: [baseline, candidate]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
+        with:
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          cache: false
+          run-install: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        id: bun
+        with:
+          bun-version-file: package.json
+          no-cache: true
+
+      - name: Resolve the baseline cache path and architecture
+        if: matrix.cache == 'baseline'
+        id: baseline
+        shell: bash
+        run: |
+          printf 'path=%s\n' "$(vp pm cache dir)" >> "$GITHUB_OUTPUT"
+          printf 'arch=%s\n' "$(bun -p 'process.arch')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the current global store on an exact hit
+        if: matrix.cache == 'baseline'
+        id: baseline-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.baseline.outputs.path }}
+          key: vite-plus-${{ runner.os }}-${{ steps.baseline.outputs.arch }}-bun-${{ hashFiles('bun.lock') }}
+          fail-on-cache-miss: true
+
+      - name: Set the candidate package cache path
+        if: matrix.cache == 'candidate'
+        shell: bash
+        run: printf 'BUN_INSTALL_CACHE_DIR=%s\n' "$RUNNER_TEMP/monke-tools-bun-cache-trial" >> "$GITHUB_ENV"
+
+      - name: Restore the isolated trial store on an exact hit
+        if: matrix.cache == 'candidate'
+        id: candidate-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: monke-tools-bun-cache-trial-v1-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lock') }}
+          fail-on-cache-miss: true
+
+      - name: Measure frozen install with the restored package cache
+        shell: bash
+        env:
+          CACHE_HIT: ${{ matrix.cache == 'baseline' && steps.baseline-cache.outputs.cache-hit || steps.candidate-cache.outputs.cache-hit }}
+        run: |
+          test "$CACHE_HIT" = true
+          test ! -e node_modules
+          du -sh "$(vp pm cache dir)"
+          TIMEFORMAT='Warm frozen install wall seconds %R'
+          time vp install --frozen-lockfile -- --prefer-offline
+          git diff --exit-code -- bun.lock
+
+      - name: Check the workspace
+        run: vp check
