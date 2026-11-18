@@ -23,7 +23,8 @@ function prepareInstallFixture(
   checkout: string,
   binDirectory: string,
   dirty: boolean,
-  changeDuringBuild: "tracked" | "untracked" | false = false
+  changeDuringBuild: "tracked" | "untracked" | false = false,
+  untrackedName = "untracked.txt"
 ) {
   const sourceChangedMarker = path.join(checkout, ".source-changed-during-build");
   mkdirSync(path.join(checkout, "scripts"), { recursive: true });
@@ -35,11 +36,12 @@ function prepareInstallFixture(
   );
   chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
   writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
-  // Git would quote the non-ASCII name, and cksum would read the dash-leading one as an option.
-  const untrackedFiles = ["café.txt", "-notes.txt"];
 
-  for (const file of untrackedFiles) {
-    writeFileSync(path.join(checkout, file), "before\n", "utf-8");
+  const untrackedFile =
+    changeDuringBuild === "untracked" ? path.join(checkout, untrackedName) : undefined;
+
+  if (untrackedFile !== undefined) {
+    writeFileSync(untrackedFile, "before\n", "utf-8");
   }
 
   writeExecutable(
@@ -51,7 +53,7 @@ case "$*" in
   *"rev-parse --short=7 HEAD") printf '%s\n' 0123456 ;;
   *"status --porcelain --untracked-files=normal") ${dirty ? "printf '%s\\n' ' M src/index.ts'" : ":"} ;;
   *"diff --binary HEAD --") [ ! -f ${JSON.stringify(sourceChangedMarker)} ] || printf '%s\n' changed ;;
-  *"ls-files --others --exclude-standard -z") printf '%s\\0' ${untrackedFiles.map((file) => JSON.stringify(file)).join(" ")} ;;
+  *"ls-files --others --exclude-standard -z") ${untrackedFile === undefined ? ":" : `printf '%s\\0' ${JSON.stringify(path.basename(untrackedFile))}`} ;;
   *) exit 2 ;;
 esac
 `
@@ -81,7 +83,7 @@ printf '%s\n' "$*" >> "$MONKE_TOOLS_LOG"
 EOF
 /bin/chmod +x "$outfile"
 ${changeDuringBuild === "tracked" ? `/usr/bin/touch ${JSON.stringify(sourceChangedMarker)}` : ""}
-${changeDuringBuild === "untracked" ? untrackedFiles.map((file) => `printf 'after\\n' > ${JSON.stringify(path.join(checkout, file))}`).join("\n") : ""}
+${untrackedFile === undefined ? "" : `printf 'after\\n' > ${JSON.stringify(untrackedFile)}`}
 `
   );
 }
@@ -201,35 +203,40 @@ describe("Local install refresh script", () => {
     expect(new Set(installIdentities).size).toBe(2);
   });
 
-  it.each(["tracked", "untracked"] as const)(
-    "aborts before activation when %s source changes during compilation",
-    (changeDuringBuild) => {
-      const sandbox = makeTempDir("install-local-source-change");
-      const checkout = path.join(sandbox, "checkout");
-      const binDirectory = path.join(sandbox, "bin");
-      const monkeHome = path.join(sandbox, "monke-home");
-      const monkeToolsLog = path.join(sandbox, "monke-tools.log");
-      prepareInstallFixture(checkout, binDirectory, false, changeDuringBuild);
+  // Git quotes non-ASCII names, and cksum reads dash-leading names as options or stdin.
+  it.each([
+    { change: "tracked" as const, label: "tracked source", name: undefined },
+    ...["café.txt", "-notes.txt", "-"].map((name) => ({
+      change: "untracked" as const,
+      label: `untracked ${name}`,
+      name
+    }))
+  ])("aborts before activation when $label changes during compilation", ({ change, name }) => {
+    const sandbox = makeTempDir("install-local-source-change");
+    const checkout = path.join(sandbox, "checkout");
+    const binDirectory = path.join(sandbox, "bin");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+    prepareInstallFixture(checkout, binDirectory, false, change, name);
 
-      const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
-        cwd: checkout,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          BUN_LOG: path.join(sandbox, "bun.log"),
-          HOME: path.join(sandbox, "home"),
-          MONKE_HOME: monkeHome,
-          MONKE_TOOLS_LOG: monkeToolsLog,
-          PATH: `${binDirectory}:/usr/bin:/bin`
-        }
-      });
+    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
+      cwd: checkout,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        BUN_LOG: path.join(sandbox, "bun.log"),
+        HOME: path.join(sandbox, "home"),
+        MONKE_HOME: monkeHome,
+        MONKE_TOOLS_LOG: monkeToolsLog,
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
+    });
 
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("Source checkout changed while");
-      expect(existsSync(monkeToolsLog)).toBeFalsy();
-      expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
-    }
-  );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Source checkout changed while");
+    expect(existsSync(monkeToolsLog)).toBeFalsy();
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+  });
 
   it("activates the compiled executable through the stable symlink in the real Local refresh", () => {
     const sandbox = makeTempDir("install-local-end-to-end");

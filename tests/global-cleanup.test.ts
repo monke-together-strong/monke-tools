@@ -1396,6 +1396,15 @@ export function release({owner, outputs}) {
           false,
           `: ${worktree}-cache ${worktree} ; trap '' TERM; sleep 60 & wait`
         )
+    },
+    {
+      label: " through a file URL",
+      start: (worktree: string) =>
+        processIn(
+          worktree,
+          false,
+          `: --import=file://${worktree}/x.mjs ; trap '' TERM; sleep 60 & wait`
+        )
     }
   ])(
     "stops a day-old process tree attached$label before removal and reports it",

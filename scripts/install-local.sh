@@ -74,8 +74,12 @@ capture_source_state() {
   CAPTURED_SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
   CAPTURED_SOURCE_STATUS=$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)
   captured_tracked_diff=$(git -C "$ROOT_DIR" diff --binary HEAD --)
-  # NUL-separated names reach cksum unquoted, including non-ASCII and dash-leading ones.
-  captured_untracked_state=$(cd "$ROOT_DIR" && git ls-files --others --exclude-standard -z | xargs -0 cksum --)
+  # NUL-separated names reach cksum unquoted, and `./` keeps names such as `-` from reading as options.
+  captured_untracked_state=$(
+    cd "$ROOT_DIR" &&
+      git ls-files --others --exclude-standard -z |
+      xargs -0 sh -c 'for file do cksum "./$file"; done' sh
+  )
   if [ "$(git -C "$ROOT_DIR" rev-parse HEAD)" != "$CAPTURED_SOURCE_COMMIT" ]; then
     return 1
   fi

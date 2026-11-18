@@ -125,12 +125,11 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
   return {
     scannedAt,
     treesUnder(worktreePath) {
+      const reference = commandReferencePattern(worktreePath);
+
       const inside = processes
         .filter((candidate) => containsPath(worktreePath, candidate.cwd))
-        .map((candidate) => ({
-          ...candidate,
-          attached: commandReferences(candidate.command, worktreePath)
-        }));
+        .map((candidate) => ({ ...candidate, attached: reference.test(candidate.command) }));
 
       return groupTrees(inside);
     }
@@ -141,13 +140,13 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
  * The working directory proves presence. Only a path in a command line marks it as attached. `ps`
  * prints unquoted arguments, so a path containing spaces can span tokens.
  */
-function commandReferences(command: string, worktreePath: string) {
-  // The path must be bounded by argument starts, `=`, quotes, or a separator; `/other/wt/topic`
-  // does not name `/wt/topic`. Later matches count too, so a prefix-sharing `/wt/topic-cache` does not hide it.
-  return new RegExp(
-    `(?:^|[\\s='"])${RegExp.escape(path.normalize(worktreePath))}(?:$|[\\s/'"])`,
-    "u"
-  ).test(command);
+function commandReferencePattern(worktreePath: string) {
+  // The path starts an argument, follows `=` or `file://`, or sits inside matching quotes. Every
+  // occurrence counts: `/wt/topic-cache` cannot hide a later `/wt/topic`, and `/other/wt/topic`
+  // does not name `/wt/topic`.
+  const escaped = RegExp.escape(path.normalize(worktreePath));
+
+  return new RegExp(`(?:^|[\\s=]|file://)(['"]?)${escaped}(?:/|\\1(?=$|\\s))`, "u");
 }
 
 function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {
