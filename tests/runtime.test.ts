@@ -259,11 +259,16 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
       { allowFailure: true, timeoutSeconds: 0.5 }
     );
 
-    await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
-    const childPid = Number(readFileSync(childPidPath, "utf-8"));
-    const descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
+    let childPid: number | undefined;
+    let descendantPid: number | undefined;
 
     try {
+      await waitFor(() => {
+        childPid = readPublishedPid(childPidPath);
+        descendantPid = readPublishedPid(descendantPidPath);
+
+        return childPid !== undefined && descendantPid !== undefined;
+      });
       await expect(resultPromise).resolves.toMatchObject({ timedOut: true });
       await expect.poll(() => processStopped(descendantPid)).toBeTruthy();
     } finally {
