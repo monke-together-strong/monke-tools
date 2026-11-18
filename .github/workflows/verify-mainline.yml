@@ -20,6 +20,9 @@ jobs:
       - name: Setup Mainline
         uses: ./.github/actions/setup-mainline
 
+      - name: Restore locked guidance
+        run: bun run src/index.ts skills restore --repo
+
       - name: Check
         # PR CI owns the full unit suite; see docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md.
         run: vp check
