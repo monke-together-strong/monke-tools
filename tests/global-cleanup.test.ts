@@ -2079,21 +2079,20 @@ export function release({owner, outputs}) {
       throw new Error("Missing Root member");
     }
 
-    const pid = processIn(laterRoot.worktreePath, true);
+    const pid = processIn(
+      laterRoot.worktreePath,
+      true,
+      `trap 'echo "shutdown authored work" > tracked.txt; kill "$child"; wait "$child"; exit 0' TERM; sleep 60 & child=$!; wait "$child"`
+    );
+
     ageProcess(f.runtime, pid, 2);
-    const original = f.runtime.exec;
-    f.runtime.exec = (command, args, options) => {
-      const result = original(command, args, options);
-
-      if (command === "kill") {
-        write(laterRoot.worktreePath, "tracked.txt", "shutdown authored work\n");
-      }
-
-      return result;
-    };
+    await expect
+      .poll(() => host.exec("pgrep", ["-P", String(pid)], { allowFailure: true }).stdout.trim())
+      .not.toBe("");
 
     const result = await f.run();
     expect(result.report.sessions[0]?.outcome).toBe("failed");
+    expect(result.report.sessions[0]?.execution.message).toContain("changed-during-inspection");
     expect(readFileSync(path.join(laterRoot.worktreePath, "tracked.txt"), "utf-8")).toBe(
       "shutdown authored work\n"
     );
