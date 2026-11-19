@@ -179,6 +179,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
+      // `.then(ok, err)` and `.then(ok).catch(err)` differ: the catch also receives failures thrown by `ok`.
+      "promise/prefer-catch": "off",
       "sort-keys": "off",
       // Allow a bare guard return in a function that otherwise returns a value.
       "typescript/consistent-return": "off",
