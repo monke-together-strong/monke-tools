@@ -1394,15 +1394,15 @@ export function release({owner, outputs}) {
   }
 
   it.each([
-    { label: "a worktree path", start: (worktree: string) => processIn(worktree, true) },
+    {
+      forceKill: true,
+      label: "a worktree path",
+      start: (worktree: string) => processIn(worktree, true)
+    },
     {
       label: "a worktree path after a longer path with the same prefix",
-      start: (worktree: string) =>
-        processIn(
-          worktree,
-          false,
-          `: ${worktree}-cache "${worktree}" ; trap '' TERM; sleep 60 & wait`
-        ),
+      start: (worktree: string, gracefulStop: string) =>
+        processIn(worktree, false, `: ${worktree}-cache "${worktree}" ; ${gracefulStop}`),
       startBystander: (worktree: string) =>
         processIn(
           worktree,
@@ -1412,16 +1412,12 @@ export function release({owner, outputs}) {
     },
     {
       label: "a file URL under the worktree",
-      start: (worktree: string) =>
-        processIn(
-          worktree,
-          false,
-          `: --import=file://${worktree}/x.mjs ; trap '' TERM; sleep 60 & wait`
-        )
+      start: (worktree: string, gracefulStop: string) =>
+        processIn(worktree, false, `: --import=file://${worktree}/x.mjs ; ${gracefulStop}`)
     }
   ])(
     "stops a process tree at least a day old before removal and reports the stop when its command contains $label",
-    async ({ start, startBystander }) => {
+    async ({ forceKill, start, startBystander }) => {
       const f = fixture();
       const state = f.addSession("feature/served");
       const [dependency] = state.repos;
@@ -1430,7 +1426,10 @@ export function release({owner, outputs}) {
         throw new Error("Missing dependency");
       }
 
-      const pid = start(dependency.worktreePath);
+      const termMarker = path.join(f.cwd, "received-term");
+      const markerFromWorktree = path.relative(dependency.worktreePath, termMarker);
+      const gracefulStop = `trap ': > "${markerFromWorktree}"; kill "$child"; wait "$child"; exit 0' TERM; sleep 60 & child=$!; wait "$child"`;
+      const pid = start(dependency.worktreePath, gracefulStop);
       ageProcess(f.runtime, pid, 2);
       const bystanders = startBystander ? [startBystander(dependency.worktreePath)] : [];
 
@@ -1457,6 +1456,7 @@ export function release({owner, outputs}) {
         expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
       }
 
+      expect(existsSync(termMarker)).toBe(!forceKill);
       expect(bystanders.filter((bystander) => !alive(bystander))).toStrictEqual([]);
       expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
       expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
