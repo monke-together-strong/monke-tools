@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import * as z from "zod";
 
 import { checkoutResourceFile } from "../src/checkout-resource-store.ts";
@@ -1291,14 +1291,21 @@ export function release({owner, outputs}) {
   it("blocks execution on foreign locks and leaves them untouched in dry-run", async () => {
     const f = fixture();
     const state = f.addSession("feature/locked");
-    const contents = JSON.stringify({ acquiredAt: Date.now(), pid: process.pid });
+    const contents = JSON.stringify({ acquiredAt: Date.now(), pid: process.ppid });
     write(f.home, "lock", contents);
     const before = files(f.cwd);
     const preview = await f.run(true);
     expect(preview.report.exitCode).toBe(1);
     expect(files(f.cwd)).toStrictEqual(before);
-    const result = await f.run();
-    expect(result.report.globalFailure).toContain("Timed out waiting for lock");
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout"] }).setTimerTickMode("nextTimerAsync");
+
+    try {
+      const result = await f.run();
+      expect(result.report.globalFailure).toContain("Timed out waiting for lock");
+    } finally {
+      vi.useRealTimers();
+    }
+
     expect(readFileSync(path.join(f.home, "lock"), "utf-8")).toBe(contents);
 
     for (const repo of state.repos) {
