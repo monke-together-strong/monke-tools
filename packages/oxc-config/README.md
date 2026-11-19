@@ -81,6 +81,8 @@ Catch bindings and promise rejection callbacks use the name `cause`. Annotate re
 
 When a function returns a value on some paths but not at its end, finish it with `return undefined`. `noImplicitReturns` rejects falling off the end, and `no-useless-return` rejects a final bare `return`. The preset disables `unicorn/no-useless-undefined`, which would otherwise flag `return undefined` whenever the return type is inferred.
 
+The preset disables `promise/prefer-catch`. `.then(ok, err)` and `.then(ok).catch(err)` are not equivalent: the `.catch` also receives failures thrown by `ok`. Oxlint offers no fix for the two-handler form for that reason.
+
 ### Framework presets
 
 `frameworks` enables Ultracite's React, TanStack, and shadcn presets and React Doctor's rules in the listed directories, relative to the config. `"."` covers the whole repository.
