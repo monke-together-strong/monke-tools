@@ -3,9 +3,6 @@
 - Always strive for concise, simple solutions.
 - Ground proposed changes in actual callers, data, and behavior. Before adding complexity, show a concrete case that requires it and compare the simpler existing solution. If the requirement is uncertain, run a focused experiment; delegate to a subagent when it can investigate independently.
 - Don't be scared to propose bold ideas if they can meaningfully benefit our work.
-- Change a shared contract only for a caller that needs it. Making a private member public, changing a shared base class, and adding a parameter to a shared helper all count.
-- Name an exported symbol so it reads correctly where it is imported, without its file for context. The name claims only what the code guarantees, and one name keeps one meaning.
-- Scripts and one-off tooling adapt to production code. Do not add a wrapper, alternate implementation, optional dependency or fallback to production code only so a script can run.
 - Tests are good. Endless smoke tests, "regression tests" for feature deletions, etc. are not. Tests should be focused, not slop.
 
 ## General preferences

@@ -1,3 +1,9 @@
+## General
+
+- Change a shared contract only for a caller that needs it. Making a private member public, changing a shared base class, and adding a parameter to a shared helper all count.
+- Name an exported symbol so it reads correctly where it is imported, without its file for context. The name claims only what the code guarantees, and one name keeps one meaning.
+- Scripts and one-off tooling adapt to production code. Do not add a wrapper, alternate implementation, optional dependency or fallback to production code only so a script can run.
+
 ## Typescript
 - Prefer inferred return types. Annotate only when required for a contract or correct inference.
 - Fix type and lint issues at the abstraction that owns the behavior. Avoid duplicating data structures or logic to satisfy a check. Types must describe what the implementation guarantees, including changes made by transformations.
