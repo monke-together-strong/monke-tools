@@ -111,10 +111,11 @@ Imported guidance is generated from the commit pins in `monke.yml`. See [maintai
 
 Skills and post-merge hand-offs choose models by Model role: `writer`,
 `reviewer`, or `post-merge`. `mt models get <role>` prints a role's models in
-fallback order. To override a role, list its models in `config.yml` under
-`mt home`, at most one per provider:
+fallback order. To override a role, list its models under `models` in
+`config.yml` in `mt home`, at most one per model family:
 
 ```yaml
+version: 1
 models:
   writer:
     - { provider: antigravity, model: gemini-4-neon, effort: high }

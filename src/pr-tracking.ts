@@ -14,11 +14,11 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
-// T3 Code names the effort option per provider.
+// T3 Code names the effort option per provider and ignores an unknown one at thread start.
 const T3_EFFORT_OPTION = {
   antigravity: "thought_level",
   claudeAgent: "effort",
-  codex: "effort"
+  codex: "reasoningEffort"
 } satisfies Record<ModelPreference["provider"], string>;
 
 const PULL_REQUEST_URL =
@@ -48,6 +48,11 @@ const TrackedPrsFileSchema = z.strictObject({
 const PullRequestStateSchema = z.object({ state: z.enum(["CLOSED", "MERGED", "OPEN"]) });
 
 type TrackedPr = z.infer<typeof TrackedPrSchema>;
+
+interface PostMergeHandoff {
+  model: ModelPreference;
+  t3: string;
+}
 
 /** Publish through gh, then persist tracking and schedule the post-merge poll before success. */
 export async function runPrsCreate(
@@ -239,7 +244,13 @@ export async function runPrsPoll(runtime: Runtime) {
 
   if (tracked.length > 0) {
     const t3 = resolveT3Cli(runtime);
-    const results = await Promise.all(tracked.map(async (pr) => await pollPr(runtime, t3, pr)));
+    // Read config before claiming any PR, so an invalid file leaves every PR tracked.
+    const [model] = modelPreferences(runtime, "post-merge");
+
+    const results = await Promise.all(
+      tracked.map(async (pr) => await pollPr(runtime, { model, t3 }, pr))
+    );
+
     const failures = results.filter((failure) => failure !== undefined);
 
     if (failures.length > 0) {
@@ -253,7 +264,11 @@ export async function runPrsPoll(runtime: Runtime) {
   }
 }
 
-async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<string | undefined> {
+async function pollPr(
+  runtime: Runtime,
+  handoff: PostMergeHandoff,
+  pr: TrackedPr
+): Promise<string | undefined> {
   const view = await runtime.execAsync("gh", ["pr", "view", pr.url, "--json", "state"], {
     allowFailure: true
   });
@@ -291,7 +306,7 @@ async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<stri
   }
 
   // Run the T3 hand-off outside the lock so a slow CLI does not block tracking.
-  const failure = await handOffPostMerge(runtime, t3, pr);
+  const failure = await handOffPostMerge(runtime, handoff, pr);
 
   if (failure !== undefined) {
     await updateTrackedPrs(runtime, (prs) =>
@@ -304,7 +319,7 @@ async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<stri
 
 async function handOffPostMerge(
   runtime: Runtime,
-  t3: string,
+  { model: { effort, model, provider }, t3 }: PostMergeHandoff,
   pr: TrackedPr
 ): Promise<string | undefined> {
   // Post-merge is explicit-only in Codex, so the message points at its installed SKILL.md.
@@ -332,37 +347,30 @@ async function handOffPostMerge(
   }
 
   // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
-  // as the project.
-  const failures = [sent.stderr.trim()];
+  // as the project. T3 reports model failures only after the thread starts, so the hand-off
+  // uses the role's first model without fallback.
+  const started = await runT3HandoffCommand(runtime, t3, [
+    "thread",
+    "start",
+    "--title",
+    `Verify #${pr.number}`,
+    "--provider",
+    provider,
+    "--model",
+    model,
+    "--option",
+    `${T3_EFFORT_OPTION[provider]}=${effort}`,
+    pr.sourceCheckout,
+    `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
+  ]);
 
-  for (const { effort, model, provider } of modelPreferences(runtime, "post-merge")) {
-    // Try fallbacks in order, so only one thread starts.
-    // oxlint-disable-next-line no-await-in-loop
-    const started = await runT3HandoffCommand(runtime, t3, [
-      "thread",
-      "start",
-      "--title",
-      `Verify #${pr.number}`,
-      "--provider",
-      provider,
-      "--model",
-      model,
-      "--option",
-      `${T3_EFFORT_OPTION[provider]}=${effort}`,
-      pr.sourceCheckout,
-      `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
-    ]);
+  if (started.exitCode === 0) {
+    runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
 
-    if (started.exitCode === 0) {
-      runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
-
-      return undefined;
-    }
-
-    failures.push(started.stderr.trim());
+    return undefined;
   }
 
-  return `Could not hand off ${pr.url}: ${failures.join(" ")}`.trim();
+  return `Could not hand off ${pr.url}: ${sent.stderr.trim()} ${started.stderr.trim()}`.trim();
 }
 
 async function runT3HandoffCommand(runtime: Runtime, t3: string, args: string[]) {

@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { describe, expect, it } from "vite-plus/test";
 
 import { runCliAsync } from "../src/index.ts";
@@ -48,7 +46,7 @@ models:
     );
   });
 
-  it("rejects a fallback from the same model family", async () => {
+  it("rejects a fallback from the same model family on another provider", async () => {
     const monkeHome = makeTempDir("models-same-family");
     write(
       monkeHome,
@@ -56,13 +54,13 @@ models:
       `version: 1
 models:
   writer:
-    - { provider: claudeAgent, model: claude-opus-5-5, effort: high }
-    - { provider: claudeAgent, model: claude-sonnet-5-5, effort: high }
+    - { provider: antigravity, model: gemini-4-neon, effort: high }
+    - { provider: claudeAgent, model: gemini-pro-orchestrator-neon, effort: high }
 `
     );
 
-    await expect(modelsGet(path.resolve(monkeHome), "writer")).rejects.toThrow(
-      /models\.writer\[1\]\.provider.*different model family/su
+    await expect(modelsGet(monkeHome, "writer")).rejects.toThrow(
+      /models\.writer\[1\]\.model.*repeats the gemini model family/su
     );
   });
 });

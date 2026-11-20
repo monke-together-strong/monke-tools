@@ -494,7 +494,7 @@ printf '${prUrl(661)}\\n'`
 
     expect({ ...values }).toStrictEqual({
       model: "gpt-6.2-sol",
-      option: ["effort=high"],
+      option: ["reasoningEffort=high"],
       provider: "codex",
       title: "Verify #3"
     });
@@ -507,7 +507,7 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });
 
-  it("starts the post-merge thread on the next model when T3 rejects the first", async () => {
+  it("starts the post-merge thread on the configured post-merge model", async () => {
     const sandbox = createSandbox();
     write(
       sandbox.monkeHome,
@@ -515,31 +515,48 @@ printf '${prUrl(661)}\\n'`
       `version: 1
 models:
   post-merge:
-    - { provider: codex, model: gpt-6.2-sol, effort: high }
     - { provider: antigravity, model: gemini-4-neon, effort: xhigh }
+    - { provider: codex, model: gpt-6.2-sol, effort: high }
 `
     );
     installFakeGh(sandbox, { 3: "MERGED" });
-
-    const t3Calls = installRecordingCommand(
-      sandbox,
-      "t3",
-      '[ "$2" = "send" ] && exit 1\nfor arg in "$@"; do [ "$arg" = codex ] && exit 1; done\nexit 0'
-    );
-
+    const t3Calls = installRecordingCommand(sandbox, "t3", '[ "$2" = "send" ] && exit 1\nexit 0');
     await track(sandbox, 3);
 
     await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
       `Started a thread for post-merge of ${prUrl(3)}\n`
     );
-    expect(t3Calls()[2]?.slice(4, 10)).toStrictEqual([
-      "--provider",
-      "antigravity",
-      "--model",
-      "gemini-4-neon",
-      "--option",
-      "thought_level=xhigh"
-    ]);
+
+    const { values } = parseArgs({
+      allowPositionals: true,
+      args: t3Calls()[1] ?? [],
+      options: {
+        model: { type: "string" },
+        option: { multiple: true, type: "string" },
+        provider: { type: "string" },
+        title: { type: "string" }
+      }
+    });
+
+    expect({ ...values }).toStrictEqual({
+      model: "gemini-4-neon",
+      option: ["thought_level=xhigh"],
+      provider: "antigravity",
+      title: "Verify #3"
+    });
+    expect(t3Calls()).toHaveLength(2);
+  });
+
+  it("keeps merged PRs tracked when Global monke config is invalid", async () => {
+    const sandbox = createSandbox();
+    installFakeGh(sandbox, { 4: "MERGED" });
+    const t3Calls = installRecordingCommand(sandbox, "t3");
+    await track(sandbox, 4);
+    write(sandbox.monkeHome, "config.yml", "version: 2\n");
+
+    await expect(mt(sandbox, ["prs", "poll"])).rejects.toThrow(/version: must be 1/u);
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(4));
+    expect(t3Calls()).toStrictEqual([]);
   });
 
   it("leaves a PR re-tracked during a poll for the next poll", async () => {

@@ -51,21 +51,25 @@ export const MODEL_ROLES = ["writer", "reviewer", "post-merge"] as const;
 
 const ModelPreferenceSchema = z.strictObject({
   effort: z.enum(["low", "medium", "high", "xhigh"]),
-  model: z.string().min(1),
-  // A T3 Code provider instance, which also identifies the model family.
+  // `mt models get` prints models as one comma-separated line.
+  model: z.string().regex(/^[^\s,]+$/u, { error: "must be a model id without spaces or commas" }),
   provider: z.enum(["antigravity", "claudeAgent", "codex"])
 });
 
+// A model's family is the leading name of its id, such as `claude` in `claude-opus-5-5`.
+const modelFamily = (model: string) => model.split("-")[0];
+
 const ModelPreferencesSchema = z
-  .array(ModelPreferenceSchema)
-  .min(1, { error: "must be a non-empty array" })
+  .tuple([ModelPreferenceSchema], ModelPreferenceSchema)
   .superRefine((preferences, context) => {
-    for (const [index, { provider }] of preferences.entries()) {
-      if (preferences.findIndex((preference) => preference.provider === provider) !== index) {
+    const families = preferences.map(({ model }) => modelFamily(model));
+
+    for (const [index, family] of families.entries()) {
+      if (families.indexOf(family) !== index) {
         context.addIssue({
           code: "custom",
-          message: `Fallbacks need a different model family than ${provider}`,
-          path: [index, "provider"]
+          message: `repeats the ${family} model family`,
+          path: [index, "model"]
         });
       }
     }
@@ -81,6 +85,8 @@ const GlobalMonkeConfigSchema = z.strictObject({
 export type ModelRole = (typeof MODEL_ROLES)[number];
 
 export type ModelPreference = z.output<typeof ModelPreferenceSchema>;
+
+export type ModelPreferences = z.output<typeof ModelPreferencesSchema>;
 
 export type BuiltInSkillInstallTargetKind = z.output<typeof BuiltInSkillInstallTargetKindSchema>;
 
