@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import * as z from "zod";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
-import type { ModelPreference } from "./global-config.ts";
+import type { ModelPreference, ModelPreferences } from "./global-config.ts";
 import { modelPreferences } from "./model-roles.ts";
 import { schedulePoll, unschedulePoll } from "./poll-scheduler.ts";
 import { findExecutable, getHomeDirectory, getMonkeHome, withScopedLockAsync } from "./runtime.ts";
@@ -48,11 +48,6 @@ const TrackedPrsFileSchema = z.strictObject({
 const PullRequestStateSchema = z.object({ state: z.enum(["CLOSED", "MERGED", "OPEN"]) });
 
 type TrackedPr = z.infer<typeof TrackedPrSchema>;
-
-interface PostMergeHandoff {
-  model: ModelPreference;
-  t3: string;
-}
 
 /** Publish through gh, then persist tracking and schedule the post-merge poll before success. */
 export async function runPrsCreate(
@@ -244,13 +239,7 @@ export async function runPrsPoll(runtime: Runtime) {
 
   if (tracked.length > 0) {
     const t3 = resolveT3Cli(runtime);
-    // Read config before claiming any PR, so an invalid file leaves every PR tracked.
-    const [model] = modelPreferences(runtime, "post-merge");
-
-    const results = await Promise.all(
-      tracked.map(async (pr) => await pollPr(runtime, { model, t3 }, pr))
-    );
-
+    const results = await Promise.all(tracked.map(async (pr) => await pollPr(runtime, t3, pr)));
     const failures = results.filter((failure) => failure !== undefined);
 
     if (failures.length > 0) {
@@ -264,11 +253,7 @@ export async function runPrsPoll(runtime: Runtime) {
   }
 }
 
-async function pollPr(
-  runtime: Runtime,
-  handoff: PostMergeHandoff,
-  pr: TrackedPr
-): Promise<string | undefined> {
+async function pollPr(runtime: Runtime, t3: string, pr: TrackedPr): Promise<string | undefined> {
   const view = await runtime.execAsync("gh", ["pr", "view", pr.url, "--json", "state"], {
     allowFailure: true
   });
@@ -306,7 +291,7 @@ async function pollPr(
   }
 
   // Run the T3 hand-off outside the lock so a slow CLI does not block tracking.
-  const failure = await handOffPostMerge(runtime, handoff, pr);
+  const failure = await handOffPostMerge(runtime, t3, pr);
 
   if (failure !== undefined) {
     await updateTrackedPrs(runtime, (prs) =>
@@ -319,7 +304,7 @@ async function pollPr(
 
 async function handOffPostMerge(
   runtime: Runtime,
-  { model: { effort, model, provider }, t3 }: PostMergeHandoff,
+  t3: string,
   pr: TrackedPr
 ): Promise<string | undefined> {
   // Post-merge is explicit-only in Codex, so the message points at its installed SKILL.md.
@@ -346,31 +331,52 @@ async function handOffPostMerge(
     return undefined;
   }
 
-  // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
-  // as the project. T3 reports model failures only after the thread starts, so the hand-off
-  // uses the role's first model without fallback.
-  const started = await runT3HandoffCommand(runtime, t3, [
-    "thread",
-    "start",
-    "--title",
-    `Verify #${pr.number}`,
-    "--provider",
-    provider,
-    "--model",
-    model,
-    "--option",
-    `${T3_EFFORT_OPTION[provider]}=${effort}`,
-    pr.sourceCheckout,
-    `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
-  ]);
+  let models: ModelPreferences;
 
-  if (started.exitCode === 0) {
-    runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
-
-    return undefined;
+  try {
+    models = modelPreferences(runtime, "post-merge");
+  } catch (cause) {
+    return `Could not hand off ${pr.url}: ${errorMessage(ThrownValueSchema.parse(cause))}`;
   }
 
-  return `Could not hand off ${pr.url}: ${sent.stderr.trim()} ${started.stderr.trim()}`.trim();
+  // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
+  // as the project.
+  const failures = [sent.stderr.trim()];
+
+  for (const { effort, model, provider } of models) {
+    // Fallbacks run in order so that at most one thread starts.
+    // oxlint-disable-next-line no-await-in-loop
+    const started = await runT3HandoffCommand(runtime, t3, [
+      "thread",
+      "start",
+      "--title",
+      `Verify #${pr.number}`,
+      "--provider",
+      provider,
+      "--model",
+      model,
+      "--option",
+      `${T3_EFFORT_OPTION[provider]}=${effort}`,
+      pr.sourceCheckout,
+      `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
+    ]);
+
+    if (started.exitCode === 0) {
+      runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
+
+      return undefined;
+    }
+
+    failures.push(started.stderr.trim());
+
+    // T3 rejects an unavailable model before creating the thread. After a timeout or spawn
+    // failure the thread may exist, so the next model would start a second one.
+    if (started.exitCode < 0) {
+      break;
+    }
+  }
+
+  return `Could not hand off ${pr.url}: ${failures.join(" ")}`.trim();
 }
 
 async function runT3HandoffCommand(runtime: Runtime, t3: string, args: string[]) {

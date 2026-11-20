@@ -51,12 +51,13 @@ export const MODEL_ROLES = ["writer", "reviewer", "post-merge"] as const;
 
 const ModelPreferenceSchema = z.strictObject({
   effort: z.enum(["low", "medium", "high", "xhigh"]),
-  // `mt models get` prints models as one comma-separated line.
-  model: z.string().regex(/^[^\s,]+$/u, { error: "must be a model id without spaces or commas" }),
+  // `mt models get` prints `<model> <effort>` entries on one comma-separated line.
+  model: z.string().regex(/^[^\s,\p{C}]+$/u, {
+    error: "must be a model id without spaces, commas, or control characters"
+  }),
   provider: z.enum(["antigravity", "claudeAgent", "codex"])
 });
 
-// A model's family is the leading name of its id, such as `claude` in `claude-opus-5-5`.
 const modelFamily = (model: string) => model.split("-")[0];
 
 const ModelPreferencesSchema = z

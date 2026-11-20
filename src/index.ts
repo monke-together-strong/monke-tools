@@ -135,7 +135,7 @@ function createProgram(runtime: Runtime) {
 
   program
     .command("models")
-    .description("Show the models agents use for each kind of delegated work")
+    .description("Show the models agents use for each Model role")
     .command("get")
     .description("Print a Model role's models in fallback order")
     .addArgument(new Argument("<role>").choices(MODEL_ROLES))

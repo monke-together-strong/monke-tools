@@ -94,10 +94,11 @@ template or unexpected in a way that affects review.
 
 Have a subagent on the writer model (`mt models get writer`) draft the title and
 body. Brief it with the diff against the base, the PR requirements, and your
-facts: the source issue or Spec, risks, evidence, and media. Point it at this
-file's Choose the explanation and Choose the evidence sections, and have it
-return the draft without publishing. When your instructions bar subagents, write
-the draft yourself.
+facts: the source issue or Spec, risks, evidence, and media. Point it at
+[Choose the explanation](#choose-the-explanation) and
+[Choose the evidence](#choose-the-evidence) in this file, and have it return the
+draft without publishing. When your instructions bar subagents, write the draft
+yourself.
 
 Before publishing, check every claim in the draft against the diff and your
 evidence, then fix or cut each one that does not hold.

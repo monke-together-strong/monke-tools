@@ -95,6 +95,22 @@ function installRecordingCommand(sandbox: Sandbox, name: string, body = "exit 0"
       : [];
 }
 
+/** Parses the flags and positionals of one recorded `t3 thread start` call. */
+function parseThreadStart(call: string[] | undefined) {
+  const { positionals, values } = parseArgs({
+    allowPositionals: true,
+    args: call ?? [],
+    options: {
+      model: { type: "string" },
+      option: { multiple: true, type: "string" },
+      provider: { type: "string" },
+      title: { type: "string" }
+    }
+  });
+
+  return { positionals, values: { ...values } };
+}
+
 function installFakeGh(sandbox: Sandbox, states: Record<number, string>) {
   const cases = Object.entries(states)
     .map(([number, state]) => `  ${prUrl(Number(number))}) printf '{"state":"${state}"}\\n' ;;`)
@@ -481,18 +497,9 @@ printf '${prUrl(661)}\\n'`
       ["thread", "start"]
     ]);
 
-    const { positionals, values } = parseArgs({
-      allowPositionals: true,
-      args: calls[1] ?? [],
-      options: {
-        model: { type: "string" },
-        option: { multiple: true, type: "string" },
-        provider: { type: "string" },
-        title: { type: "string" }
-      }
-    });
+    const { positionals, values } = parseThreadStart(calls[1]);
 
-    expect({ ...values }).toStrictEqual({
+    expect(values).toStrictEqual({
       model: "gpt-6.2-sol",
       option: ["reasoningEffort=high"],
       provider: "codex",
@@ -507,7 +514,7 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });
 
-  it("starts the post-merge thread on the configured post-merge model", async () => {
+  it("starts the post-merge thread on the next configured model when T3 rejects one", async () => {
     const sandbox = createSandbox();
     write(
       sandbox.monkeHome,
@@ -515,48 +522,48 @@ printf '${prUrl(661)}\\n'`
       `version: 1
 models:
   post-merge:
-    - { provider: antigravity, model: gemini-4-neon, effort: xhigh }
     - { provider: codex, model: gpt-6.2-sol, effort: high }
+    - { provider: antigravity, model: gemini-4-neon, effort: xhigh }
 `
     );
     installFakeGh(sandbox, { 3: "MERGED" });
-    const t3Calls = installRecordingCommand(sandbox, "t3", '[ "$2" = "send" ] && exit 1\nexit 0');
+
+    const t3Calls = installRecordingCommand(
+      sandbox,
+      "t3",
+      '[ "$2" = "send" ] && exit 1\nfor arg in "$@"; do [ "$arg" = codex ] && exit 1; done\nexit 0'
+    );
+
     await track(sandbox, 3);
 
     await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
       `Started a thread for post-merge of ${prUrl(3)}\n`
     );
 
-    const { values } = parseArgs({
-      allowPositionals: true,
-      args: t3Calls()[1] ?? [],
-      options: {
-        model: { type: "string" },
-        option: { multiple: true, type: "string" },
-        provider: { type: "string" },
-        title: { type: "string" }
-      }
-    });
-
-    expect({ ...values }).toStrictEqual({
+    const calls = t3Calls();
+    expect(calls.map((call) => parseThreadStart(call).values.provider)).toStrictEqual([
+      undefined,
+      "codex",
+      "antigravity"
+    ]);
+    expect(parseThreadStart(calls[2]).values).toStrictEqual({
       model: "gemini-4-neon",
       option: ["thought_level=xhigh"],
       provider: "antigravity",
       title: "Verify #3"
     });
-    expect(t3Calls()).toHaveLength(2);
   });
 
-  it("keeps merged PRs tracked when Global monke config is invalid", async () => {
+  it("keeps a merged PR tracked when a new thread needs an invalid Global monke config", async () => {
     const sandbox = createSandbox();
     installFakeGh(sandbox, { 4: "MERGED" });
-    const t3Calls = installRecordingCommand(sandbox, "t3");
+    const t3Calls = installRecordingCommand(sandbox, "t3", '[ "$2" = "send" ] && exit 1\nexit 0');
     await track(sandbox, 4);
     write(sandbox.monkeHome, "config.yml", "version: 2\n");
 
     await expect(mt(sandbox, ["prs", "poll"])).rejects.toThrow(/version: must be 1/u);
     await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(4));
-    expect(t3Calls()).toStrictEqual([]);
+    expect(t3Calls().map((call) => call.slice(0, 2))).toStrictEqual([["thread", "send"]]);
   });
 
   it("leaves a PR re-tracked during a poll for the next poll", async () => {
