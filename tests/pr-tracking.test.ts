@@ -507,6 +507,41 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });
 
+  it("starts the post-merge thread on the next model when T3 rejects the first", async () => {
+    const sandbox = createSandbox();
+    write(
+      sandbox.monkeHome,
+      "config.yml",
+      `version: 1
+models:
+  post-merge:
+    - { provider: codex, model: gpt-6.2-sol, effort: high }
+    - { provider: antigravity, model: gemini-4-neon, effort: xhigh }
+`
+    );
+    installFakeGh(sandbox, { 3: "MERGED" });
+
+    const t3Calls = installRecordingCommand(
+      sandbox,
+      "t3",
+      '[ "$2" = "send" ] && exit 1\nfor arg in "$@"; do [ "$arg" = codex ] && exit 1; done\nexit 0'
+    );
+
+    await track(sandbox, 3);
+
+    await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
+      `Started a thread for post-merge of ${prUrl(3)}\n`
+    );
+    expect(t3Calls()[2]?.slice(4, 10)).toStrictEqual([
+      "--provider",
+      "antigravity",
+      "--model",
+      "gemini-4-neon",
+      "--option",
+      "thought_level=xhigh"
+    ]);
+  });
+
   it("leaves a PR re-tracked during a poll for the next poll", async () => {
     const sandbox = createSandbox();
     const state = path.join(sandbox.monkeHome, "tracked-prs.json");

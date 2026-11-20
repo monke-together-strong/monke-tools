@@ -57,9 +57,9 @@ continue below. Running this skill is the user's request for that thread; in T3
 Code, start it with `t3_thread_launch`. Finish here only when no thread tool
 exists. Otherwise:
 
-1. Start a new thread on GPT 6.2 Sol, high effort, that runs post-merge for the
-   PR, or the pushed commit with its base and source branches, using this skill
-   and its checkout. Link it.
+1. Start a new thread on the post-merge model (`mt models get post-merge`) that
+   runs post-merge for the PR, or the pushed commit with its base and source
+   branches, using this skill and its checkout. Link it.
 2. Finish this thread in the same turn. The deploy gate, contract checks,
    demo repairs and cleanup now belong to the new thread. Recap only what
    remains here outside them: a decision still waiting on the user, or agreed

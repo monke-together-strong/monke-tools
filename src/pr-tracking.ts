@@ -5,6 +5,8 @@ import { isDeepStrictEqual } from "node:util";
 import * as z from "zod";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
+import type { ModelPreference } from "./global-config.ts";
+import { modelPreferences } from "./model-roles.ts";
 import { schedulePoll, unschedulePoll } from "./poll-scheduler.ts";
 import { findExecutable, getHomeDirectory, getMonkeHome, withScopedLockAsync } from "./runtime.ts";
 import { shellQuote } from "./shell-quote.ts";
@@ -12,15 +14,12 @@ import type { Runtime } from "./types.ts";
 
 const T3_TIMEOUT_SECONDS = 60;
 
-// Keep the fallback thread options in sync with skills/internal/post-merge/SKILL.md.
-const POST_MERGE_THREAD_OPTIONS = [
-  "--provider",
-  "codex",
-  "--model",
-  "gpt-6.2-sol",
-  "--option",
-  "effort=high"
-];
+// T3 Code names the effort option per provider.
+const T3_EFFORT_OPTION = {
+  antigravity: "thought_level",
+  claudeAgent: "effort",
+  codex: "effort"
+} satisfies Record<ModelPreference["provider"], string>;
 
 const PULL_REQUEST_URL =
   /^https:\/\/github\.com\/(?<owner>[^/\s]+)\/(?<name>[^/\s]+)\/pull\/(?<number>\d+)\/?$/u;
@@ -334,23 +333,36 @@ async function handOffPostMerge(
 
   // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
   // as the project.
-  const started = await runT3HandoffCommand(runtime, t3, [
-    "thread",
-    "start",
-    "--title",
-    `Verify #${pr.number}`,
-    ...POST_MERGE_THREAD_OPTIONS,
-    pr.sourceCheckout,
-    `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
-  ]);
+  const failures = [sent.stderr.trim()];
 
-  if (started.exitCode === 0) {
-    runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
+  for (const { effort, model, provider } of modelPreferences(runtime, "post-merge")) {
+    // Try fallbacks in order, so only one thread starts.
+    // oxlint-disable-next-line no-await-in-loop
+    const started = await runT3HandoffCommand(runtime, t3, [
+      "thread",
+      "start",
+      "--title",
+      `Verify #${pr.number}`,
+      "--provider",
+      provider,
+      "--model",
+      model,
+      "--option",
+      `${T3_EFFORT_OPTION[provider]}=${effort}`,
+      pr.sourceCheckout,
+      `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
+    ]);
 
-    return undefined;
+    if (started.exitCode === 0) {
+      runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
+
+      return undefined;
+    }
+
+    failures.push(started.stderr.trim());
   }
 
-  return `Could not hand off ${pr.url}: ${sent.stderr.trim()} ${started.stderr.trim()}`.trim();
+  return `Could not hand off ${pr.url}: ${failures.join(" ")}`.trim();
 }
 
 async function runT3HandoffCommand(runtime: Runtime, t3: string, args: string[]) {

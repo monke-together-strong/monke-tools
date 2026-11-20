@@ -8,7 +8,8 @@ description: Create or edit a PR
 ## Brief a delegate
 
 When a delegate will open the PR, name this skill in the brief, pass facts
-rather than body sections, and allow a subagent for each documentation review run.
+rather than body sections, and allow subagents for each documentation review run
+and the draft.
 
 ## Prepare the branch
 
@@ -88,6 +89,18 @@ template or unexpected in a way that affects review.
   Choose side-by-side or stacked layouts based on readability.
 - For deployment-dependent correctness, add any extra verification using
   the [post-merge contract](../post-merge/SKILL.md#load-the-contracts).
+
+## Draft
+
+Have a subagent on the writer model (`mt models get writer`) draft the title and
+body. Brief it with the diff against the base, the PR requirements, and your
+facts: the source issue or Spec, risks, evidence, and media. Point it at this
+file's Choose the explanation and Choose the evidence sections, and have it
+return the draft without publishing. When your instructions bar subagents, write
+the draft yourself.
+
+Before publishing, check every claim in the draft against the diff and your
+evidence, then fix or cut each one that does not hold.
 
 ## Publish and verify
 

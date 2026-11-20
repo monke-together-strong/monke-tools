@@ -107,6 +107,20 @@ global skill, import personal skills, or sync project installs to other worktree
 
 Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
 
+### Model roles
+
+Skills and post-merge hand-offs choose models by Model role: `writer`,
+`reviewer`, or `post-merge`. `mt models get <role>` prints a role's models in
+fallback order. To override a role, list its models in `config.yml` under
+`mt home`, at most one per provider:
+
+```yaml
+models:
+  writer:
+    - { provider: antigravity, model: gemini-4-neon, effort: high }
+    - { provider: claudeAgent, model: claude-opus-5-5, effort: high }
+```
+
 ## Update
 
 ```bash

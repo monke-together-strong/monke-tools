@@ -47,11 +47,40 @@ export const SkillInstallPreferenceSchema = z.strictObject({
     })
 });
 
+export const MODEL_ROLES = ["writer", "reviewer", "post-merge"] as const;
+
+const ModelPreferenceSchema = z.strictObject({
+  effort: z.enum(["low", "medium", "high", "xhigh"]),
+  model: z.string().min(1),
+  // A T3 Code provider instance, which also identifies the model family.
+  provider: z.enum(["antigravity", "claudeAgent", "codex"])
+});
+
+const ModelPreferencesSchema = z
+  .array(ModelPreferenceSchema)
+  .min(1, { error: "must be a non-empty array" })
+  .superRefine((preferences, context) => {
+    for (const [index, { provider }] of preferences.entries()) {
+      if (preferences.findIndex((preference) => preference.provider === provider) !== index) {
+        context.addIssue({
+          code: "custom",
+          message: `Fallbacks need a different model family than ${provider}`,
+          path: [index, "provider"]
+        });
+      }
+    }
+  });
+
 const GlobalMonkeConfigSchema = z.strictObject({
   diffAdapter: z.enum(["codiff", "ms"]).optional(),
+  models: z.partialRecord(z.enum(MODEL_ROLES), ModelPreferencesSchema).optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
 });
+
+export type ModelRole = (typeof MODEL_ROLES)[number];
+
+export type ModelPreference = z.output<typeof ModelPreferenceSchema>;
 
 export type BuiltInSkillInstallTargetKind = z.output<typeof BuiltInSkillInstallTargetKindSchema>;
 
