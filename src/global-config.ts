@@ -50,7 +50,7 @@ export const SkillInstallPreferenceSchema = z.strictObject({
 export const MODEL_ROLES = ["writer", "reviewer", "post-merge"] as const;
 
 const ModelPreferenceSchema = z.strictObject({
-  effort: z.enum(["low", "medium", "high", "xhigh"]),
+  effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   // `mt models get` prints `<model> <effort>` entries on one comma-separated line.
   model: z.string().regex(/^[^\s,\p{C}]+$/u, {
     error: "must be a model id without spaces, commas, or control characters"

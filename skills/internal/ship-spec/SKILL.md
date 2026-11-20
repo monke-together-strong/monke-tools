@@ -21,8 +21,7 @@ description: Ship an agreed Spec, given as its URL or the thread that agreed it,
    concurrently on the committed HEAD from this thread, both on the reviewer
    model (`mt models get reviewer`). Give AutoReview the first of those models
    that one of its engines runs, through `--engine`, `--model`, and `--thinking`,
-   plus `--codex-no-fallback` for Codex. When it reports `reviewer_unavailable`,
-   move to the next of those models.
+   plus `--codex-no-fallback` for Codex.
    Use the recorded review base for AutoReview and the Spec as the behavior
    contract. Delegate behavior validation to a fresh source-blind subagent.
    Freshness applies to agent context. The parent selects and owns the validation

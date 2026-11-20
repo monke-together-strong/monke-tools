@@ -69,9 +69,8 @@ mt prs create --thread <thread-id> --checkout <checkout> -- \
 
 Use `mt prs track` for an existing PR. When a tracked PR merges outside its
 owning thread, `mt prs poll` asks the thread to run post-merge. If delivery
-fails, the poller starts a thread for it on the first `post-merge` model T3
-accepts. Untrack a PR before merging
-it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
+fails, the poller starts a thread for it on the first
+[`post-merge` model](#model-roles). Untrack a PR before merging it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
 cleanup and when verification needs a separate thread.
 
 ## Configure a repo
@@ -112,7 +111,8 @@ Imported guidance is generated from the commit pins in `monke.yml`. See [maintai
 
 Skills and post-merge hand-offs choose models by Model role: `writer`,
 `reviewer`, or `post-merge`. `mt models get <role>` prints a role's models in
-fallback order. To override a role, list its models under `models` in
+fallback order, without providers, so a skill may run a model through any
+provider that serves it. To override a role, list its models under `models` in
 `$(mt home)/config.yml`, at most one per model family:
 
 ```yaml

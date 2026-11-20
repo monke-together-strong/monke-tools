@@ -8,7 +8,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Repo PR guidance**: Repo-owned PR authoring instructions that replace **User PR guidance** and complement the reviewer-facing PR template.
 
-**Model role**: A named kind of delegated agent work, such as writing or code review, with its models in fallback order and at most one per model family. _Avoid_: Agent type, persona
+**Model role**: A named kind of agent work, such as writing or code review, with its models in fallback order and at most one per model family. _Avoid_: Agent type, persona
 
 **Spec**: A durable work target that records agreed behavior, implementation decisions, testing decisions, and scope for an agent to execute. A PRD can serve as a Spec when it carries that implementation contract.
 

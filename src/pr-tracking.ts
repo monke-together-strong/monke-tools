@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import * as z from "zod";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
-import type { ModelPreference, ModelPreferences } from "./global-config.ts";
+import type { ModelPreference } from "./global-config.ts";
 import { modelPreferences } from "./model-roles.ts";
 import { schedulePoll, unschedulePoll } from "./poll-scheduler.ts";
 import { findExecutable, getHomeDirectory, getMonkeHome, withScopedLockAsync } from "./runtime.ts";
@@ -331,50 +331,39 @@ async function handOffPostMerge(
     return undefined;
   }
 
-  let models: ModelPreferences;
+  let model: ModelPreference;
 
   try {
-    models = modelPreferences(runtime, "post-merge");
+    [model] = modelPreferences(runtime, "post-merge");
   } catch (cause) {
     return `Could not hand off ${pr.url}: ${errorMessage(ThrownValueSchema.parse(cause))}`;
   }
 
   // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
-  // as the project.
-  const failures = [sent.stderr.trim()];
+  // as the project. A failed start can still leave a thread, so the hand-off uses the role's
+  // first model and leaves retries to the next poll.
+  const started = await runT3HandoffCommand(runtime, t3, [
+    "thread",
+    "start",
+    "--title",
+    `Verify #${pr.number}`,
+    "--provider",
+    model.provider,
+    "--model",
+    model.model,
+    "--option",
+    `${T3_EFFORT_OPTION[model.provider]}=${model.effort}`,
+    pr.sourceCheckout,
+    `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
+  ]);
 
-  for (const { effort, model, provider } of models) {
-    // Fallbacks run in order so that at most one thread starts.
-    // oxlint-disable-next-line no-await-in-loop
-    const started = await runT3HandoffCommand(runtime, t3, [
-      "thread",
-      "start",
-      "--title",
-      `Verify #${pr.number}`,
-      "--provider",
-      provider,
-      "--model",
-      model,
-      "--option",
-      `${T3_EFFORT_OPTION[provider]}=${effort}`,
-      pr.sourceCheckout,
-      `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
-    ]);
+  if (started.exitCode === 0) {
+    runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
 
-    if (started.exitCode === 0) {
-      runtime.writeStdout(`Started a thread for post-merge of ${pr.url}\n`);
-
-      return undefined;
-    }
-
-    failures.push(started.stderr.trim());
-
-    // T3 rejects an unavailable model before creating the thread. After a timeout or spawn
-    // failure the thread may exist, so the next model would start a second one.
-    if (started.exitCode < 0) {
-      break;
-    }
+    return undefined;
   }
+
+  const failures = [sent.stderr.trim(), started.stderr.trim()].filter(Boolean);
 
   return `Could not hand off ${pr.url}: ${failures.join(" ")}`.trim();
 }

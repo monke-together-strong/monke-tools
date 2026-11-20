@@ -95,7 +95,6 @@ function installRecordingCommand(sandbox: Sandbox, name: string, body = "exit 0"
       : [];
 }
 
-/** Parses the flags and positionals of one recorded `t3 thread start` call. */
 function parseThreadStart(call: string[] | undefined) {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
@@ -514,7 +513,7 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });
 
-  it("starts the post-merge thread on the next configured model when T3 rejects one", async () => {
+  it("starts the post-merge thread only on the role's first model and keeps a failed PR tracked", async () => {
     const sandbox = createSandbox();
     write(
       sandbox.monkeHome,
@@ -522,36 +521,28 @@ printf '${prUrl(661)}\\n'`
       `version: 1
 models:
   post-merge:
-    - { provider: codex, model: gpt-6.2-sol, effort: high }
     - { provider: antigravity, model: gemini-4-neon, effort: xhigh }
+    - { provider: codex, model: gpt-6.2-sol, effort: high }
 `
     );
     installFakeGh(sandbox, { 3: "MERGED" });
-
-    const t3Calls = installRecordingCommand(
-      sandbox,
-      "t3",
-      '[ "$2" = "send" ] && exit 1\nfor arg in "$@"; do [ "$arg" = codex ] && exit 1; done\nexit 0'
-    );
-
+    const t3Calls = installRecordingCommand(sandbox, "t3", "exit 1");
     await track(sandbox, 3);
 
-    await expect(mt(sandbox, ["prs", "poll"])).resolves.toBe(
-      `Started a thread for post-merge of ${prUrl(3)}\n`
-    );
+    await expect(mt(sandbox, ["prs", "poll"])).rejects.toThrow(`Could not hand off ${prUrl(3)}`);
 
     const calls = t3Calls();
-    expect(calls.map((call) => parseThreadStart(call).values.provider)).toStrictEqual([
-      undefined,
-      "codex",
-      "antigravity"
+    expect(calls.map((call) => call.slice(0, 2))).toStrictEqual([
+      ["thread", "send"],
+      ["thread", "start"]
     ]);
-    expect(parseThreadStart(calls[2]).values).toStrictEqual({
+    expect(parseThreadStart(calls[1]).values).toStrictEqual({
       model: "gemini-4-neon",
       option: ["thought_level=xhigh"],
       provider: "antigravity",
       title: "Verify #3"
     });
+    await expect(mt(sandbox, ["prs", "list"])).resolves.toContain(prUrl(3));
   });
 
   it("keeps a merged PR tracked when a new thread needs an invalid Global monke config", async () => {
