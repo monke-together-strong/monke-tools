@@ -18,7 +18,7 @@ import { importedGuidancePath } from "../scripts/import-guidance.ts";
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import type { SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { rememberSkillGuidance } from "../scripts/skill-review.ts";
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { BUILT_IN_SKILL_INSTALL_TARGET_KINDS, loadGlobalMonkeConfig } from "./global-config.ts";
 import { containsPath } from "./path-identity.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
@@ -26,9 +26,9 @@ import { resolveSkillPath } from "./skill-path.ts";
 import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
 import { discoverSourceSkillCopies, resolveSkillSourceFolder } from "./skill-source-discovery.ts";
 import {
+  assertDistinctSkillInstallTargets,
   resolveSkillInstallTargets,
   skillPublicationPaths,
-  skillTargetLabel,
   usesFlatSkillLayout
 } from "./skills.ts";
 import type { Runtime } from "./types.ts";
@@ -221,20 +221,12 @@ function adoptionTargets(runtime: Runtime) {
     }
   });
 
-  const custom = configured.find((target) => target.kind === "custom");
-
-  const overlappingFlatTarget =
-    custom &&
-    configured.find(
-      (target) =>
-        usesFlatSkillLayout(target.kind) &&
-        resolveSkillPath(target.agentSkillRoot).resolved ===
-          resolveSkillPath(custom.agentSkillRoot).resolved
-    );
-
-  if (custom && overlappingFlatTarget) {
+  try {
+    assertDistinctSkillInstallTargets(configured, { homeDirectory });
+  } catch (cause) {
     throw new MonkeError(
-      `Skill adoption preflight failed: overlapping ${skillTargetLabel(overlappingFlatTarget.kind)} and custom Skill layouts at ${overlappingFlatTarget.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
+      `Skill adoption preflight failed: ${errorMessage(ThrownValueSchema.parse(cause))}`,
+      { cause }
     );
   }
 

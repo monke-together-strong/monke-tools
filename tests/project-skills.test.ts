@@ -231,6 +231,19 @@ describe("project skill installation", () => {
     expect(existsSync(path.join(f.repo, ".agents/skills/monke-tools"))).toBeFalsy();
   });
 
+  it("rejects project targets whose Agent skill roots alias each other before publishing", async () => {
+    const f = fixture();
+    const agentsSkills = path.join(f.repo, ".agents/skills");
+    mkdirSync(agentsSkills, { recursive: true });
+    symlinkSync(agentsSkills, path.join(f.repo, ".claude/skills"), "dir");
+    await expect(runCliAsync(["skills", "add", f.source, "--project"], f.runtime)).rejects.toThrow(
+      /Codex at .* and Claude at .* overlap as Agent skill roots/u
+    );
+    expect(readImportRecipeStore(f.registry).recipes).toStrictEqual([]);
+    expect(existsSync(path.join(agentsSkills, "monke-tools"))).toBeFalsy();
+    expect(existsSync(path.join(agentsSkills, "ms-view"))).toBeFalsy();
+  });
+
   it.each(["directory", "read-only"] as const)(
     "rejects a %s in exclusion preflight before publishing links",
     async (kind) => {
