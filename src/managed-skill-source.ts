@@ -223,7 +223,7 @@ function adoptionTargets(runtime: Runtime) {
 
   const custom = configured.find((target) => target.kind === "custom");
 
-  const flat =
+  const overlappingFlatTarget =
     custom &&
     configured.find(
       (target) =>
@@ -232,9 +232,9 @@ function adoptionTargets(runtime: Runtime) {
           resolveSkillPath(custom.agentSkillRoot).resolved
     );
 
-  if (custom && flat) {
+  if (custom && overlappingFlatTarget) {
     throw new MonkeError(
-      `Skill adoption preflight failed: overlapping ${skillTargetLabel(flat.kind)} and custom Skill layouts at ${flat.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
+      `Skill adoption preflight failed: overlapping ${skillTargetLabel(overlappingFlatTarget.kind)} and custom Skill layouts at ${overlappingFlatTarget.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
     );
   }
 

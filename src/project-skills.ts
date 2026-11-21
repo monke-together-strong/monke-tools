@@ -86,7 +86,7 @@ export function initializeProjectSkillRegistry(
 
     if (targets.length === 0) {
       throw new MonkeError(
-        "Project skills require a built-in target; select one with mt skills configure"
+        "Project skills require a Codex, Claude, or Cursor target; select one with mt skills configure"
       );
     }
 

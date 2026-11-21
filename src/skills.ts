@@ -66,7 +66,7 @@ export function skillTargetLabel(kind: SkillInstallTargetKind) {
   return TARGET_OPTIONS.find((option) => option.kind === kind)?.label ?? kind;
 }
 
-/** Agents that discover skills only one level below their Skill root get flat links. */
+/** Agents that discover skills only one level below their Agent skill root get flat links. */
 export function usesFlatSkillLayout(kind: SkillInstallTargetKind) {
   return kind === "claude" || kind === "antigravity";
 }
@@ -655,10 +655,6 @@ function reconcileNamespaceTarget(
   sourceFolders: readonly string[]
 ) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
-
-  if (usesFlatSkillLayout(target.kind)) {
-    removeFlatManagedLinks(target);
-  }
 
   const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
 

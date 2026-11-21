@@ -139,10 +139,10 @@ describe("skills", () => {
         writeMessage() {}
       });
 
-      const claudeSkillRoot = path.join(sandbox, ...rootSegments);
-      const manifestPath = path.join(claudeSkillRoot, ".monke-tools-flat-skills.json");
-      const coreLink = path.join(claudeSkillRoot, "monke-tools-core");
-      const tddLink = path.join(claudeSkillRoot, "tdd");
+      const agentSkillRoot = path.join(sandbox, ...rootSegments);
+      const manifestPath = path.join(agentSkillRoot, ".monke-tools-flat-skills.json");
+      const coreLink = path.join(agentSkillRoot, "monke-tools-core");
+      const tddLink = path.join(agentSkillRoot, "tdd");
       const manifest: unknown = JSON.parse(readFileSync(manifestPath, "utf-8"));
       expect(manifest).toMatchObject({
         links: [
@@ -163,8 +163,8 @@ describe("skills", () => {
       );
       expect(lstatSync(tddLink).isSymbolicLink()).toBeTruthy();
       expect(readlinkSync(tddLink)).toBe(path.join(sourceCheckout, "skills", "imported", "tdd"));
-      expect(existsSync(path.join(claudeSkillRoot, "example"))).toBeFalsy();
-      expect(existsSync(path.join(claudeSkillRoot, "monke-tools"))).toBeFalsy();
+      expect(existsSync(path.join(agentSkillRoot, "example"))).toBeFalsy();
+      expect(existsSync(path.join(agentSkillRoot, "monke-tools"))).toBeFalsy();
 
       reconcileSkillNamespaces({
         cwd: sandbox,

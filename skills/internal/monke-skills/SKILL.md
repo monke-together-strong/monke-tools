@@ -41,9 +41,11 @@ from the Consumer repo. Local authored skills stay linked. Publisher-declared
 imports keep their own copies. A local checkout prefers `skills/` over
 `.agents/skills`. Pass the exact skill directory to use another location.
 
-The first project install saves the global selection of built-in targets or
-uses the built-in defaults if no selection exists. If you have only a custom
-target, select a built-in target first. Later global changes leave this clone's
+The first project install saves the global selection of Codex, Claude, and
+Cursor targets or uses those defaults if no selection exists. Project installs
+skip Antigravity because its project skill root, `.agents/skills`, is the Codex
+one. If you have only a custom or Antigravity target, select Codex, Claude, or
+Cursor first. Later global changes leave this clone's
 selection in place.
 
 After adding or removing skills, run `mt setup` in other existing worktrees
