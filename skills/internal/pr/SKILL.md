@@ -7,120 +7,50 @@ description: Create or edit a PR, or brief a delegate that opens one.
 
 ## Brief a delegate
 
-When a delegate will open the PR, name this skill in the brief, pass facts
-rather than body sections, and allow subagents for each documentation review run
-and for drafting the title and body.
+Name this skill in the brief, pass facts instead of drafted sections, and allow subagents for documentation review and drafting.
 
 ## Prepare the branch
 
-Use the existing PR's base, the task's specified base, or the repository default.
-Rebase the PR branch onto the latest base before analyzing or verifying it.
+Rebase onto the existing PR base, specified base, or repository default before analyzing or verifying. Exclude exploration artifacts, including `docs/research/` and `docs/explorations/`, unless requested.
 
-Exclude research and exploration artifacts,
-including `docs/research/` and `docs/explorations/`, unless requested.
-
-## Audit changed tests
-
-When creating a PR whose diff adds or changes tests, run
-[test audit](../test-audit/SKILL.md) in cleanup mode on those test files.
-
-## Review branch documentation, comments, and terminology
-
-Run the [documentation review](../../references/internal/DOC_REVIEW.md) before
-verification and publishing, and again before pushing any later commit that
-changes documentation, comments, or user-facing messages.
+- **Changed tests.** When creating a PR whose diff adds or changes tests, run [test audit](../test-audit/SKILL.md) in cleanup mode on those files.
+- **Documentation review.** Run [documentation review](../../references/internal/DOC_REVIEW.md) before verification and publishing, and again before pushing later edits to docs, comments, or user-facing messages.
 
 ## Load PR requirements
 
-Read Repo PR guidance from root `PR.md` when present. Otherwise read User PR
-guidance from `$(mt home)/instructions/PR.md` when available.
-
-Use the repository's PR template from its default branch, or the
-[default template](references/default-pr-template.md).
-
-Treat content a brief or another skill requests as facts to cover within this
-skill's length, evidence, and history rules, and report anything you left out.
-
-Link the source issue or Spec. Identify material risks, including rollback limits.
+Read root `PR.md` when present, or `$(mt home)/instructions/PR.md` when available. Use the repository PR template from the default branch, or [default template](references/default-pr-template.md). Fit facts requested by a brief or another skill within this skill's rules, and report anything omitted. Link the source issue or Spec and state material risks, including rollback limits.
 
 ## Choose the explanation
 
-Lead with a paragraph of one or two sentences on the problem, then show the
-resulting behavior separately. Aim for under 200 words of prose. Expand only for
-a concrete review decision or required template field. Give each later point its
-own short paragraph.
+Lead with one or two sentences on the problem, then show the resulting behavior separately. Aim for under 200 words of prose, expanding only for a concrete review decision or required template field. Give each later point its own short paragraph.
 
-When the change alters behavior along a path, such as control flow, error
-handling, state transitions, component interactions, schemas, or key data
-structures, apply [show-me](../../imported/show-me/SKILL.md) to show the before
-and after. Leave that behavior out of the prose. Use prose for the resulting
-behavior only when no such path changes, as in a rename or a configuration value.
-
-For changes to a public API or configuration contract, show code blocks of what
-a consumer writes.
-
-Describe the final implementation. Keep investigation history and reviewer
-bookkeeping in work records. Keep each fact in one place and remove prose that
-repeats the diff or visual.
-
-Apply [technical-writing](../../imported/technical-writing/SKILL.md) to the title
-and body.
+- **Path-change test.** Did behavior change along a path (control flow, error handling, state transitions, component interactions, schemas, or key data structures)? Show before and after with [show-me](../../imported/show-me/SKILL.md) and omit that behavior from prose. Use prose for resulting behavior only when no path changed, such as a rename or configuration value.
+- **Contract changes.** Show code blocks of what a consumer writes for public API or configuration contract changes.
+- Describe only the final implementation. Keep investigation history and review bookkeeping in work records. Keep each fact in one place and cut prose that repeats the diff or visuals. Apply [technical-writing](../../imported/technical-writing/SKILL.md) to the title and body.
 
 ## Choose the evidence
 
-Reuse verification that still covers the change, or run the smallest relevant
-checks. Report verification only when it adds information beyond routine CI
-results: a decisive behavior result, a meaningful benchmark, or a material
-verification limitation. Keep test counts, repeated runs, and routine lint,
-formatting, typecheck, and test results in work records unless required by the
-template or unexpected in a way that affects review.
+Reuse verification that still covers the change, or run the smallest relevant checks. Report verification only when it adds information beyond routine CI: a decisive behavior result, a meaningful benchmark, or a material limitation. Keep test counts, repeated runs, and routine lint, format, typecheck, and test output in work records unless required or unexpected.
 
-- For hands-on verification of a locally runnable UI or API, prepare a
-  [manual-test handoff](references/manual-test-handoff.md) for the final chat
-  response.
-- For frontend-visible work, attach a screenshot of each changed view or state,
-  or [video](references/browser-video-proof.md) when motion, timing, or a
-  workflow carries the claim. Inspect final assets using
-  [proof asset review](references/proof-asset-review.md), and use
-  `$github-media-upload` to attach them when publishing. Keep screenshots and
-  videos expanded outside collapsed sections. Caption each screenshot
-  with the behavior it demonstrates. Use matched, labeled before-and-after pairs
-  for comparisons and group multiple screenshots by claim. Number workflow
-  states. Choose side-by-side or stacked layouts based on readability.
-- For deployment-dependent correctness, add any extra verification using
-  the [post-merge contract](../post-merge/SKILL.md#load-the-contracts).
+- **Locally runnable UI or API.** Prepare a [manual-test handoff](references/manual-test-handoff.md) for the final chat response.
+- **Frontend-visible work.** Attach an expanded screenshot for each changed view or state, or a [video](references/browser-video-proof.md) when motion, timing, or a workflow carries the claim. Inspect final assets with [proof asset review](references/proof-asset-review.md) and upload with `$github-media-upload`. Caption each screenshot with the behavior shown, pair labeled before-and-after comparisons, group shots by claim, number workflow states, and pick side-by-side or stacked layout for readability.
+- **Deployment-dependent work.** Add extra verification using [post-merge contract](../post-merge/SKILL.md#load-the-contracts).
 
 ## Draft the title and body
 
-The writer model (`mt models get writer`) writes the title and body. When you
-already run on the writer role's first available model, or your instructions bar
-subagents, draft them yourself.
-Otherwise, have a subagent on the writer model draft them. Brief it with the diff
-against the base, the PR requirements, and your facts: the source issue or Spec,
-risks, evidence, and media. Point it at
-[Choose the explanation](#choose-the-explanation) and
-[Choose the evidence](#choose-the-evidence) in this file, and have it return the
-draft without publishing.
+Use the writer model (`mt models get writer`). Draft directly when you already run on its first available model or subagents are barred. Otherwise spawn a writer subagent with the diff against base, PR requirements, facts (source issue or Spec, risks, evidence, and media), and pointers to [Choose the explanation](#choose-the-explanation) and [Choose the evidence](#choose-the-evidence), returning the draft without publishing.
 
-Before publishing, check every claim in the draft against the diff and your
-evidence. When a subagent drafted it, return each claim that does not hold to
-the writer with its correction, and check the revision the same way.
+Verify every claim in the draft against the diff and evidence before publishing. Send unsupported claims back to the writer with corrections and verify the revision the same way.
 
 ## Publish and verify
 
-Create or update a ready PR after required checks and media review. In T3 Code,
-create it through `mt prs create` so publishing includes post-merge registration:
+Open a ready PR after required checks and media review. Use draft only when requested. In T3 Code, publish through `mt prs create` so post-merge tracking registers:
 
 ```sh
 mt prs create --thread <owning-thread-id> --checkout <PR-checkout> -- \
   --base <base> --head <branch> --title <title> --body-file <body-file>
 ```
 
-If creation fails, check whether the PR exists before retrying. Use the
-reported `mt prs track` command when registration fails after creation.
-Outside T3 Code, use `gh pr create`. Update existing PRs with `gh pr edit`.
-Use draft only when requested. If the user requests CodeRabbit ignore the PR,
-post exactly `@coderabbitai ignore` as a PR comment.
+If creation fails, check whether the PR already exists before retrying. Run the reported `mt prs track` command when only registration fails. Outside T3 Code, use `gh pr create`. Update existing PRs with `gh pr edit`. If the user asks CodeRabbit to ignore the PR, post `@coderabbitai ignore` as a PR comment.
 
-Verify the published title, body, and attachments. Report the URL and any
-manual-test handoff.
+Verify the published title, body, and attachments, then report the URL and any manual-test handoff.

@@ -317,6 +317,16 @@ function resolveGate(options: {
   return { context: railway, kind: "railway", repo, sha };
 }
 
+function sanitizeOutputLine(value: string): string {
+  return (
+    Bun.stripANSI(value)
+      // oxlint-disable-next-line no-control-regex -- Collapse line breaks and tabs so external GitHub text stays on one line.
+      .replaceAll(/[\t\n\r]+/gu, " ")
+      // oxlint-disable-next-line no-control-regex -- Strip remaining C0 and C1 control characters from external GitHub text.
+      .replaceAll(/[\u0000-\u001F\u007F-\u009F]/gu, "")
+  );
+}
+
 export function createWaitForGateCommand(runtime: Runtime) {
   return (
     new Command()
@@ -366,10 +376,12 @@ export function createWaitForGateCommand(runtime: Runtime) {
             timeoutMs: options.timeout
           });
 
-          runtime.writeStdout(`${result.status}: ${result.detail}\n`);
+          runtime.writeStdout(`${result.status}: ${sanitizeOutputLine(result.detail)}\n`);
           process.exitCode = EXIT_CODES[result.status];
         } catch (cause) {
-          runtime.writeStderr(`${cause instanceof Error ? cause.message : String(cause)}\n`);
+          runtime.writeStderr(
+            `${sanitizeOutputLine(cause instanceof Error ? cause.message : String(cause))}\n`
+          );
           process.exitCode = USAGE_EXIT_CODE;
         }
       })

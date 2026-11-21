@@ -1,39 +1,23 @@
 # Documentation review
 
-Have a subagent on the writer model (`mt models get writer`) review
-documentation, code comments, user-facing messages, and domain terminology in
-the full diff against the PR's base, including pending edits and new files,
-using [documentation standards](../../internal/documentation-standards/SKILL.md).
-When your instructions bar subagents, run the review yourself under these rules.
+Have a subagent on the writer model (`mt models get writer`) review documentation, code comments, user-facing messages, and domain terminology across the full diff against the PR base, including pending edits and new files, using [documentation standards](../../internal/documentation-standards/SKILL.md). Run the review yourself under these rules when subagents are barred.
 
-Every run covers the full diff, not only the latest commit. Brief the reviewer
-to edit passages in place (overriding documentation-standards's read-only review
-default) and reach a keep, cut, or correct decision for every added or changed
-passage as it reads after the change. Leave out word limits and severity
-filters. They let implementation narration and restated error messages through
-as style.
+Brief the reviewer to cover the full diff, edit passages in place (overriding read-only review mode), and reach a keep, cut, or correct decision for every added or changed passage as it reads after the change. Omit word limits and severity filters, which let implementation narration and restated errors pass as style.
 
-The reviewer applies its cuts and corrections in place and leaves them
-uncommitted. It reports these instead of applying them:
+The reviewer leaves edits uncommitted and reports these items instead of editing them:
 
-- A finding about code behavior, such as a comment that contradicts the code.
-- A rename of an exported symbol.
-- Removal of a TODO.
-- An edit to a recorded decision or its attribution, such as an ADR.
-- Anything outside the diff.
+- Code behavior contradictions, such as a comment that disagrees with the code.
+- Exported-symbol renames.
+- `TODO` removals.
+- Edits to recorded decisions or their attribution, such as ADRs.
+- Items outside the diff.
 
-Edit the checkout only after the reviewer finishes. Then read its diff against
-the standards and revert any edit that breaks them. Check each reported item,
-then handle it:
+Wait until the reviewer finishes before editing the checkout. Inspect its diff against the standards and revert any edit that breaks them. Handle each reported item:
 
-- Fix a bug, where code contradicts its documented intent, and add a test.
-- Apply a rename across all callers and confirm the typecheck passes.
-- Remove a TODO only once you have checked that its work is done.
+- Fix a code and documentation contradiction at its owner and add a test.
+- Apply a rename across all callers and confirm typechecking passes.
+- Remove a `TODO` only after verifying its work is complete.
 - Rewrite a recorded decision only when the code shows the decision changed.
-- Fix an item outside the diff when it finishes something the diff started,
-  such as a rename. Leave other out-of-diff items out of the PR and list them
-  in your reply.
+- Fix an out-of-diff item only when it finishes work the diff started, such as a rename. Leave other out-of-diff items out of the PR and list them in your reply.
 
-You are done when every edit in the diff is kept or reverted and every reported
-item has an outcome. In your final reply, list each finding with its outcome,
-including each proposal you overrode, or state that there were none.
+Done when every reviewer edit is kept or reverted and every reported item has an outcome. In your final reply, list each finding and its outcome (including overrides), or state that there were none.

@@ -20,9 +20,10 @@ import * as z from "zod";
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, formatCommand, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import { parseSkillFrontmatterDocument } from "../src/skill-metadata.ts";
 import { resolveSkillPath } from "../src/skill-path.ts";
 import type { ExecResult, Runtime } from "../src/types.ts";
-import { parseOwnedYamlText } from "../src/validation.ts";
+import { parseOwnedYamlText, unwrapBoundaryResult } from "../src/validation.ts";
 import {
   assertManagedGuidanceRoots,
   assertObsoleteReferencesAreUnconsumed,
@@ -1145,10 +1146,13 @@ function stagedSkillSelector(entry: string, slug: string, imported?: SkillImport
     throw new MonkeError(`Add YAML frontmatter at the start of ${entry}.`);
   }
 
-  const metadata = parseOwnedYamlText(
-    frontmatter.groups?.frontmatter ?? "{}",
-    entry,
-    z.looseObject({ name: z.string().optional() })
+  const metadata = unwrapBoundaryResult(
+    z
+      .looseObject({ name: z.string().optional() })
+      .safeParse(
+        parseSkillFrontmatterDocument(frontmatter.groups?.frontmatter ?? "{}", entry).toJS()
+      ),
+    entry
   );
 
   if (metadata.name === undefined) {

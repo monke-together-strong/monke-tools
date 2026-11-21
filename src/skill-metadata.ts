@@ -15,6 +15,12 @@ import * as z from "zod";
 import { MonkeError } from "./errors.ts";
 import { unwrapBoundaryResult } from "./validation.ts";
 
+const YAML_DOCUMENT_OPTIONS = {
+  merge: false,
+  strict: true,
+  uniqueKeys: true
+} as const;
+
 const SkillFrontmatterSchema = z.looseObject({
   "disable-model-invocation": z.boolean().optional()
 });
@@ -54,7 +60,7 @@ export function setSkillMetadata(
 
   const frontmatterLabel = `Skill frontmatter at ${skillEntryPath}`;
 
-  const frontmatter = parseMutableYamlDocument(
+  const frontmatter = parseSkillFrontmatterDocument(
     frontmatterMatch.groups?.frontmatter ?? "",
     frontmatterLabel
   );
@@ -127,12 +133,87 @@ export function setSkillMetadata(
   writeFileSync(openaiMetadataPath, openaiMetadata.toString(), "utf-8");
 }
 
+/**
+ * Parse Skill frontmatter strictly, falling back to quoting unquoted single-line scalar values that
+ * contain `: ` or end with `:` (common in third-party SKILL.md descriptions).
+ */
+export function parseSkillFrontmatterDocument(text: string, label: string) {
+  const initial = parseDocument(text, YAML_DOCUMENT_OPTIONS);
+
+  if (initial.errors.length === 0) {
+    return initial;
+  }
+
+  const lines = text.split(/\r?\n/u);
+  const repairedLines = new Set<number>();
+  let current = initial;
+
+  while (current.errors.length > 0) {
+    const candidates = new Map<number, number>();
+
+    for (const error of current.errors) {
+      if (error.code !== "BLOCK_AS_IMPLICIT_KEY") {
+        continue;
+      }
+
+      const position = error.linePos?.[0];
+
+      if (!position) {
+        continue;
+      }
+
+      const previousCol = candidates.get(position.line);
+
+      if (previousCol === undefined || position.col < previousCol) {
+        candidates.set(position.line, position.col);
+      }
+    }
+
+    let changed = false;
+
+    for (const [lineNumber, column] of candidates) {
+      if (repairedLines.has(lineNumber)) {
+        continue;
+      }
+
+      const lineIndex = lineNumber - 1;
+      const line = lines[lineIndex];
+
+      if (line === undefined || column < 1 || column > line.length) {
+        continue;
+      }
+
+      const valueStart = column - 1;
+      const prefix = line.slice(0, valueStart);
+      const value = line.slice(valueStart).trimEnd();
+
+      if (!/\S.*:[ \t]+$/u.test(prefix) || !/:(?:\s|$)/u.test(value)) {
+        continue;
+      }
+
+      lines[lineIndex] = `${prefix}${JSON.stringify(value)}`;
+      repairedLines.add(lineNumber);
+      changed = true;
+    }
+
+    if (!changed) {
+      break;
+    }
+
+    current = parseDocument(lines.join("\n"), YAML_DOCUMENT_OPTIONS);
+  }
+
+  if (current.errors.length > 0) {
+    throw new MonkeError(
+      `Invalid ${label}:\n${initial.errors.map((error) => error.message).join("\n")}`
+    );
+  }
+
+  return current;
+}
+
 function parseMutableYamlDocument(text: string, label: string) {
-  const document = parseDocument(text, {
-    merge: false,
-    strict: true,
-    uniqueKeys: true
-  });
+  const document = parseDocument(text, YAML_DOCUMENT_OPTIONS);
 
   if (document.errors.length > 0) {
     throw new MonkeError(

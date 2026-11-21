@@ -5,117 +5,51 @@ description: Use when writing or reviewing documentation, code comments, user-fa
 
 # Documentation standards
 
-Repo-specific requirements take precedence on conflicts. When asked to review,
-leave the text unchanged and report a decision for every passage in scope. List
-kept passages by location, grouping adjacent ones into ranges, and give each cut
-or correction as a finding. Otherwise, edit passages in scope. Decide what to
-delete before rewrites or additions, then check what remains for accuracy.
-Finish only after deciding whether every passage in scope is kept, cut, or
-corrected.
+Repository requirements take precedence on conflicts.
 
-Each finding names its location, the evidence, the problem, and the smallest fix.
-Report unresolved questions explicitly. Keep edits within the task's scope, and
-report changes outside it, such as code fixes, renames, and public-contract
-changes, as separate findings.
+- **Review mode.** Leave text unchanged. Reach a keep, cut, or correct decision for every passage in scope. List kept ranges by location and report each cut or correction as a finding.
+- **Edit mode.** Decide what to cut before rewriting or adding, then check what remains for accuracy. Finish only after every passage in scope has a keep, cut, or correct decision.
+
+Each finding names its location, evidence, problem, and smallest fix. Report unresolved questions and out-of-scope changes (code fixes, renames, public-contract changes) separately.
 
 ## Reader value
 
-- Keep information that helps the intended reader act, make a decision, or
-  understand a contract or constraint.
-- Delete unnecessary explanations even when technically correct. Leaving useful,
-  accurate text unchanged is a valid outcome.
-- Document an operational failure only when it is silent, misleading, or surfaces
-  only after a slow or irreversible step. A startup or test failure whose error
-  names the cause documents itself. Where a reference must still list such a
-  failure, state the condition that fails, not the message text or the fix it
-  already gives. Leave out edge cases the reader is unlikely to hit.
-- Write for someone who has not seen the conversation. Keep relevant reasons and
-  consequences. Put investigation history and reviewer bookkeeping in commit
-  messages, PRs, or issues.
-- Keep each fact in one authoritative place, and link to it when the reader would
-  not otherwise reach it. Use code, configuration, and command help as the source
-  for facts they already describe. Remove implementation narration and duplicated
-  explanations. Skill indexes and related-skill lists add nothing, since agents
-  already see the descriptions of model-invoked skills.
+Keep only text that helps the reader act, decide, or understand a contract or constraint. Cut unnecessary explanations even when accurate. Leaving clear, accurate text unchanged is valid.
+
+- **Conversation test.** Does the reader need this without seeing the conversation? Keep reasons and consequences. Move investigation history and review bookkeeping to commits, PRs, or issues.
+- **Failure test.** Document an operational failure only when it is silent, misleading, or surfaces after a slow or irreversible step. Skip self-documenting startup or test errors. When a reference must list one, state the failing condition rather than the message text or fix it already prints. Skip unlikely edge cases.
+- **Single source of truth.** Keep each fact in one authoritative place and link to it. Let code, configuration, and command help describe themselves. Cut implementation narration, duplicated explanations, and skill indexes (agents already see model-invoked skill descriptions).
 
 ## Code comments
 
-- Explain design reasons, invariants, ordering constraints, and surprising
-  behavior that the code does not make clear. State the consequence when a
-  constraint matters to future changes. Warnings such as `IMPORTANT` or
-  `do not remove` need a concrete reason.
-- Document contracts that callers need, including failure behavior,
-  ownership, and side effects. Include inputs and outputs when their meaning is
-  unclear from the signature. A comment can explain what code does when that
-  behavior is difficult to infer.
-- Prefer clear names and straightforward code when they remove the need for an
-  explanation.
-- Prefer types, assertions, or focused tests for constraints they can enforce.
-  Use the smallest useful check and keep comments for the rationale it cannot
-  express.
-- Put a comment next to the code it explains. Keep reasoning that spans several
-  modules in a focused document or ADR and link from the relevant code.
-- Preserve TODOs and FIXMEs while the work remains. Remove them only after
-  verifying that the underlying issue is resolved.
+Comment only what the code cannot express: design rationale, invariants, ordering constraints, surprising behavior with its consequence for future edits, and caller contracts (failure behavior, ownership, side effects, and unclear inputs or outputs). Warnings such as `IMPORTANT` or `do not remove` need a concrete reason.
+
+- **Enforcement test.** Can a clearer name, type, assertion, or focused test enforce this? Use that first, and keep comments for the rationale it cannot express.
+- Put local comments beside the code. Put multi-module rationale in a focused document or ADR and link from the code.
+- Keep `TODO` and `FIXME` comments until you verify the underlying work is complete.
 
 ## Workarounds
 
-- Explain the cause of each necessary workaround or lint and type suppression
-  when the code does not make it clear. Keep the explanation until the underlying
-  code is fixed.
-- Check each comment or document that justifies a workaround or suppression
-  against the affected code and actual callers. Identify avoidable workarounds
-  even when their explanations are accurate. Judge whether a workaround is
-  avoidable per
-  [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md),
-  and target the fix at its root cause.
+Explain the cause of each necessary workaround or lint and type suppression until the underlying issue is fixed. Check every workaround or suppression against the affected code and actual callers. Flag avoidable workarounds per [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md), even when their comments are accurate.
 
 ## Documentation
 
-- Explain workflows, contracts, decisions, and gotchas that the reader needs.
-- In a how-to or skill, give the recommended way for each distinct need, with an
-  example the reader can copy.
-- Put details in the example instead of describing them in prose, and prefer one
-  complete example to several fragments. Pick one example domain and reuse
-  it across a repository's documentation.
-- Put skills for consumers of the repository in `skills/`. They ship without the
-  repository, so keep references contained in that directory.
-- Consolidate related new ADRs when they record one decision. When trimming an
-  ADR, keep the decision and its reasons. Cut inventories of changed code.
-- Put parallel items such as files, options, or cases in a list, and keep
-  paragraphs for reasoning that connects ideas.
-- Follow the established audience, terminology, and structure. Apply
-  [technical-writing](../../imported/technical-writing/SKILL.md) to text you
-  write or correct and
-  [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to agent-facing
-  documents.
+- In a how-to or skill, give one recommended path per distinct need with one complete, copyable example. Put details in the example rather than prose, and reuse one example domain across a repository.
+- Consumer skills in `skills/` ship without the repository, so keep their references inside `skills/`.
+- Consolidate related new ADRs that record one decision. Keep the decision and its reasons, and cut inventories of changed code.
+- Use lists for parallel items and paragraphs for connected reasoning. Match the established audience, terminology, and structure.
+- Apply [technical-writing](../../imported/technical-writing/SKILL.md) to text you write or correct, and [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to agent-facing documents.
 
 ## User-facing messages
 
-- State the condition that failed and the next action the reader can take. Use
-  terms the reader sees elsewhere, and leave out internal identifiers and
-  implementation details the reader cannot act on.
+State the failing condition and the next action the reader can take. Use terms the reader sees elsewhere, and omit internal identifiers or implementation details the reader cannot act on.
 
 ## Glossary and terminology
 
-- Read the applicable `GLOSSARY.md`, or follow `GLOSSARY-MAP.md` to the relevant
-  domain context. Consult linked domain references and ADRs when they define a term.
-- For terms in scope, search their usages across code, docs, comments,
-  and user-facing labels. Check definitions against actual behavior, including
-  glossary entries that the diff leaves unchanged.
-- Identify conflicting names for one concept, one term with conflicting meanings,
-  and vague terms that obscure distinctions. Respect intentional differences
-  between domain contexts.
-- Identify missing or stale glossary entries when they cause ambiguity. Keep
-  glossary entries focused on domain definitions and relationships.
-- For each finding, cite the conflicting or confusing definitions and usages,
-  explain the misunderstanding they cause, and propose a precise term or
-  definition. Use [domain-modeling](../../imported/domain-modeling/SKILL.md) when
-  changing the model.
+Read `GLOSSARY.md` (or follow `GLOSSARY-MAP.md`), plus linked domain references and ADRs. Search in-scope terms across code, docs, comments, and user-facing labels, and check definitions against actual behavior, including glossary entries untouched by the diff.
+
+Flag conflicting names for one concept, one term with conflicting meanings, vague terms, and missing or stale entries that cause ambiguity. Respect intentional differences between domain contexts, and keep glossary entries focused on domain definitions and relationships. Cite the conflicting usages, explain the misunderstanding, and propose a precise term or definition. Use [domain-modeling](../../imported/domain-modeling/SKILL.md) when changing the model.
 
 ## Accuracy
 
-- Verify claims against the implementation, actual callers, and relevant evidence.
-  Use current symbol names, commands, and paths. Check examples and link targets.
-- Update affected documentation and comments when behavior changes. Remove stale
-  claims, and distinguish unresolved questions from established behavior.
+Verify claims, symbol names, commands, paths, examples, and link targets against the implementation and actual callers. Update affected docs and comments when behavior changes, cut stale claims, and separate unresolved questions from established behavior.

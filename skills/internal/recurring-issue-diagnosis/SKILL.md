@@ -5,61 +5,30 @@ description: Diagnose a recurring bug or incident from prior investigation evide
 
 # Recurring issue diagnosis
 
-Continue from established evidence and run the next check that separates the
-remaining hypotheses.
+Continue from established evidence and run the next check that separates the remaining hypotheses.
 
-## Reconstruct the investigation
+## Reconstruct
 
-Find the canonical tracker and retired predecessors. Read their bodies, evidence
-comments, relevant prior threads, deployments, reports, and retained artifacts.
-Establish the latest deployment or time boundary before looking for recurrences.
+Read the canonical tracker, retired predecessors, evidence comments, prior threads, deployments, reports, and retained artifacts. Establish the latest deployment or time boundary before checking for recurrences.
 
-Classify material interventions as `confirmed`, `failed`, `inconclusive`, or
-`superseded`. Distinguish causal prevention, recovery, continuity and impact, and
-observability. Evidence on one does not settle the others.
+Classify material interventions as `confirmed`, `failed`, `inconclusive`, or `superseded`. Keep causal prevention, recovery, continuity and impact, and observability separate, because evidence on one does not settle another. Build the deepest supported causal chain from trigger through mechanism to impact. When the initiating trigger remains unknown, name the diagnosed boundary, the evidence ruling out earlier boundaries, and what would confirm or falsify each remaining hypothesis.
 
-Build the deepest supported chain from trigger through mechanism to failure,
-recovery, and impact. If the initiating cause remains unknown, name the diagnosed
-boundary and evidence that rules out earlier boundaries. State what would confirm
-or falsify each remaining hypothesis.
+## Advance
 
-## Advance the investigation
+Pick the smallest discriminating check. State its evidence source, bounded window, expected observations, and decision rule before running it. Run the check, update hypotheses and intervention classifications, and continue running any newly exposed discriminating checks until remaining uncertainty depends on unavailable evidence or access, an unapproved side effect, or a future event. Verify that boundary before handing off.
 
-Choose the smallest discriminating check. Before running it, identify the evidence
-source, bounded window, expected observations, and how each result changes the
-next action. Run the check and record how its evidence changes a hypothesis,
-intervention classification, or next action. When the result exposes another
-feasible discriminating check, run it too. Continue until the remaining
-uncertainty depends on evidence or access that is genuinely unavailable, an
-unapproved side effect, or a future event. Verify that boundary before handing
-off a next check.
+Investigate and recommend unless implementation is in scope. When fixing, target the root cause per [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md).
 
-Investigate and recommend for diagnosis requests. Implement a correction only
-when implementation is in scope. Make the correction at the root cause per
-[principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md).
+## Update tracker and report
 
-## Maintain the tracker
-
-When tracker updates are in scope, keep one `## Investigation frontier` section
-in the canonical body with these items:
+When tracker updates are in scope, maintain one `## Investigation frontier` section in the canonical body containing:
 
 - Last synthesized time, current verdict, and deployment or time boundary.
-- Established facts about prevention, recovery, impact, and observability.
-- Material interventions and their result classifications.
-- Open hypotheses, their confirming or falsifying evidence, and the next check
-  with its decision rule.
+- Established facts across prevention, recovery, impact, and observability.
+- Material interventions and their classifications.
+- Open hypotheses with confirming or falsifying evidence and the next check's decision rule.
 - Links to primary evidence.
 
-Replace stale next actions and summarize superseded conclusions. Keep raw evidence
-and chronology in linked comments or reports. A new agent should be able to choose
-the next check from the body without rereading earlier threads. When writes are
-outside scope, provide the proposed update instead.
+Replace stale next actions and keep raw chronology in linked comments or reports. **Handoff test.** Can a new agent choose the next check from the tracker body alone without rereading prior threads? When writes are out of scope, propose the update instead.
 
-## Report
-
-Explain the causal chain and decisive evidence first, including the unresolved
-boundary and alternatives ruled out. Then give ordered next steps with reasons,
-distinguishing recommendations from changes made. Finish by stating whether you
-updated the tracker. Link to the update when you wrote one, or to the primary
-evidence when you proposed one. Make the diagnosis understandable from the final
-response alone.
+In your final response, lead with the causal chain, decisive evidence, unresolved boundary, and ruled-out alternatives. Follow with ordered next steps separating recommendations from changes made, and end with tracker update status and links so the response stands alone.

@@ -172,6 +172,19 @@ describe("mt prs wait-for-gate on a Railway service", () => {
           status("pending", "Railway is deploying the service")
         ]
       ]
+    },
+    {
+      expected: {
+        detail: `${context}: Deployment failed next line: ${deployUrl("d1")}`,
+        status: "failed"
+      },
+      name: "strips ANSI escapes and control characters from GitHub status output",
+      responses: [
+        [
+          status("failure", "\u001B[31mDeployment\u001B[0m\u0000 failed\r\nnext\tline"),
+          status("pending", "Railway is deploying the service")
+        ]
+      ]
     }
   ])("$name", async ({ expected, responses }) => {
     await expect(waitForGate(gate, { status: responses })).resolves.toMatchObject(result(expected));
