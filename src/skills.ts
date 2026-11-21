@@ -285,6 +285,36 @@ export const assertDistinctSkillInstallTargets = (
   }
 };
 
+/** Reject targets whose managed location is inside, or contains, the Skill source tree. */
+const assertTargetsOutsideSkillSourceTree = (
+  targets: readonly ResolvedSkillInstallTarget[],
+  skillSourceTree: string
+) => {
+  // Registry source folders can be links into a checkout or Tool install, so resolve each one.
+  const sourceRegions = [
+    skillSourceTree,
+    ...readdirSync(skillSourceTree).map((name) => path.join(skillSourceTree, name))
+  ].map((entry) => resolveSkillPath(entry).resolved);
+
+  for (const target of targets) {
+    const resolvedRoot = resolveSkillPath(target.agentSkillRoot).resolved;
+
+    const managedLocation = usesFlatSkillLayout(target.kind)
+      ? resolvedRoot
+      : path.join(resolvedRoot, SKILL_NAMESPACE);
+
+    if (
+      sourceRegions.some(
+        (region) => containsPath(region, managedLocation) || containsPath(managedLocation, region)
+      )
+    ) {
+      throw new MonkeError(
+        `${skillTargetLabel(target.kind)} Agent skill root ${target.agentSkillRoot} overlaps the Skill source tree at ${skillSourceTree}. Configure an Agent skill root outside it with mt skills configure.`
+      );
+    }
+  }
+};
+
 export function explicitSkillInstallPreference(
   homeDirectory: string,
   explicitTargets: ExplicitSkillTargetSelection | undefined
@@ -589,6 +619,11 @@ export function preflightInstallGuidance(
   if (nextTargets.size > 0) {
     try {
       assertDistinctSkillInstallTargets([...nextTargets.values()], { homeDirectory, project });
+
+      assertTargetsOutsideSkillSourceTree(
+        [...nextTargets.values()],
+        resolveSkillSourceTree(guidanceSourceRoot)
+      );
     } catch (cause) {
       throw new MonkeError(
         `Install guidance destination preflight failed:\n${errorMessage(ThrownValueSchema.parse(cause))}`,
@@ -798,6 +833,8 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
     project: options.project
   });
+
+  assertTargetsOutsideSkillSourceTree(nextTargets, skillSourceTree);
 
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];

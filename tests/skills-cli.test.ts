@@ -1035,6 +1035,32 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".gemini", "config", "skills"))).toBeFalsy();
   });
 
+  it("rejects a Custom destination inside the Skill source tree without saving or writing into it", async () => {
+    const sandbox = makeTempDir("skills-cli-source-tree-target");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
+    const customRoot = path.join(sourceCheckout, "skills", "internal");
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          multiSelectValues: [["custom"]],
+          onStderr() {},
+          onStdout() {},
+          stdinText: `${customRoot}\n`
+        })
+      )
+    ).rejects.toThrow(/Custom Agent skill root .* overlaps the Skill source tree/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
+  });
+
   it("fails clearly during mt skills configure when the guidance source root is missing", async () => {
     const sandbox = makeTempDir("skills-configure-missing-source");
     const monkeHome = path.join(sandbox, "monke-home");
