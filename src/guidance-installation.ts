@@ -66,6 +66,7 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
     environment: runtime.env,
     guidanceSourceRoot: registryGuidanceRoot(runtime, guidanceSourceRoot),
     homeDirectory,
+    monkeHome,
     nextPreference,
     previousPreference,
     writeMessage(message) {
@@ -171,6 +172,7 @@ export async function runInstallSkillsLocked(
     environment: runtime.env,
     guidanceSourceRoot: registryGuidanceRoot(runtime, resolvedGuidanceSourceRoot),
     homeDirectory,
+    monkeHome,
     nextPreference,
     previousPreference: config.skillInstallPreference ?? null,
     writeMessage(message) {

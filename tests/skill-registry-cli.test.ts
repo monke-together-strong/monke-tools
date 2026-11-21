@@ -2610,12 +2610,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     { error: /registered owner.*duplicate discovery/u, harness: "codex", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "claude", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "cursor", preservesLeftover: true },
-    { error: /registered owner.*duplicate discovery/u, harness: "custom", preservesLeftover: true },
-    {
-      error: /registered owner.*duplicate discovery/u,
-      harness: "custom-claude",
-      preservesLeftover: true
-    }
+    { error: /registered owner.*duplicate discovery/u, harness: "custom", preservesLeftover: true }
   ] as const)(
     "preserves a registered physical owner in a raw $harness harness path during adoption",
     async (scenario) => {
@@ -2626,14 +2621,11 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
         skillInstallPreference: {
           targets: [
             { kind: "codex" },
-            ...(scenario.harness.startsWith("custom")
+            ...(scenario.harness === "custom"
               ? [
                   {
                     kind: "custom" as const,
-                    path:
-                      scenario.harness === "custom-claude"
-                        ? fixture.installed.claude
-                        : path.join(fixture.sandbox, "custom-skills")
+                    path: path.join(fixture.sandbox, "custom-skills")
                   }
                 ]
               : [])
@@ -2645,8 +2637,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
         claude: fixture.installed.claude,
         codex: path.resolve(fixture.installed.codex, "../.."),
         cursor: path.resolve(fixture.installed.cursor, "../.."),
-        custom: path.join(fixture.sandbox, "custom-skills"),
-        "custom-claude": fixture.installed.claude
+        custom: path.join(fixture.sandbox, "custom-skills")
       }[scenario.harness];
 
       writeSkill(rawRoot, "typography", "Course instructions.\n");
@@ -2683,7 +2674,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     { alias: "missing-parent", claudeFirst: false, registered: false },
     { alias: "dangling-root", claudeFirst: true, registered: false }
   ])(
-    "rejects overlapping Claude/custom layouts during adoption before mutation ($registered, $claudeFirst, $alias)",
+    "rejects overlapping Claude and Custom Agent skill roots during adoption before mutation ($registered, $claudeFirst, $alias)",
     async ({ alias, claudeFirst, registered }) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
@@ -2713,7 +2704,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
       const custom = { kind: "custom" as const, path: customRoot };
       saveGlobalMonkeConfig(fixture.monkeHome, {
         ...config,
-        skillInstallPreference: { targets: [{ kind: "codex" }, custom] }
+        skillInstallPreference: { targets: [{ kind: "codex" }] }
       });
 
       if (registered) {
@@ -2747,7 +2738,9 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
 
       await expect(
         runCliAsync(["skills", "adopt", path.join(fixture.source, "typography")], fixture.runtime)
-      ).rejects.toThrow(/overlapping Claude and custom Skill layouts.*configure distinct roots/u);
+      ).rejects.toThrow(
+        /Skill adoption preflight failed: Custom Agent skill root .* overlaps Claude at .*mt skills configure/u
+      );
       expect(loadGlobalMonkeConfig(fixture.monkeHome).skillInstallPreference).toStrictEqual(
         preference
       );

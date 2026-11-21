@@ -4,6 +4,7 @@ import {
   readFileSync,
   readlinkSync,
   realpathSync,
+  rmSync,
   symlinkSync
 } from "node:fs";
 import path from "node:path";
@@ -955,31 +956,27 @@ describe("skills CLI", () => {
     const oldCheckout = path.join(sandbox, "old-source");
     const newCheckout = path.join(sandbox, "new-source");
     const namespacePath = path.join(osHome, ".codex", "skills", "monke-tools");
-    write(
-      oldCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeSkillSource(oldCheckout);
     writeSkillSource(newCheckout);
-    saveGlobalMonkeConfig(monkeHome, {
-      skillInstallPreference: {
-        targets: [{ kind: "codex" }]
-      },
-      version: 1
+    selectActiveLocalInstall(monkeHome, oldCheckout);
+
+    const runtime = createTestRuntime({
+      cwd: sandbox,
+      env: skillsEnvironment(osHome, monkeHome),
+      onStderr() {},
+      onStdout() {}
     });
-    write(path.dirname(namespacePath), ".keep", "\n");
-    symlinkSync(path.join(oldCheckout, "skills"), namespacePath, "dir");
+
+    await runCliAsync(["skills", "local-install", oldCheckout, "--targets", "codex"], runtime);
+    expect(readlinkSync(path.join(namespacePath, "internal"))).toBe(
+      path.join(oldCheckout, "skills", "internal")
+    );
+
+    rmSync(path.join(monkeHome, "current"));
+    rmSync(path.join(monkeHome, "installs"), { recursive: true });
     selectActiveLocalInstall(monkeHome, newCheckout);
 
-    await runCliAsync(
-      ["skills", "local-install", newCheckout],
-      createTestRuntime({
-        cwd: sandbox,
-        env: skillsEnvironment(osHome, monkeHome),
-        onStderr() {},
-        onStdout() {}
-      })
-    );
+    await runCliAsync(["skills", "local-install", newCheckout], runtime);
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
       skillInstallPreference: { targets: [{ kind: "codex" }] },
@@ -989,6 +986,79 @@ describe("skills CLI", () => {
     expect(readlinkSync(path.join(namespacePath, "internal"))).toBe(
       path.join(newCheckout, "skills", "internal")
     );
+  });
+
+  it("rejects overlapping Custom destinations in mt skills configure and mt skills local-install without saving", async () => {
+    const sandbox = makeTempDir("skills-cli-overlapping-targets");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          multiSelectValues: [["antigravity", "custom"]],
+          onStderr() {},
+          onStdout() {},
+          stdinText: "~/.gemini/config/skills\n"
+        })
+      )
+    ).rejects.toThrow(/Custom Agent skill root .* overlaps Antigravity/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(osHome, ".gemini", "config", "skills"))).toBeFalsy();
+
+    await expect(
+      runCliAsync(
+        [
+          "skills",
+          "local-install",
+          sourceCheckout,
+          "--targets",
+          "antigravity",
+          "--custom-target",
+          "~/.gemini/config/skills/monke-tools-core"
+        ],
+        createTestRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow(/Custom Agent skill root .* overlaps Antigravity/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(osHome, ".gemini", "config", "skills"))).toBeFalsy();
+  });
+
+  it("rejects a Custom destination inside the Skill source tree without saving or writing into it", async () => {
+    const sandbox = makeTempDir("skills-cli-source-tree-target");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
+    const customRoot = path.join(sourceCheckout, "skills", "internal");
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          multiSelectValues: [["custom"]],
+          onStderr() {},
+          onStdout() {},
+          stdinText: `${customRoot}\n`
+        })
+      )
+    ).rejects.toThrow(/Custom Agent skill root .* overlaps the Skill source tree/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
   });
 
   it("fails clearly during mt skills configure when the guidance source root is missing", async () => {
