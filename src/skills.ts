@@ -88,6 +88,8 @@ export interface ResolvedSkillInstallTarget {
 export interface SkillPublicationScope {
   homeDirectory: string;
   preference: SkillInstallPreference;
+  /** Project Skill registry root. Pre-manifest namespace links into it are owned. */
+  registryRoot?: string;
 }
 
 /** Noninteractive Skill targets supplied by install automation. */
@@ -293,7 +295,7 @@ const assertTargetsOutsideSkillSourceTree = (
   // Registry source folders can be links into a checkout or Tool install, so resolve each one.
   const sourceRegions = [
     skillSourceTree,
-    ...readdirSync(skillSourceTree).map((name) => path.join(skillSourceTree, name))
+    ...CODEX_NAMESPACE_SOURCE_FOLDERS.map((name) => path.join(skillSourceTree, name))
   ].map((entry) => resolveSkillPath(entry).resolved);
 
   for (const target of targets) {
@@ -384,6 +386,8 @@ type NamespaceManifest = z.output<typeof NamespaceManifestSchema>;
 interface LegacyNamespaceContext {
   monkeHome?: string;
   project?: boolean;
+  /** Live registry tree, when `skillSourceTree` is a publication proposal. */
+  registrySkillSourceTree?: string;
   skillSourceTree?: string;
 }
 
@@ -476,8 +480,9 @@ const isLegacyManagedNamespaceLink = (
   const normalizedTarget = path.resolve(currentTarget);
 
   if (
-    context.skillSourceTree !== undefined &&
-    normalizedTarget === path.join(path.resolve(context.skillSourceTree), name)
+    [context.skillSourceTree, context.registrySkillSourceTree].some(
+      (tree) => tree !== undefined && normalizedTarget === path.join(path.resolve(tree), name)
+    )
   ) {
     return true;
   }
@@ -590,6 +595,16 @@ const assertNamespaceCanBeManaged = (
   }
 };
 
+const legacyContextForScope = (
+  monkeHome: string,
+  scope: SkillPublicationScope | undefined
+): Omit<LegacyNamespaceContext, "skillSourceTree"> => ({
+  monkeHome,
+  project: scope !== undefined,
+  registrySkillSourceTree:
+    scope?.registryRoot === undefined ? undefined : path.join(scope.registryRoot, "skills")
+});
+
 /** Preflight known guidance destinations before Local or Release core activation. */
 export function preflightInstallGuidance(
   runtime: Runtime,
@@ -634,9 +649,10 @@ export function preflightInstallGuidance(
 
   const candidateSkillSourceTree = path.join(path.resolve(guidanceSourceRoot), "skills");
 
+  const legacyContext = legacyContextForScope(monkeHome, scope);
+
   const removalLegacyContext: LegacyNamespaceContext = {
-    monkeHome,
-    project,
+    ...legacyContext,
     skillSourceTree: existsSync(candidateSkillSourceTree) ? candidateSkillSourceTree : undefined
   };
 
@@ -664,7 +680,7 @@ export function preflightInstallGuidance(
 
   for (const target of nextTargets.values()) {
     try {
-      preflightOneSkillTarget(target, guidanceSourceRoot, adoptedLinks, { monkeHome, project });
+      preflightOneSkillTarget(target, guidanceSourceRoot, adoptedLinks, legacyContext);
 
       if (!scope) {
         preflightGlobalInstructions(target, {
