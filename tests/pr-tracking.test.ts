@@ -513,7 +513,7 @@ printf '${prUrl(661)}\\n'`
     await expect(mt(sandbox, ["prs", "list"])).resolves.toBe("");
   });
 
-  it("starts the post-merge thread only on the role's first model and keeps a failed PR tracked", async () => {
+  it("attempts the post-merge thread only on the role's first model and keeps a failed PR tracked", async () => {
     const sandbox = createSandbox();
     write(
       sandbox.monkeHome,

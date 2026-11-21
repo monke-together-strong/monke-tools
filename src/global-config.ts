@@ -47,8 +47,6 @@ export const SkillInstallPreferenceSchema = z.strictObject({
     })
 });
 
-export const MODEL_ROLES = ["writer", "reviewer", "post-merge"] as const;
-
 const ModelPreferenceSchema = z.strictObject({
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   // `mt models get` prints `<model> <effort>` entries on one comma-separated line.
@@ -76,9 +74,17 @@ const ModelPreferencesSchema = z
     }
   });
 
+const ModelRolesSchema = z.strictObject({
+  "post-merge": ModelPreferencesSchema.optional(),
+  reviewer: ModelPreferencesSchema.optional(),
+  writer: ModelPreferencesSchema.optional()
+});
+
+export const MODEL_ROLES = ModelRolesSchema.keyof().options;
+
 const GlobalMonkeConfigSchema = z.strictObject({
   diffAdapter: z.enum(["codiff", "ms"]).optional(),
-  models: z.partialRecord(z.enum(MODEL_ROLES), ModelPreferencesSchema).optional(),
+  models: ModelRolesSchema.optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
 });

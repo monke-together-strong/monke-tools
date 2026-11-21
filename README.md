@@ -69,7 +69,7 @@ mt prs create --thread <thread-id> --checkout <checkout> -- \
 
 Use `mt prs track` for an existing PR. When a tracked PR merges outside its
 owning thread, `mt prs poll` asks the thread to run post-merge. If delivery
-fails, the poller starts a thread for it on the first
+fails, the poller attempts to start a thread for it on the first
 [`post-merge` model](#model-roles). Untrack a PR before merging it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
 cleanup and when verification needs a separate thread.
 
