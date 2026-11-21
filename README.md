@@ -113,7 +113,8 @@ Skills and post-merge hand-offs choose models by Model role: `writer`,
 `reviewer`, or `post-merge`. `mt models get <role>` prints a role's models in
 fallback order, without providers, so a skill may run a model through any
 provider that serves it. To override a role, list its models under `models` in
-`$(mt home)/config.yml`, at most one per model family:
+`$(mt home)/config.yml`, at most one per model family. The family is the model
+id's leading name, such as `claude` or `gemini`, so use canonical model ids:
 
 ```yaml
 version: 1
@@ -122,6 +123,9 @@ models:
     - { provider: antigravity, model: gemini-4-neon, effort: high }
     - { provider: claudeAgent, model: claude-opus-5-5, effort: high }
 ```
+
+`provider` is the T3 Code provider instance that automatic post-merge starts
+use: `antigravity`, `claudeAgent`, or `codex`.
 
 ## Update
 

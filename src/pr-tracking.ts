@@ -331,10 +331,10 @@ async function handOffPostMerge(
     return undefined;
   }
 
-  let model: ModelPreference;
+  let preference: ModelPreference;
 
   try {
-    [model] = modelPreferences(runtime, "post-merge");
+    [preference] = modelPreferences(runtime, "post-merge");
   } catch (cause) {
     return `Could not hand off ${pr.url}: ${errorMessage(ThrownValueSchema.parse(cause))}`;
   }
@@ -348,11 +348,11 @@ async function handOffPostMerge(
     "--title",
     `Verify #${pr.number}`,
     "--provider",
-    model.provider,
+    preference.provider,
     "--model",
-    model.model,
+    preference.model,
     "--option",
-    `${T3_EFFORT_OPTION[model.provider]}=${model.effort}`,
+    `${T3_EFFORT_OPTION[preference.provider]}=${preference.effort}`,
     pr.sourceCheckout,
     `This thread runs post-merge for ${pr.url}. Follow ${skill} for it. Its checkout was ${pr.checkout}.`
   ]);
