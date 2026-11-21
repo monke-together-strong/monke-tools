@@ -163,18 +163,18 @@ apps:
       prefix: "seedPaths:\n  - ../shared/sessions"
     },
     {
-      expected: /Duplicate seedPath/u,
+      expected: /Duplicate Seed path/u,
       name: "duplicate normalized seedPaths",
       prefix:
         "seedPaths:\n  - apps/frostbite-crawler/data/sessions\n  - apps/frostbite-crawler/data/../data/sessions"
     },
     {
-      expected: /seedPath "." is not allowed/u,
+      expected: /Seed path "." is not allowed/u,
       name: "seedPaths that point at the repo root",
       prefix: "seedPaths:\n  - ."
     },
     {
-      expected: /seedPath "." is not allowed/u,
+      expected: /Seed path "." is not allowed/u,
       name: "seedPaths normalizing to the repo root",
       prefix: "seedPaths:\n  - apps/.."
     }
@@ -443,7 +443,7 @@ external:
     write(root, "apps/consumer/.keep", "");
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /owns no local ports/u
+      /has no Local mappings/u
     );
   });
 

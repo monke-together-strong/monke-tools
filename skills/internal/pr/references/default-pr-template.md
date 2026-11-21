@@ -6,10 +6,11 @@ visuals or post-merge checks per [Choose the evidence](../SKILL.md#choose-the-ev
 ```markdown
 ## Summary
 
-<One or two sentences: the problem. Link the source issue.>
+<One or two sentences on the problem. Link the source issue.>
 
-<The show-me view or consumer code blocks from Choose the explanation, when it
-calls for them. Otherwise, a separate paragraph on the resulting behavior.>
+<The show-me view or consumer code blocks from Choose the explanation, when
+Choose the explanation calls for them. Otherwise, a separate paragraph on the
+resulting behavior.>
 
 ## Evidence
 

@@ -1,6 +1,6 @@
 # monke-tools
 
-`monke-tools` gives each coding session its own Git worktrees, ports, and environment values across a repo and its dependencies. It also distributes shared agent skills to Codex, Claude, Cursor, Antigravity, and custom agents.
+`monke-tools` gives each Session its own Git worktrees, ports, and environment values across a repo and its dependencies. It also distributes shared agent skills to Codex, Claude, Cursor, Antigravity, and custom targets.
 
 ## Install
 
@@ -13,10 +13,10 @@ curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/m
 Follow the installer's shell instructions before starting a Session. For unattended
 installation, custom targets, and recovery, see the [installation guide](skills/internal/monke-install/SKILL.md).
 
-## Start a session
+## Start a Session
 
-Create a Session and review your changes. With `monke.yml`, Spawn also prepares
-the repo's configured environment and dependencies.
+In a repo with `monke.yml`, create a Session and review your changes. Spawn
+prepares the repo's worktrees, environment, and dependencies.
 
 ```bash
 mt spawn banana
@@ -25,7 +25,7 @@ mt swing '^'             # Return to the Source checkout
 mt swing banana          # Return to the Session
 ```
 
-When finished, run `mt chop banana`. It preserves local branches and deletes
+When finished, run `mt chop banana`. Chop preserves local branches and deletes
 ignored files with the worktrees. To find Sessions eligible for removal across
 repos, run `mt cleanup --dry-run` before `mt cleanup`. The [Session guide](skills/internal/monke-worktrees/SKILL.md)
 covers branch selection, worktree adoption, PR navigation, and cleanup recovery.
@@ -37,7 +37,7 @@ different adapter. With Monke See installed and configured, `mt diff --adapter m
 prints a browser review link for that invocation.
 
 `mt diff` can use a Session's remembered base or infer one from `main` or `master`
-history. On either branch it shows local changes. Run
+history. On either branch, `mt diff` shows local changes. Run
 `mt diff --pick` to choose a base or review local changes only. See
 `mt diff --help` for explicit comparisons and the [Diff guide](skills/internal/monke-diff/SKILL.md)
 for time-based comparisons.
@@ -69,8 +69,9 @@ mt prs create --thread <thread-id> --checkout <checkout> -- \
 
 Use `mt prs track` for an existing PR. When a tracked PR merges outside its
 owning thread, `mt prs poll` asks the thread to run post-merge. If delivery
-fails, the poller attempts to start a thread for it on the first
-[`post-merge` model](#model-roles). Untrack a PR before merging it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
+fails, the poller tries to start a new thread for the PR on the first
+[`post-merge` model](#model-roles). Run `mt prs untrack <url>` before merging
+a PR yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
 cleanup and when verification needs a separate thread.
 
 ## Configure a repo
@@ -94,9 +95,9 @@ for dependencies, env files, seed paths, and resources. For `PR.md` and
 ## Agent skills
 
 Run `mt skills configure` to select agents or change the saved targets. Codex
-and Claude also receive shared global instructions in a Monke-managed section.
+and Claude also receive Global agent instructions in a Managed instruction section.
 
-To use skills from a local checkout in one project, run this inside the Consumer repo.
+To use skills from a local checkout in one project, run `mt skills add` inside the Consumer repo:
 
 ```bash
 mt skills add ../banana-workflows --project
@@ -134,7 +135,7 @@ mt update --check         # Check without changing the install
 mt update                # Activate the latest stable release
 ```
 
-Updating a local build switches to a release install and preserves the source
+Updating a Local tool install switches to a Release install and preserves the Source
 checkout. Changes to installed release guidance block updates. See the
 [update recovery guide](skills/internal/monke-install/SKILL.md#update-and-recovery).
 

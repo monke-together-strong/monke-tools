@@ -11,9 +11,10 @@ converts retained skills that monke-tools made references.
 Personal and private guidance, including course-provided skills, must be usable
 without adding its content or import recipes to the public monke-tools
 repository. `mt skills add` registers these imports in a machine-local Skill
-registry using the existing recipe format and distribution mechanism. This
-replaces the source-only import boundary in [ADR 0002](./0002-import-skills-through-skills-cli-wrapper.md)
-without creating a separate category of external-repository skills.
+registry using the existing recipe format and distribution mechanism. The
+machine-local registry replaces the source-only import boundary in
+[ADR 0002](./0002-import-skills-through-skills-cli-wrapper.md) without creating
+a separate category of external-repository skills.
 
 The registry starts with monke-tools' imports and owns its recipes and invocation
 overrides independently. These imports originally came from the repository's
@@ -21,7 +22,7 @@ overrides independently. These imports originally came from the repository's
 updates the tool and its bundled guidance without replaying personal installers.
 
 Getting skills and distributing them are separate choices. A source may come
-through Git, an existing local link, or a saved installer command; a command-only
+through Git, an existing local link, or a saved installer command. A command-only
 import does not require a repository checkout. Commands retain their working
 directory and Skill source folder, with a managed working directory under
 `$MONKE_HOME/skill-sources/<name>` when none is supplied. Credentials come from
@@ -31,17 +32,17 @@ projections selected by the user's Skill install preference.
 
 Linked and command-installed skills retain source links so edits through an
 installed skill reach the original collection. Git imports remain managed
-snapshots. Model invocation overrides belong to the recipe: a source-wide default
+snapshots. Model invocation overrides belong to the recipe. A source-wide default
 applies to future skills, and a per-skill override takes precedence. Refreshes
 reapply those choices to Claude and Codex metadata. Instruction edits follow the
-source's overwrite behavior; they do not receive the persistence guarantee of
+source's overwrite behavior. They do not receive the persistence guarantee of
 invocation overrides.
 
 One Skill update review compares the imported collection, supporting files, and
-lock before and after the update. Source provenance remains part of that review:
-a newer Git commit with an unchanged Guidance digest is a valid lock-only
+lock before and after the update. Source provenance remains part of that review.
+A newer Git commit with an unchanged Guidance digest is a valid lock-only
 comparison. Command imports compare the current editable content before running
-the installer; plain linked imports compare against the last accepted snapshot.
+the installer. Plain linked imports compare against the last accepted snapshot.
 An installer recipe is replayable, but it does not provide the immutable source
 pin used for reproducible Git imports.
 

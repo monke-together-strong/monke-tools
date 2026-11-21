@@ -242,7 +242,7 @@ export default function ({ previous }) {
 `,
       name: "single-repo-resource-command-retained-input",
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
-      // oxlint-disable-next-line no-template-curly-in-string -- The Resource config interpolates this YAML value.
+      // oxlint-disable-next-line no-template-curly-in-string -- monke-tools interpolates this Resource value literal.
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
 
@@ -585,7 +585,7 @@ export default function () {
     expect(scenario.readWorktree("banana", "command-order.log")).toBe("first\nsecond\n");
   });
 
-  it("includes retained dead Session state outputs in Resource command input until cleanup removes them", () => {
+  it("includes retained Session state outputs from a Session with a missing worktree in Resource command input until Cleanup removes them", () => {
     const scenario = createResourceCommandScenario({
       module: `import { writeFileSync } from "node:fs";
 

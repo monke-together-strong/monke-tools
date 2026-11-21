@@ -9,7 +9,10 @@ export const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "refer
 // Earlier schema-version-1 Releases bundled their recipes in skills.lock.json.
 const RECIPE_FILENAMES = ["monke.yml", "skills.lock.json"];
 
-/** Hash the ordinary guidance files included in a Release bundle. */
+/**
+ * Hash the regular guidance files included in a Release bundle, rejecting symlinks and non-regular
+ * entries.
+ */
 export function hashReleaseGuidance(bundleRoot: string) {
   const globalInstructions = path.join(bundleRoot, "instructions", "GLOBAL.md");
   const globalStat = lstatSync(globalInstructions, { throwIfNoEntry: false });

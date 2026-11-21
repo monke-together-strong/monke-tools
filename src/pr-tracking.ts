@@ -179,7 +179,7 @@ export async function runPrsTrack(
 
   const checkout = gitOutput(runtime, requestedCheckout, ["rev-parse", "--show-toplevel"]);
 
-  // Git lists the main worktree first; that is the folder T3 Code knows as the project.
+  // Git lists the Source checkout first; that is the folder T3 Code knows as the project.
   const worktrees = gitOutput(runtime, checkout, ["worktree", "list", "--porcelain"]);
   const sourceCheckout = /^worktree (?<path>.+)$/mu.exec(worktrees)?.groups?.path ?? checkout;
 
@@ -318,7 +318,7 @@ async function handOffPostMerge(
   );
 
   if (!existsSync(skill)) {
-    return `Could not hand off ${pr.url}: post-merge is not installed at ${skill}`;
+    return `Could not hand off ${pr.url}: post-merge is not installed at ${skill}. Reinstall or activate monke-tools skills, then rerun mt prs poll.`;
   }
 
   const message = `${pr.url} was merged outside this thread. Follow ${skill} for it. Its checkout was ${pr.checkout}.`;
@@ -339,7 +339,7 @@ async function handOffPostMerge(
     return `Could not hand off ${pr.url}: ${errorMessage(ThrownValueSchema.parse(cause))}`;
   }
 
-  // The thread may be gone; start the post-merge thread in the source checkout, which T3 knows
+  // The thread may be gone; start the post-merge thread in the Source checkout, which T3 knows
   // as the project. A failed start can still leave a thread, so the hand-off uses the role's
   // first model and leaves retries to the next poll.
   const started = await runT3HandoffCommand(runtime, t3, [
@@ -384,7 +384,9 @@ function resolveT3Cli(runtime: Runtime) {
   const t3 = findExecutable("t3", runtime.env) ?? (existsSync(fallback) ? fallback : null);
 
   if (t3 === null) {
-    throw new MonkeError(`T3 Code CLI not found on PATH or at ${fallback}`);
+    throw new MonkeError(
+      `T3 Code CLI not found on PATH or at ${fallback}. Install T3 Code or add t3 to PATH, then rerun mt prs poll.`
+    );
   }
 
   return t3;

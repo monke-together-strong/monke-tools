@@ -612,7 +612,7 @@ function interpolateResourceLiteral(options: {
       if (name === "session") {
         if (!options.session) {
           throw new MonkeError(
-            `${options.location}: use \${id} for resources shared with source checkouts; \${session} requires a Session.`
+            `${options.location}: use \${id} for resources shared with Source checkouts; \${session} requires a Session.`
           );
         }
 

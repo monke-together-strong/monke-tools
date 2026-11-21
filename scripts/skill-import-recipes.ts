@@ -527,7 +527,9 @@ function assertUniqueRecipeSkillSelectors(
 
   for (const skill of skills) {
     if (selectors.has(skill.selector)) {
-      throw new MonkeError(`Duplicate skill selector in recipe ${source}: ${skill.selector}`);
+      throw new MonkeError(
+        `Duplicate Skill import selector in recipe ${source}: ${skill.selector}`
+      );
     }
 
     selectors.add(skill.selector);

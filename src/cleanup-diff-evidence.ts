@@ -11,7 +11,7 @@ export interface MatchingMergeDiff {
   mergeParent: string;
 }
 
-/** False is a mismatch/unsupported history; null means required Git evidence is unavailable. */
+/** False means a mismatch or unsupported history; null means required Git evidence is unavailable. */
 export function inspectMatchingMergeDiff(
   runtime: Runtime,
   sourceRoot: string,

@@ -38,13 +38,13 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Release installer**: The first-install workflow for a verified **Release bundle**.
 
-**Release bootstrap**: The public entrypoint that discovers a compatible **Release bundle** and starts installation.
+**Release bootstrap**: The public entry point that discovers a compatible **Release bundle** and starts installation.
 
 **Mainline release**: A stable monke-tools release published from validated mainline changes.
 
 **Codiff runtime dependency**: The separately installed Codiff executable required by the desktop **Diff adapter**.
 
-**Shared Oxc presets**: Team-owned lint and format policy distributed across **Consumer repos**.
+**Shared Oxc presets**: Team-owned TypeScript, lint, and format presets distributed across **Consumer repos**.
 
 **Release entry**: A pending description of a consumer-visible package change and its intended version impact.
 
@@ -56,4 +56,4 @@ Part of the [domain glossary](../../GLOSSARY.md).
 - Each install has its own **Install manifest**. **Global monke config** belongs to its **Monke home**.
 - A **Local tool install** has an **Installed source checkout**. A **Release install** has a **Release bundle** as its origin.
 - **Distributed skills**, **Distributed references**, and **Global agent instructions** belong to the installed version. **Codiff** has an independent release lifecycle.
-- **Skill authoring mode** keeps guidance changes in the source checkout; a **Customized release install** carries changes in installed release content.
+- **Skill authoring mode** keeps guidance changes in the source checkout. A **Customized release install** carries changes in installed release content.

@@ -1,8 +1,8 @@
-# Browser Video Proof
+# Browser video proof
 
 Produce an MP4 showing the changed workflow and its successful end state.
 
-## Preferred Path: Playwright Video
+## Playwright video
 
 Use Playwright when the workflow can be scripted deterministically.
 

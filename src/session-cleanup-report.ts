@@ -31,7 +31,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "hidden-index-entries": "Git index flags may hide changes, including in submodules.",
   "identity-unverified":
     "The worktree's repository identity or Git registration could not be verified.",
-  "invalid-state": "The retained Session state is invalid or cannot be read.",
+  "invalid-state":
+    "The retained Session state is invalid or cannot be read. Inspect the state file listed in this report before retrying Cleanup.",
   "invalid-state-overlap": "Invalid Session state may claim the same worktrees.",
   "local-evidence-unavailable": "Git could not establish the local branch, commit, or cleanliness.",
   "matching-default-tree": "The complete committed tree occurs in verified default history.",
@@ -42,7 +43,7 @@ const messages: Record<SessionCleanupReason, string> = {
     "A member's Source checkout, recorded path, or registration could not be verified.",
   "member-missing-or-unverified": "The member has no usable worktree evidence.",
   "merged-pr-ancestor":
-    "The current commit is contained in the same branch’s merged PR, whose merge remains in default history.",
+    "The current commit is contained in the same branch's merged PR, whose merge remains in default history.",
   "merged-pr-head":
     "The current commit matches a merged PR head; its merge commit or complete merge tree is in verified default history.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
@@ -50,9 +51,9 @@ const messages: Record<SessionCleanupReason, string> = {
     "No qualifying merged pull request proves this work is complete, and the branch has commits outside the default branch.",
   "open-pr": "A pull request for this branch is still open.",
   "operation-lock-present":
-    "A Monke operation lock is present; its status has not been overridden.",
+    "A Monke operation lock is present; wait for the running mt command to finish before retrying Cleanup.",
   "owned-worktree-gone":
-    "The owned worktree is already removed; its Source and registrations were verified.",
+    "The owned Session worktree is already removed; its Source checkout and registrations were verified.",
   "owned-worktrees-gone": "All owned worktrees are already removed; Session finalization remains.",
   "ownership-conflict":
     "Session ownership conflicts with another record or an overlapping Git worktree. Inspect the paths in the report before retrying Cleanup.",
@@ -61,8 +62,9 @@ const messages: Record<SessionCleanupReason, string> = {
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "resource-recovery-required":
-    "A required cleanup worktree is missing; restore it or select an audited --recover-with command.",
-  "resource-state-unverified": "Retained Checkout resource records could not be read.",
+    "A Session worktree with a Cleanup obligation is missing; restore it or select an audited --recover-with command.",
+  "resource-state-unverified":
+    "Retained Checkout resource records could not be read. Inspect the records under Monke home's resources directory before retrying Cleanup.",
   "source-checkout": "Source checkouts cannot be removed.",
   "source-missing":
     "A member's Source checkout is missing. Restore it at its recorded path before retrying Cleanup.",

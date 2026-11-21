@@ -70,7 +70,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Relationships
 
-- Each **Session** has one participating worktree per repo. **Worktree preparation** can complete independently; **Repo materialization** depends on that repo's preparation and its dependencies' materialization.
+- Each **Session** has one participating worktree per repo. **Worktree preparation** can complete independently. **Repo materialization** depends on that repo's preparation and its dependencies' materialization.
 - An incomplete **Materialization generation** retains completed work for resumption. A completed generation may be followed by another.
 - A **Prepared worktree** alone creates no **Cleanup obligation**. Repos incur Cleanup obligations during materialization.
 - **Spawn** places new Session worktrees under **Monke home**. **Worktree adoption** can record a Session worktree outside Monke home.

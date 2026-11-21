@@ -3,7 +3,7 @@ name: recurring-issue-diagnosis
 description: Diagnose a recurring bug or incident from prior investigation evidence. Use when an issue returns or its tracker records earlier attempts.
 ---
 
-# Recurring Issue Diagnosis
+# Recurring issue diagnosis
 
 Continue from established evidence and run the next check that separates the
 remaining hypotheses.
@@ -16,14 +16,14 @@ Establish the latest deployment or time boundary before looking for recurrences.
 
 Classify material interventions as `confirmed`, `failed`, `inconclusive`, or
 `superseded`. Distinguish causal prevention, recovery, continuity and impact, and
-observability: evidence on one does not settle the others.
+observability. Evidence on one does not settle the others.
 
 Build the deepest supported chain from trigger through mechanism to failure,
 recovery, and impact. If the initiating cause remains unknown, name the diagnosed
 boundary and evidence that rules out earlier boundaries. State what would confirm
 or falsify each remaining hypothesis.
 
-## Advance it
+## Advance the investigation
 
 Choose the smallest discriminating check. Before running it, identify the evidence
 source, bounded window, expected observations, and how each result changes the
@@ -31,7 +31,7 @@ next action. Run the check and record how its evidence changes a hypothesis,
 intervention classification, or next action. When the result exposes another
 feasible discriminating check, run it too. Continue until the remaining
 uncertainty depends on evidence or access that is genuinely unavailable, an
-unapproved side effect, or a future event; verify that boundary before handing
+unapproved side effect, or a future event. Verify that boundary before handing
 off a next check.
 
 Investigate and recommend for diagnosis requests. Implement a correction only
@@ -41,7 +41,7 @@ when implementation is in scope. Make the correction at the root cause per
 ## Maintain the tracker
 
 When tracker updates are in scope, keep one `## Investigation frontier` section
-in the canonical body containing:
+in the canonical body with these items:
 
 - Last synthesized time, current verdict, and deployment or time boundary.
 - Established facts about prevention, recovery, impact, and observability.
@@ -59,7 +59,7 @@ outside scope, provide the proposed update instead.
 
 Explain the causal chain and decisive evidence first, including the unresolved
 boundary and alternatives ruled out. Then give ordered next steps with reasons,
-distinguishing recommendations from changes made. Finish with whether the tracker
-was updated, linking to that update when written or to the primary evidence
-when proposing an update. Make the diagnosis understandable from the final
+distinguishing recommendations from changes made. Finish by stating whether you
+updated the tracker. Link to the update when you wrote one, or to the primary
+evidence when you proposed one. Make the diagnosis understandable from the final
 response alone.

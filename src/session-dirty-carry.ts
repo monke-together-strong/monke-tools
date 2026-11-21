@@ -188,7 +188,7 @@ async function applyPatchAsync(runtime: Runtime, worktreePath: string, patch: st
 
   if (reverse.exitCode !== 0) {
     throw new MonkeError(
-      `Cannot resume dirty carry without overwriting Session-local tracked changes at ${worktreePath}`
+      `Cannot resume dirty carry without overwriting Session-local tracked changes at ${worktreePath}. Commit or stash the changes in ${worktreePath}, or run mt chop before retrying.`
     );
   }
 }
@@ -224,7 +224,7 @@ function copyUntrackedPath(sourcePath: string, targetPath: string, temporaryPath
       }
 
       throw new MonkeError(
-        `Refusing to overwrite Session-local path during dirty carry: ${conflict.targetPath}`
+        `Refusing to overwrite Session-local path during dirty carry: ${conflict.targetPath}. Remove or reconcile that path before retrying.`
       );
     },
     onMissingSource(missingPath) {

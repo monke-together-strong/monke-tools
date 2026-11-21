@@ -28,22 +28,28 @@ curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/m
 	sh -s -- --targets codex claude
 ```
 
-Pass the same target options with `vpr install:local` for local automation.
-Explicit options replace the saved targets. Run `mt shell install` from Bash
-or Zsh and follow its activation instructions.
+Built-in `--targets` choices are `codex`, `claude`, `cursor`, and `antigravity`.
+Add `--custom-target <path>` for a custom Agent skill root. Pass the same target
+options with `vpr install:local` for local automation. Explicit options replace
+the saved targets.
+
+To set up or repair shell integration from Bash or Zsh, run `mt shell install`
+and restart your shell. To install or verify Codiff (managed through Homebrew on
+macOS arm64), run `mt install-dependencies`.
 
 ## Update and recovery
 
 Run `mt update --check` to check for a release and `mt update` to activate it.
-Read the check output to distinguish an available update from an up-to-date
-install. Updating a local install activates a release. To resume development,
+`mt update --check` exits 0 whether an update is available or not, so read its
+output. Updating a local install activates a release. To resume development,
 run `vpr install:local` in the preserved Source checkout.
 
-If installed guidance differs from the release, preserve those edits before
-updating. Restore the changed paths from the bundle named by `releaseTag` in the
-active `install-manifest.json` to stay on releases. To keep editing, carry the
-changes into the Source checkout and activate a local install.
+Updates stop when installed release guidance differs from the bundle. To stay on
+releases, preserve the reported edits and restore those paths using `releaseTag`
+from `$(mt home)/current/install-manifest.json`. To keep editing, move the
+changes into a monke-tools Source checkout and run `vpr install:local`.
 
-After an activation failure, check `mt --version` before retrying. Skill or
-dependency reconciliation can fail after the new version is already active.
-Retry the reported `mt skills configure` or `mt install-dependencies` command.
+After an activation failure, check `mt --version` before retrying. Shell, skill,
+or dependency reconciliation can fail after the new version is already active.
+Retry the reported `mt shell install`, `mt skills configure`, or
+`mt install-dependencies` command.

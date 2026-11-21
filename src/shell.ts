@@ -24,7 +24,7 @@ export interface ShellInstallOptions {
   binary?: string;
 }
 
-/** Request that an active Shell adapter changes directory after mt exits. */
+/** Request that an active shell adapter change directory after mt exits. */
 export function requestShellDirectory(runtime: Runtime, targetPath: string) {
   return requestShellDirectoryWithFallback(runtime, targetPath, false);
 }
@@ -48,9 +48,7 @@ function requestShellDirectoryWithFallback(
   }
 
   if (removedCurrentWorktree) {
-    logger.warning(
-      `Warning: your shell is still in the removed worktree. Switch to ${targetPath}.`
-    );
+    logger.warning(`Your shell is still in the removed worktree. Switch to ${targetPath}.`);
   } else {
     logger.info(`Switch to ${targetPath}`);
   }

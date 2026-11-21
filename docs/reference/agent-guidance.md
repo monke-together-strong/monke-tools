@@ -40,13 +40,13 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Internal skill**: A monke-tools-owned **Distributed skill** shipped with the tool.
 
-**Imported guidance**: Agent guidance imported from a **Skill import source** and distributed as either an **Imported skill** or an **Imported reference**, whether bundled with monke-tools or registered personally.
+**Imported guidance**: Agent guidance imported from a **Skill import source** and distributed as either an **Imported skill** or an **Imported reference**.
 
 **Imported skill**: An **Imported guidance** item distributed as a **Distributed skill**.
 
 **Distributed reference**: Non-invocable agent guidance packaged inside the **Skill source tree** for explicit use by skills or other files.
 
-**Internal reference**: A monke-tools-owned **Distributed reference** packaged with the local install.
+**Internal reference**: A monke-tools-owned **Distributed reference** shipped with the tool.
 
 **Imported reference**: A non-invocable **Imported guidance** item distributed as a **Distributed reference**.
 
@@ -56,9 +56,9 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Managed instruction section**: The portion of user-level agent instructions owned by monke-tools.
 
-**Team coding baseline**: Minimum Team-owned coding guidance required across all **Consumer repos**; repo rules may add stricter or more specific guidance.
+**Team coding baseline**: Minimum team-owned coding guidance required across all **Consumer repos**. Repo rules may add stricter or more specific guidance.
 
-**Repo coding standards**: Repository-owned coding guidance documented by a **Consumer repo**; it supplements the **Team coding baseline** and may override conflicting imported review guidance.
+**Repo coding standards**: Repository-owned coding guidance documented by a **Consumer repo**. It supplements the **Team coding baseline** and may override conflicting imported review guidance.
 
 **Skill import**: The operation that brings selected guidance from a **Skill import source** into the **Skill source tree** as **Imported skills** or **Imported references**.
 
@@ -90,7 +90,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Imported guidance snapshot**: A captured state of an **Imported guidance** collection, including its supporting files and **Skill lock**.
 
-**Skill update**: The operation that refreshes **Imported guidance** using its recorded import choices and **Model invocation overrides**.
+**Skill update**: The operation that refreshes **Imported guidance** using its recorded import choices and local overrides.
 
 **Skill update review**: A comparison of **Imported guidance snapshots** before and after a **Skill update**, including both content and source provenance changes.
 
@@ -116,14 +116,14 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Custom skill install target**: The one user-provided destination path for installing monke-tools **Distributed skills** outside the built-in agent destinations.
 
-**Skill install preference**: The remembered set of **Skill install targets** used by later local installs.
+**Skill install preference**: The remembered set of **Skill install targets** used by later installs and skill updates.
 
 ## Relationships
 
 - A global **Skill registry** can include imports from the active Monke install and personal sources. A project registry contains explicitly registered sources for that clone.
-- A **Skill import** selects a source collection. **Skill install preferences** select distribution targets; an installer's agent-specific output folder does not restrict those targets.
-- Authored skills from linked and installer-backed sources share editing authority with their **Skill source folder**. Their global and project **Skill projections** expose that same guidance; source refreshes may replace instruction edits. Publisher-declared imports and aliases into their generated folders use consumer-owned copies, preserving the publisher's pins and policies.
+- A **Skill import** selects a source collection. **Skill install preferences** select distribution targets. An installer's agent-specific output folder does not restrict those targets.
+- Authored skills from linked and installer-backed sources share editing authority with their **Skill source folder**. Their global and project **Skill projections** expose that same guidance. Source refreshes may replace instruction edits. Publisher-declared imports and aliases into a publisher's generated folders use consumer-owned copies and preserve the publisher's pins and policies.
 - A skill may be both **Model-invoked** and **User-invoked**.
-- A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes and selection changes, including a skill disappearing and returning; without an override, upstream invocation metadata remains authoritative.
+- A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes and selection changes, including a skill disappearing and returning. Without an override, upstream invocation metadata remains authoritative.
 - A **Skill source revision** may change without changing its **Guidance digest**. The resulting lock-only comparison is still a **Skill update review**.
 - Projections and managed instruction sections belong to monke-tools. Other agent guidance remains user-owned.

@@ -1499,7 +1499,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     installFakeCodexSummary(bin);
     await expect(
       runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
-    ).rejects.toThrow("1 recipe(s)");
+    ).rejects.toThrow("1 recipe");
     expect(read(repo, "skills/imported/first/SKILL.md")).toBe(accepted);
     expect(existsSync(path.join(repo, "skills/imported/unpublished"))).toBeFalsy();
     expect(read(repo, "skills/imported/other/SKILL.md")).toContain("Other second revision.");
@@ -1784,7 +1784,9 @@ else console.log(table);
       );
       git(publisher, ["add", "."]);
       git(publisher, ["commit", "-m", "Introduce ambiguous root"]);
-      await expect(runCliAsync(add, runtime)).rejects.toThrow("Ambiguous Skill selector internal");
+      await expect(runCliAsync(add, runtime)).rejects.toThrow(
+        "Ambiguous Skill import selector internal"
+      );
       expect([
         read(repo, "monke.yml"),
         read(repo, "skills/.monke-restored.json"),
@@ -1800,7 +1802,7 @@ else console.log(table);
       });
 
       await expect(runCliAsync(add, freshRuntime)).rejects.toThrow(
-        "Ambiguous Skill selector internal"
+        "Ambiguous Skill import selector internal"
       );
       expect(existsSync(path.join(fresh, "monke.yml"))).toBeFalsy();
       expect(existsSync(path.join(fresh, "skills/imported"))).toBeFalsy();

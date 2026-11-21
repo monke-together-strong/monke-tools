@@ -4,11 +4,11 @@ Use this pattern for a TypeScript CLI that accepts structured runtime input.
 
 ## Responsibilities
 
-- Commander owns CLI grammar: commands, arguments, options, choices, relationships, help, version.
+- Commander owns CLI grammar: commands, arguments, options, choices, relationships, help, and version.
 - `@commander-js/extra-typings` infers action arguments and options from those declarations.
   Commander ships its own types, but its action parameters are broadly typed and `.opts<T>()` trusts
   whatever type the caller supplies.
-- Zod validates structured values assembled from CLI input, files, environment, or subprocess
+- Zod validates structured values assembled from CLI input, files, the environment, or subprocess
   output.
 - One executable-level handler renders every failure.
 
@@ -115,33 +115,30 @@ Every configuration method returns `this`, so chaining into `new Command()` keep
 argument and option types. The shared parser helper is generic so inference survives the call.
 
 Commander normally writes a failure to stderr before `exitOverride()` throws. Buffer that output so
-the executable handler can print it exactly once. This also preserves Commander's generated help
-when a command owns subcommands but none was selected: with `exitOverride()`, the thrown error's
-message is only the placeholder `(outputHelp)`, not the help text Commander already sent to
-`writeErr`.
-
-The boundary returns `z.output<typeof ConfigSchema>`. JSON enters as `unknown` until
-the schema validates it.
+the executable handler can print it exactly once. Buffering `writeErr` also preserves Commander's
+generated help when a command owns subcommands and none was selected. With `exitOverride()`, the
+thrown error's message is only the placeholder `(outputHelp)`, not the help text Commander already
+sent to `writeErr`.
 
 Configure the root parser before declaring any subcommand. `.command()` copies the parent's output
 configuration and exit callback at creation time, so a subcommand declared first writes its own
-diagnostic and calls `process.exit`, skipping the handler and killing the process mid-run. Nothing
-type-checks this and the root command still behaves, so the gap shows only on subcommand failures.
-The same copy covers help configuration and `allowExcessArguments` — set them once on the root
-instead of repeating them per subcommand. Leave Commander's built-in help option and help command
-enabled unless the product deliberately replaces them.
+diagnostic and calls `process.exit`, skipping the handler and killing the process mid-run.
+TypeScript does not catch this ordering bug, and the root command still behaves, so the gap shows
+only on subcommand failures. The same copy covers help configuration and `allowExcessArguments`.
+Set them once on the root instead of repeating them per subcommand. Leave Commander's built-in help
+option and help command enabled unless the product deliberately replaces them.
 
 Call `program.parseAsync()` when any action or hook is asynchronous, and `schema.parseAsync()` when
-a schema holds asynchronous refinements. Commander reads `process.argv` when `parse()` receives no
-arguments; pass `(argv, { from: "user" })` only where a wrapper injects arguments for tests or
-embedding.
+a schema holds asynchronous refinements. Commander reads `process.argv` when `parse()` or
+`parseAsync()` receives no arguments. Pass `(argv, { from: "user" })` only where a wrapper injects
+arguments for tests or embedding.
 
 Await that boundary rather than installing a process-level `uncaughtException` handler.
 
 ## Error ownership
 
 Throw and let errors bubble to the one handler. Catching an error only to reformat and rethrow it
-buys nothing.
+adds no value.
 
 Use `parse()` when the handler can report the Zod error as it is. Use
 `safeParse()` when the boundary must recover or identify a specific input that
@@ -153,14 +150,14 @@ or upstream response. Use the same label for malformed input and schema errors.
 The global `ZodError` branch then catches only schemas that bypassed the helper.
 
 `z.prettifyError` is the right default, not always the best output. When schemas phrase their own
-messages to complete a sentence — `z.array(..., { error: "must be a non-empty array" })` —
-joining path to message reads better: `apps.web.ports must be a non-empty array`. That pairing
-earns a small custom formatter, so long as it stays inside the one helper. Judge it on the sentence
-a user reads.
+messages to complete a sentence, such as `z.array(..., { error: "must be a non-empty array" })`,
+joining the path to the message reads better, as in `apps.web.ports must be a non-empty array`.
+That pairing justifies a small custom formatter as long as it stays inside the one helper. Judge it
+on the sentence a user reads.
 
-Explicit help (`--help` or `help <command>`) and version stay stdout successes with exit status
-zero. In Commander 15, parsing a command that owns subcommands with none selected generates help on
-stderr and exits with status one; preserve that generated output instead of replacing it with a
+Explicit help, such as `--help` or `help <command>`, and `--version` write to stdout and exit with
+status 0. In Commander 15, parsing a command that owns subcommands with none selected writes help
+to stderr and exits with status 1. Preserve that generated output instead of replacing it with a
 custom missing-command guard. Every other failure produces one stderr diagnostic and a nonzero
 status. A standalone CLI that needs no testable boundary can skip the override and let Commander
 write and exit on its own.

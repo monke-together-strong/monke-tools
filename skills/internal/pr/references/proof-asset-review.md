@@ -7,7 +7,7 @@
    - Video: inspect frames across the full timeline, then watch the complete
      playback when motion, timing, or transitions carry the claim.
 3. Confirm the claimed action and result are visible, unambiguous, and readable.
-4. Reject and regenerate an asset when it shows any of these:
+4. Reject and regenerate an asset when it shows any of these defects:
    - the claimed behavior is absent, cropped, ambiguous, or only implied
    - a blank, loading, stale, failed, or transitional state contradicts the
      claim

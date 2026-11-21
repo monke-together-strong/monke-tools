@@ -7,7 +7,7 @@ import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout, assertWorktreeUnlocked } from "./worktree-safety.ts";
 
-/** Shared registration checks. Live checkout identity/cleanliness is checked by each caller. */
+/** Shared registration checks. Each caller verifies live checkout identity and cleanliness. */
 export function inspectSessionRepoRegistration(
   runtime: Runtime,
   home: string,

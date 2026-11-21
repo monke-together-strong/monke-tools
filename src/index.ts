@@ -80,17 +80,18 @@ function createProgram(runtime: Runtime) {
 
   program
     .command("spawn")
+    .description("Create or complete a Session and its participating worktrees")
     .argument("<session>")
-    .option("--no-dirty", "require clean checkouts instead of carrying their edits")
-    .option("-m, --main", "start from default branches without carrying edits")
-    .option("--master", "alias for --main")
+    .option("--no-dirty", "Require clean checkouts instead of carrying their edits")
+    .option("-m, --main", "Start from default branches without carrying edits")
+    .option("--master", "Alias for --main")
     .addOption(
       new Option(
         "--from <ref>",
-        "start the Root repo from a branch, tag, or commit, and dependencies from default branches, without carrying edits"
+        "Start the Root repo from a branch, tag, or commit, and dependencies from default branches, without carrying edits"
       ).conflicts(["main", "master"])
     )
-    .option("--codex", "open the Session in Codex once it is ready")
+    .option("--codex", "Open the Session in Codex once it is ready")
     .action((session, options) => {
       let spawnOptions: SpawnOptions = { copyDirty: options.dirty, mode: "current-head" };
 
@@ -105,8 +106,12 @@ function createProgram(runtime: Runtime) {
 
   program
     .command("swing")
-    .argument("[target]")
-    .option("--codex")
+    .description("Navigate to a Checkout of the current repo, or create a PR's Session worktree")
+    .argument(
+      "[target]",
+      "Session name, branch, ^ (Source checkout), - (Previous Swing target), pr:<number>, or PR URL"
+    )
+    .option("--codex", "Open the target Checkout in Codex")
     .action((target, options) => runSwing(runtime, target, options));
 
   const diff = program
@@ -119,18 +124,18 @@ function createProgram(runtime: Runtime) {
       "[targets...]",
       "ref, base..head, base...head, #PR, pr <number|branch>, mr <number>, or review URL"
     )
-    .option("-p, --pick", "choose a Diff base or review only local changes")
-    .option("--adapter <adapter>", "one-off adapter selection (codiff or ms)")
-    .option("--path <checkout>", "select an existing Checkout, including a nested directory")
-    .option("--working-tree", "review only staged, unstaged, and untracked changes")
-    .option("--commit <ref>", "review one commit")
-    .option("--branch <ref>", "review the branch contribution plus local changes")
+    .option("-p, --pick", "Choose a Diff base or review only local changes")
+    .option("--adapter <adapter>", "One-off adapter selection (codiff or ms)")
+    .option("--path <checkout>", "Select an existing Checkout, including a nested directory")
+    .option("--working-tree", "Review only staged, unstaged, and untracked changes")
+    .option("--commit <ref>", "Review one commit")
+    .option("--branch <ref>", "Review the branch contribution plus local changes")
     .action((targets, options) => runDiffInteractive(runtime, { ...options, targets }));
 
   diff
     .command("configure")
     .description("Save this machine's Diff adapter without launching a review")
-    .option("--adapter <adapter>", "noninteractive selection (codiff or ms)")
+    .option("--adapter <adapter>", "Noninteractive selection (codiff or ms)")
     .action((options) => runDiffConfigure(runtime, options));
 
   program
@@ -148,7 +153,7 @@ function createProgram(runtime: Runtime) {
     .description("Materialize the current Session worktree and its Dependency repos")
     .option(
       "--adopt",
-      `adopt this Ordinary worktree as the Root repo's Session worktree for its current branch. ${ADOPTION_CONSEQUENCES}`
+      `Adopt this Ordinary worktree as the Root repo's Session worktree for its current branch. ${ADOPTION_CONSEQUENCES}`
     )
     .action((options) => runMaterialize(runtime, { adopt: options.adopt === true }));
 
@@ -159,8 +164,14 @@ function createProgram(runtime: Runtime) {
     .description("Manage resources owned by the current checkout")
     .enablePositionalOptions();
 
-  resources.command("acquire").action(() => runResources(runtime, "acquire"));
-  resources.command("release").action(() => runResources(runtime, "release"));
+  resources
+    .command("acquire")
+    .description("Acquire missing Checkout resource allocations or reuse saved ones")
+    .action(() => runResources(runtime, "acquire"));
+  resources
+    .command("release")
+    .description("Release acquired Checkout resource allocations while keeping the checkout")
+    .action(() => runResources(runtime, "release"));
   resources
     .command("exec")
     .description("Run a command with acquired resources, keeping them protected until it exits")
@@ -223,7 +234,7 @@ function createProgram(runtime: Runtime) {
     )
     .option(
       "--cleanup-from-source",
-      "Explicit recovery: run cleanup from the source checkout only for missing Session worktrees"
+      "Explicit recovery: run recorded Cleanup commands and resource release from the Source checkout for Missing Session worktrees"
     )
     .action((target, options) => {
       runChop(runtime, target, {
@@ -249,7 +260,7 @@ function createProgram(runtime: Runtime) {
     .option("--eligible", "Hide skipped Sessions in human output")
     .option(
       "--include-unowned",
-      "Inspect ordinary worktrees and stale registrations; live removal requires --recover-with"
+      "Inspect Ordinary worktrees and stale registrations; live removal requires --recover-with"
     )
     .option(
       "--archive-untracked",
@@ -272,7 +283,12 @@ function createProgram(runtime: Runtime) {
       })
     );
 
-  program.command("setup").action(() => runSetup(runtime));
+  program
+    .command("setup")
+    .description(
+      "Reconcile project skill links, dependency paths, and deterministic resource values"
+    )
+    .action(() => runSetup(runtime));
 
   program
     .command("install-dependencies")
@@ -283,13 +299,14 @@ function createProgram(runtime: Runtime) {
 
   program
     .command("update")
+    .description("Check for or activate the latest compatible stable Release")
     .option("--check", "Check for a compatible stable Release without installing it")
     .action((options) => runUpdate(runtime, { check: options.check === true }));
 
   program
     .command("activate-release-install", { hidden: true })
     .argument("<bundle-root>")
-    .option("--custom-target <path>", "Add a custom Agent Skill root")
+    .option("--custom-target <path>", "Add a custom Agent skill root")
     .option("--installation-lock-held")
     .option("--interactive")
     .addOption(
@@ -316,7 +333,7 @@ function createProgram(runtime: Runtime) {
     .requiredOption("--source-commit <sha>")
     .requiredOption("--created-at <timestamp>")
     .requiredOption("--platform <platform>")
-    .option("--custom-target <path>", "Add a custom Agent Skill root")
+    .option("--custom-target <path>", "Add a custom Agent skill root")
     .option("--dirty")
     .option("--installation-lock-held")
     .addOption(
@@ -339,26 +356,35 @@ function createProgram(runtime: Runtime) {
       })
     );
 
-  const shell = program.command("shell");
+  const shell = program
+    .command("shell")
+    .description("Install or emit shell integration for Spawn and Swing navigation");
 
   shell
     .command("install")
-    .option("--binary <path>")
+    .description("Configure your current shell to load the Shell adapter")
+    .option("--binary <path>", "Explicit path to the mt binary")
     .action((options) => {
       runShellInstall(runtime, options);
     });
 
   shell
     .command("init")
+    .description("Print the Shell adapter script for a supported shell")
     .addArgument(new Argument("<shell>").choices(["bash", "zsh"]))
-    .option("--binary <path>")
+    .option("--binary <path>", "Explicit path to the mt binary")
     .action((shellName, options) => {
       runShellInit(runtime, shellName, options);
     });
 
-  const skills = program.command("skills");
+  const skills = program
+    .command("skills")
+    .description("Manage global, project, and repo skills and agent targets");
 
-  skills.command("configure").action(() => runSkillsConfigure(runtime));
+  skills
+    .command("configure")
+    .description("Select Skill install targets and reconcile agent guidance")
+    .action(() => runSkillsConfigure(runtime));
 
   skills
     .command("create")
@@ -433,7 +459,12 @@ function createProgram(runtime: Runtime) {
     .description("Update imported skills and review changes in a single comparison")
     .option("--repo", "Pin and advance imports declared in this repo's monke.yml")
     .option("--project", "Update the clone-local registry and its skill projections")
-    .addOption(new Option("--adapter <adapter>").choices(["codiff", "ms"]))
+    .addOption(
+      new Option(
+        "--adapter <adapter>",
+        "Diff adapter for the update review (codiff or ms)"
+      ).choices(["codiff", "ms"])
+    )
     .option("--interactive", "Prompt before accepting upstream Skill slug replacements")
     .action((options) =>
       runSkillsRegistry(
@@ -450,7 +481,7 @@ function createProgram(runtime: Runtime) {
 
   skills
     .command("remove")
-    .description("Remove an import registration while preserving its external source")
+    .description("Remove an import registration while preserving its Skill import source")
     .argument("<source>")
     .option("--repo", "Remove a source from this repo's monke.yml")
     .option("--project", "Remove a source from the clone-local registry and its projections")
@@ -465,7 +496,12 @@ function createProgram(runtime: Runtime) {
     .option("--project", "Set overrides in the clone-local registry for skill projections")
     .argument("<source>")
     .argument("[skill]", "Skill slug; omit to set the source default, including future skills")
-    .addOption(new Option("--model-invocation <policy>").choices(["allow", "deny"]))
+    .addOption(
+      new Option(
+        "--model-invocation <policy>",
+        "Override whether models may select the skill automatically (allow or deny)"
+      ).choices(["allow", "deny"])
+    )
     .option("--description <description>", "Replace one Skill's description; requires a Skill slug")
     .action((source, skill, options) =>
       runSkillsRegistry(
@@ -492,7 +528,7 @@ function createProgram(runtime: Runtime) {
   skills
     .command("local-install", { hidden: true })
     .argument("<source-checkout>")
-    .option("--custom-target <path>", "Add a custom Agent Skill root")
+    .option("--custom-target <path>", "Add a custom Agent skill root")
     .addOption(
       new Option(
         "--targets <targets...>",

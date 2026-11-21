@@ -24,7 +24,7 @@ jobs:
         run: bun run src/index.ts skills restore --repo
 
       - name: Check
-        # PR CI owns the full unit suite; see docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md.
+        # PR CI owns the full unit suite. See docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md.
         run: vp check
 
       - name: Check packaged skill links

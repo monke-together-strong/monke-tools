@@ -75,7 +75,7 @@ describe("checkout resources", () => {
       "live.ts":
         'export async function acquire() { await Bun.write("acquired", "yes"); return {LIVE: "allocated"}; }',
       "monke.yml":
-        // oxlint-disable-next-line no-template-curly-in-string -- MT interpolates this YAML literal.
+        // oxlint-disable-next-line no-template-curly-in-string -- monke-tools interpolates this Resource value literal.
         "apps: {}\nresources:\n  values:\n    COMPOSE_PROJECT_NAME: project-${id}\n  commands:\n    live:\n      acquire: explicit\n      run: live.ts\n      outputs: [LIVE]\n"
     });
 

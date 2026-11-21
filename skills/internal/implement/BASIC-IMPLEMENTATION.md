@@ -1,6 +1,6 @@
-# Basic Implementation
+# Basic implementation
 
-Use this for direct work, a Spec without attached tickets, or one ticket of a
+Use this workflow for direct work, a Spec without attached tickets, or one ticket of a
 larger Spec. Implement the Work target's scope and acceptance criteria.
 
 Before editing, resolve the user-supplied review base or current `HEAD` to its

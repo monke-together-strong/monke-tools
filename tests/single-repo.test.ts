@@ -71,7 +71,7 @@ describe("single-repo sessions", () => {
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toBe(
-      `Spawned or updated session banana\nSwitch to ${worktreeRoot}\nRun mt shell install to enable automatic switching.\n`
+      `Spawned or updated Session banana\nSwitch to ${worktreeRoot}\nRun mt shell install to enable automatic switching.\n`
     );
     expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe(
@@ -111,7 +111,7 @@ describe("single-repo sessions", () => {
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     const codexWorkspaceUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
-    expect(result.stderr).toContain(`Spawned or updated session banana`);
+    expect(result.stderr).toContain(`Spawned or updated Session banana`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
     expect(result.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
     expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexWorkspaceUrl}\n`);
@@ -181,7 +181,7 @@ describe("single-repo sessions", () => {
     );
     expect(result.error?.message).toContain(`Prepared Root repo Session worktree: ${worktreeRoot}`);
     expect(result.error?.message).toContain("Retry: mt spawn 'banana'");
-    expect(result.stderr).not.toContain("Spawned or updated session banana");
+    expect(result.stderr).not.toContain("Spawned or updated Session banana");
     expect(result.stderr).not.toContain(`Switch to ${worktreeRoot}`);
     expect(result.stdout).toBe("");
 
@@ -1199,7 +1199,7 @@ apps:
         cwd: repoRoot,
         monkeHome: home
       })
-    ).toThrow(/Expected managed env file to exist/u);
+    ).toThrow(/Expected Managed env file to exist/u);
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retryable");
     expect(existsSync(worktreeRoot)).toBeTruthy();
@@ -1936,13 +1936,13 @@ apps:
         cwd: repoRoot,
         monkeHome: home
       });
-    }).toThrow(/must run inside a session worktree/u);
+    }).toThrow(/must run inside a Session worktree/u);
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     git(worktreeRoot, ["switch", "-c", "wrong"]);
     expect(() => {
       runMonke({ args: ["materialize"], binDirectory, cwd: worktreeRoot, monkeHome: home });
-    }).toThrow(/session "banana" to match current branch "wrong"/u);
+    }).toThrow(/Session "banana" to match current branch "wrong"/u);
     git(worktreeRoot, ["switch", "banana"]);
 
     const before = read(worktreeRoot, ".env");
@@ -2242,8 +2242,6 @@ apps:
         })
       ).toThrow(/Worktree preparation failed/u);
     } finally {
-      // Restore the mode even when the assertion fails, so temp-directory cleanup cannot
-      // fail on an unreadable directory and mask the original failure.
       chmodSync(protectedSourcePath, 0o700);
     }
 
@@ -2339,9 +2337,9 @@ apps:
     });
 
     expect(result.stderr).toContain(
-      "Warning: seedPath apps/frostbite-crawler/data/sessions is missing"
+      "Warning: Seed path apps/frostbite-crawler/data/sessions is missing"
     );
-    expect(result.stderr).toContain("Spawned or updated session banana");
+    expect(result.stderr).toContain("Spawned or updated Session banana");
   });
 
   it("creates the Source checkout root .env with direct external path env defaults on setup", () => {

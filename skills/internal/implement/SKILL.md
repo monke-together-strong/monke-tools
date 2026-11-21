@@ -9,16 +9,16 @@ Implement it. Run reviews on the reviewer model (`mt models get reviewer`).
 When assigned a checkout, read its repo instructions, use absolute file paths,
 and anchor every command to it. Confirm its root and branch before editing.
 
-Follow [Basic Implementation](./BASIC-IMPLEMENTATION.md) for delegated tickets
-and non-Spec work. A Parent Spec is background; the ticket defines scope.
+Follow [Basic implementation](./BASIC-IMPLEMENTATION.md) for delegated tickets
+and non-Spec work. A parent Spec is background. The ticket defines scope.
 
 For other Specs, discover tickets before choosing the implementation path.
 For GitHub Specs, check the body, comments, native sub-issues, and timeline
-cross-references; search referencing issues if uncertain. Read candidates to
+cross-references. Search referencing issues if uncertain. Read candidates to
 confirm parent and scope, then record ticket URLs and blockers. An empty native
 sub-issue list alone does not establish that no tickets exist.
 
-- If tickets exist, follow [Spec Orchestration](./SPEC-ORCHESTRATION.md).
+- If tickets exist, follow [Spec orchestration](./SPEC-ORCHESTRATION.md).
 - If the checked sources establish no tickets, follow
-  [Basic Implementation](./BASIC-IMPLEMENTATION.md). Report unavailable discovery
+  [Basic implementation](./BASIC-IMPLEMENTATION.md). Report unavailable discovery
   sources before selecting this path.

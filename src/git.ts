@@ -86,7 +86,7 @@ export function resolveRepoContext(
 
   if (!isSourceCheckout && shouldInferSessionName) {
     if (!home) {
-      throw new MonkeError("Unable to infer the current session without a Monke home");
+      throw new MonkeError("Unable to infer the current Session without a Monke home");
     }
 
     sessionName = inferSessionNameForContext(home, sourceRoot, worktreeRoot, currentBranch, {
@@ -138,7 +138,7 @@ function inferSessionNameForContext(
 
   if (sessionName !== branch && !options.allowSessionBranchMismatch) {
     throw new MonkeError(
-      `Expected linked worktree session "${sessionName}" to match current branch "${branch}"`
+      `Expected linked worktree Session "${sessionName}" to match current branch "${branch}". Check out branch "${sessionName}" in ${worktreeRoot} before retrying.`
     );
   }
 
@@ -327,7 +327,7 @@ export function resolveStartRef(
 
   if (pinnedRef === undefined) {
     throw new MonkeError(
-      `Could not resolve --from ref "${name}" locally or on origin for ${sourceRoot}`
+      `Could not resolve --from ref "${name}" locally or on origin for ${sourceRoot}. Check the ref name or fetch it first.`
     );
   }
 
@@ -421,7 +421,7 @@ export function validateWorktreeForSession(
   const context = resolveRepoContext(runtime, worktreePath, null, { inferSessionName: false });
 
   if (context.isSourceCheckout) {
-    throw new MonkeError(`Expected ${worktreePath} to be a linked session worktree`);
+    throw new MonkeError(`Expected ${worktreePath} to be a linked Session worktree`);
   }
 
   if (path.normalize(context.sourceRoot) !== path.normalize(sourceRoot)) {
@@ -432,7 +432,7 @@ export function validateWorktreeForSession(
 
   if (context.currentBranch !== session && options.allowBranchMismatch !== true) {
     throw new MonkeError(
-      `Expected worktree ${worktreePath} to be on branch ${session}, found ${context.currentBranch}`
+      `Expected worktree ${worktreePath} to be on branch ${session}, found ${context.currentBranch}. Check out branch "${session}" in ${worktreePath} before retrying.`
     );
   }
 

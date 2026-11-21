@@ -81,7 +81,7 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
 
     if (current.worktree.branch !== preflight.worktree.branch) {
       throw new MonkeError(
-        `Ordinary worktree branch/HEAD changed from ${preflight.worktree.branch ?? "detached"} to ${current.worktree.branch ?? "detached"} at ${current.worktree.path}`
+        `Ordinary worktree HEAD changed from ${preflight.worktree.branch ?? "detached"} to ${current.worktree.branch ?? "detached"} at ${current.worktree.path}. Retry mt chop once the worktree settles.`
       );
     }
 
@@ -163,7 +163,7 @@ function resolveChopTarget(
       // Preserve fail-closed behavior when invalid state may be the missing owner.
       listSessionStates(home);
       throw new MonkeError(
-        `Managed worktree ${invocation.worktreeRoot} has no valid owning Session state`
+        `Worktree ${invocation.worktreeRoot} is inside Monke home but has no valid owning Session state. Inspect Session state under Monke home or remove the worktree with Git.`
       );
     }
 
@@ -223,7 +223,7 @@ function resolveChopTarget(
 
     if (!samePath(selectedOwner.rootSourceRoot, rootScope)) {
       throw new MonkeError(
-        `Session ${selectedOwner.session} is outside the current Root repo scope ${rootScope}`
+        `Session ${selectedOwner.session} is outside the current Root repo scope ${rootScope}. Retry mt chop from ${selectedOwner.rootSourceRoot}.`
       );
     }
 
@@ -274,7 +274,7 @@ function assertInvocationSessionScope(
 
   if (repo === undefined) {
     throw new MonkeError(
-      `Managed worktree ${invocation.worktreeRoot} does not match its recorded Session identity`
+      `Session worktree ${invocation.worktreeRoot} does not match its recorded Session identity. Inspect its Session state before retrying.`
     );
   }
 }
@@ -322,7 +322,7 @@ function resolveOrdinaryTarget(
     throw new MonkeError(
       `Chop target "${target}" matches multiple registered worktrees: ${matches
         .map((worktree) => worktree.path)
-        .join(", ")}`
+        .join(", ")}. Pass the exact worktree path to select one.`
     );
   }
 
@@ -346,7 +346,9 @@ function resolveOrdinaryTarget(
 
 function assertOutsideManagedWorktrees(home: string, worktreePath: string) {
   if (isManagedWorktreePath(home, worktreePath)) {
-    throw new MonkeError(`Cannot Chop managed worktree ${worktreePath} as an Ordinary worktree`);
+    throw new MonkeError(
+      `Cannot Chop ${worktreePath} as an Ordinary worktree because it is inside Monke home. Target its owning Session, or inspect Session state if the record is missing.`
+    );
   }
 }
 

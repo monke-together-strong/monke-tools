@@ -301,7 +301,7 @@ function adoptionProjectionFailures(options: {
     )
     .map(
       (projection) =>
-        `${options.slug}: registered owner occupies ${projection}, which is also the requested incidental projection; preserve the existing source recipe and reconcile that harness layout separately`
+        `${options.slug}: registered owner occupies ${projection}, which is also a requested Skill projection; preserve the existing source recipe and reconcile that harness layout separately`
     );
 }
 
@@ -500,7 +500,9 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
     }
 
     if (!/^[a-z\d][a-z\d_-]*$/u.test(slug)) {
-      failures.push(`${slug}: invalid folder slug at ${original}`);
+      failures.push(
+        `${slug}: invalid Skill slug at ${original}; use lowercase letters, digits, hyphens, or underscores, starting with a letter or digit`
+      );
       continue;
     }
 
@@ -652,8 +654,8 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
 }
 
 /**
- * Publish editable sources using existing linked recipes, preserving recovery through target
- * reconciliation.
+ * Create or adopt editable skills in Monke home as linked recipes, rolling back if target
+ * reconciliation fails.
  */
 export async function acquireManagedSkillSource(options: {
   guidanceRoot: string;

@@ -5,7 +5,10 @@ export interface Runtime {
   readonly architecture: string;
   readonly cwd: string;
   readonly env: Record<string, string | undefined>;
-  /** Run a command with the runtime environment. */
+  /**
+   * Run a command; throws MonkeError on non-zero exit, signal, or timeout unless `allowFailure` is
+   * true.
+   */
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
   execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
   /** Optional injected activation boundary used to prove atomic failure behavior. */
@@ -132,7 +135,7 @@ export interface ResourceCommandConfig {
   acquire?: "automatic" | "explicit";
   /** Lowercase command label used as the Resource command namespace. */
   name: string;
-  /** Uppercase environment variable names the function must return. */
+  /** Uppercase environment variable names the module's `acquire` function must return. */
   outputs: string[];
   /** Repo-relative JS/TS module path run from the owning checkout. */
   run: string;

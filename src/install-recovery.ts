@@ -40,7 +40,7 @@ export function withInstallMutationLockAsync<T>(home: string, callback: () => Pr
   });
 }
 
-/** Restore or discard managed collision backups according to the current Active pointer. */
+/** Restore or discard managed collision backups according to the Active tool install pointer. */
 export function reconcilePendingInstallBackups(monkeHome: string) {
   const backupsRoot = path.join(monkeHome, "install-backups");
 

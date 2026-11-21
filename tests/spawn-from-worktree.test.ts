@@ -121,7 +121,7 @@ describe("spawn from worktrees", () => {
 
     const resumed = runMonke({ args: ["spawn", "interrupted"], cwd: donor, monkeHome: home });
 
-    expect(resumed.stderr).toContain("Spawned or updated session");
+    expect(resumed.stderr).toContain("Spawned or updated Session");
     expect(read(target, "tracked.txt")).toBe("donor edits\n");
     expect(read(target, "notes.txt")).toBe("donor notes\n");
     expect(loadSessionState(home, root, "interrupted").repos[0]?.dirtyCarryStatus).toBe("complete");

@@ -520,8 +520,8 @@ export function release({owner, outputs}) {
   );
 
   it.each([
-    ["", "nonempty recovery command"],
-    ["   ", "nonempty recovery command"],
+    ["", "non-empty recovery command"],
+    ["   ", "non-empty recovery command"],
     ["true", "explicit worktree targets"]
   ])("rejects unscoped or empty recovery commands: %j", async (command, message) => {
     const f = fixture();
@@ -1245,7 +1245,7 @@ export function release({owner, outputs}) {
     await runCliAsync(["cleanup", "--dry-run"], runtime);
     const [summary] = stdout.split("\n");
     expect(summary).toBe(
-      "Inspected 2 Sources, 4 registered worktrees, 2 Sessions: 1 would clean, 1 skipped (would remove 2 worktrees)"
+      "Inspected 2 Source checkouts, 4 registered worktrees, 2 Sessions: 1 would clean, 1 skipped (would remove 2 worktrees)"
     );
     expect(stdout).toContain("Skipped: root / feature/blocked");
     expect(stdout).toContain("       M tracked.txt");

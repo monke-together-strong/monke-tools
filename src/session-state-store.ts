@@ -105,7 +105,7 @@ export function scanSessionStates(home: string) {
 
       return { filePath, fingerprint: hashKey(text), references, state };
     } catch {
-      // Bound corrupt ownership only when the complete identity/path shape can
+      // Bound corrupt ownership only when the complete identity and path shape can
       // still be read. An arbitrary scalar in broken YAML cannot prove isolation.
       const references: string[] = [];
 
@@ -270,7 +270,9 @@ function parseSessionStateFile(home: string, filePath: string) {
   const expectedFilePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
 
   if (path.normalize(expectedFilePath) !== path.normalize(filePath)) {
-    throw new MonkeError(`Session state identity does not match its storage key: ${filePath}`);
+    throw new MonkeError(
+      `Session state identity does not match its storage key: ${filePath}. Inspect or remove the misplaced state file before retrying.`
+    );
   }
 
   return state;
@@ -299,7 +301,7 @@ export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]
   for (const [index, recordedRoot] of recordedRoots.entries()) {
     if (expectedOrder[index] !== recordedRoot) {
       throw new MonkeError(
-        `Session state for ${state.session} is out of sync with the current dependency graph`
+        `Session state for ${state.session} is out of sync with the current dependency graph. Restore the previous dependency graph in monke.yml, or run mt chop ${state.session} and spawn it again.`
       );
     }
   }
@@ -317,7 +319,7 @@ export function getOrCreateReservation(home: string, sourceRoot: string, size: n
 
     if (size > existing.size) {
       throw new MonkeError(
-        `Repo ${sourceRoot} owns ${size} local ports but its reservation only has room for ${existing.size}`
+        `Repo ${sourceRoot} declares ${size} Port keys, but its Port reservation only has room for ${existing.size}. Reduce the repo's local Port keys or remove its Port reservation after chopping its Sessions.`
       );
     }
 

@@ -68,7 +68,10 @@ function isProjectSkillTarget(kind: SkillInstallTargetKind) {
   return kind !== "custom" && kind !== "antigravity";
 }
 
-/** Start with the user's built-in targets and an empty imported collection. */
+/**
+ * Initialize the clone's project Skill registry on first use with supported project targets (Codex,
+ * Claude, Cursor).
+ */
 export function initializeProjectSkillRegistry(
   runtime: Runtime,
   context: ProjectSkillRegistry

@@ -18,5 +18,5 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 - Resources are independent across the worktrees in a **Session**.
 - A **Resource value** exists independently of live acquisition. A **Resource command output** represents an acquired allocation.
-- Releasing an allocation ends its ownership obligation; it preserves the checkout and its deterministic values.
+- Releasing an allocation ends its ownership obligation. Release preserves the checkout and its deterministic values.
 - Resource release precedes **Cleanup commands** during Session removal.

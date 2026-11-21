@@ -165,7 +165,7 @@ export function loadResolvedGraph(
 
       if (existingOwner !== undefined && existingOwner !== repo.sourceRoot) {
         throw new MonkeError(
-          `Port key ${portKey} is owned by both ${existingOwner} and ${repo.sourceRoot}`
+          `Port key ${portKey} is owned by both ${existingOwner} and ${repo.sourceRoot}. Rename one of the Port keys in monke.yml so each has one owner.`
         );
       }
 
@@ -336,13 +336,13 @@ function parseRepoConfigObject(
 
     if (path.normalize(resolvedRepoRoot) !== path.normalize(absoluteRepoRoot)) {
       throw new MonkeError(
-        `External dependency ${label} must point to the dependency repo root exactly: ${absoluteRepoRoot}`
+        `Dependency repo ${label} (external.${label}) must point to its repo root exactly: ${absoluteRepoRoot}`
       );
     }
 
     if (!options.pathExists(absoluteRepoRoot, "monke.yml")) {
       throw new MonkeError(
-        `External dependency ${label} is missing monke.yml at ${absoluteRepoRoot}`
+        `Dependency repo ${label} (external.${label}) is missing monke.yml at ${absoluteRepoRoot}`
       );
     }
 
@@ -387,7 +387,7 @@ function parseRepoConfigObject(
   for (const app of appsInOrder) {
     if (app.localMappings.length === 0 && !externalTargetApps.has(app.label)) {
       throw new MonkeError(
-        `App ${app.label} owns no local ports and is not targeted by any external mapping`
+        `App ${app.label} has no Local mappings and is not targeted by any External mapping`
       );
     }
   }
@@ -454,7 +454,7 @@ function parseSeedPaths(
 
     if (relativePath === "." || normalizedPath === path.normalize(sourceRoot)) {
       throw new MonkeError(
-        `${configPath}#seedPaths[${index}] cannot point at the repo root; seedPath "." is not allowed`
+        `${configPath}#seedPaths[${index}] cannot point at the repo root; Seed path "." is not allowed`
       );
     }
 
@@ -462,7 +462,7 @@ function parseSeedPaths(
 
     if (existing !== undefined) {
       throw new MonkeError(
-        `Duplicate seedPath ${relativePath} in ${configPath}; already declared as ${existing}`
+        `Duplicate Seed path ${relativePath} in ${configPath}; already declared as ${existing}`
       );
     }
 
@@ -562,7 +562,7 @@ function requireResourceCommandRunPath(relativePath: string, location: string) {
     normalizedPath === ".." ||
     path.isAbsolute(normalizedPath)
   ) {
-    throw new MonkeError(`${location} must resolve inside the session worktree`);
+    throw new MonkeError(`${location} must resolve inside the owning checkout`);
   }
 
   if (!RUN_MODULE_EXTENSION_RE.test(normalizedPath)) {

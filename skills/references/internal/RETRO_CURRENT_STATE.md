@@ -8,7 +8,7 @@ current problem. An old failure establishes history, not an outstanding fix.
 1. Establish the intended behavior from the user's request and the instructions
    that applied. Read later clarifications before calling observed behavior a
    defect. Keep changed requirements distinct from failures of the earlier ones.
-   Exclude behavior that matched the request; it does not count as a repaired defect.
+   Exclude behavior that matched the request. It does not count as a repaired defect.
 2. Read the rest of the source thread and follow its handoffs, fix references,
    related PRs, and subsequent changes to the proposed fix location. Search the
    available history for the issue, affected mechanism, and later repairs, even
@@ -49,7 +49,7 @@ finding must retain the incident evidence, what changed afterward, and current
 proof of the remaining case, including verification limits. If no later repair
 was found, state the search scope. If the search was unavailable, mark the claim
 unverified. Preserve these facts when shortening, deduplicating, or promoting
-findings; do not leave them only in worker notes. Refresh them before acting on
+findings. Do not leave them only in worker notes. Refresh them before acting on
 an older report.
 
 For example, a direct push left ticket closure and cleanup pending. A later

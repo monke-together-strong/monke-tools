@@ -1298,7 +1298,7 @@ external:
     expect(existsSync(settledMarker)).toBeTruthy();
     expect(failed.stderr).toContain(`${failingRoot}: failed (repo materialization; prepared)`);
     expect(failed.stderr).toContain(`${successfulRoot}: materialized`);
-    expect(failed.stderr).toContain("warning: Warning: seedPath optional-missing is missing");
+    expect(failed.stderr).toContain("warning: Warning: Seed path optional-missing is missing");
     expect(failed.stderr).toContain(`${root}: blocked by ${failingRoot}`);
     expect(failed.stderr).toContain(
       `Prepared Root repo Session worktree: ${getExpectedWorktreePath(home, root, "quiescent")}`
@@ -1737,8 +1737,6 @@ external:
         })
       ).toThrow(/Worktree preparation failed/u);
     } finally {
-      // Restore the mode even when the assertion fails, so temp-directory cleanup cannot
-      // fail on an unreadable directory and mask the original failure.
       chmodSync(protectedSourcePath, 0o700);
     }
 

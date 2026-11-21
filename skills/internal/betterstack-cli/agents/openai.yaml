@@ -1,4 +1,4 @@
 interface:
-  display_name: "BetterStack CLI"
-  short_description: "Query BetterStack telemetry from shared skills."
-  default_prompt: "Use $betterstack-cli to inspect BetterStack sources and query telemetry safely."
+  display_name: "Better Stack CLI"
+  short_description: "Query Better Stack telemetry through the bundled HTTP CLI."
+  default_prompt: "Use $betterstack-cli to inspect Better Stack sources and query telemetry safely."

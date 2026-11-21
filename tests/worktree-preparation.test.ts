@@ -92,7 +92,7 @@ describe("Worktree preparation", () => {
         sourceRoot,
         "--help"
       )
-    ).rejects.toThrow(/Invalid session name "--help"/u);
+    ).rejects.toThrow(/Invalid Session name "--help"/u);
   });
 });
 

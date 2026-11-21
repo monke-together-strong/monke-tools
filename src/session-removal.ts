@@ -289,7 +289,7 @@ function failure(
     retryInspectionFailure = errorMessage(ThrownValueSchema.parse(inspectionCause));
   }
 
-  // Recorded Cleanup obligations run again on retry, even after an earlier success.
+  // Re-query Cleanup obligations from disk: completed resource releases drop out, while recorded Cleanup commands run again on retry.
   const remaining =
     planned && retryObligations
       ? planned.flatMap((action) => {
@@ -520,7 +520,7 @@ function runCleanupObligations(
           releaseCheckoutResources(runtime, store, record, cleanupCwd);
         } catch (cause) {
           throw new MonkeError(
-            `Resource release failed for session ${state.session} repo ${repo.sourceRoot}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
+            `Resource release failed for Session ${state.session} repo ${repo.sourceRoot}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
             { cause }
           );
         }
@@ -557,7 +557,7 @@ function runCleanupObligations(
         });
       } catch (cause) {
         throw new MonkeError(
-          `Cleanup command failed for session ${state.session} repo ${repo.sourceRoot}: ${cleanupCommand}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
+          `Cleanup command failed for Session ${state.session} repo ${repo.sourceRoot}: ${cleanupCommand}\n${errorMessage(ThrownValueSchema.parse(cause))}`,
           { cause }
         );
       }
@@ -589,7 +589,7 @@ function finalizeSession(store: SessionStateStore, state: SessionState, effect: 
 
   if (liveRepo !== undefined) {
     throw new MonkeError(
-      `Cannot finalize session ${state.session} while worktree ${liveRepo.worktreePath} exists`
+      `Cannot finalize Session ${state.session} while worktree ${liveRepo.worktreePath} exists`
     );
   }
 
@@ -619,7 +619,7 @@ function assertSessionMemberUnchanged(
     current.registeredBranch !== candidate.registeredBranch
   ) {
     throw new MonkeError(
-      `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
+      `Session worktree HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}. Rerun once the worktree settles.`
     );
   }
 }

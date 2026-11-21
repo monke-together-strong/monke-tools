@@ -145,7 +145,9 @@ export async function runUpdateSkills(runtime: Runtime, options: SkillUpdateOpti
     const guidance = activeGuidanceRoot(runtime);
 
     if (!loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference) {
-      throw new MonkeError("No Skill targets are configured. Run mt skills configure first.");
+      throw new MonkeError(
+        "No Skill install targets are configured. Run mt skills configure first."
+      );
     }
 
     return updateSkillCollections(runtime, options, {
@@ -217,8 +219,7 @@ async function updateSkillCollections(
 
           writeMessage(`Updating repo imports: ${root}\n`);
 
-          // Publish one connection at a time so interactive prompts never overlap.
-          // oxlint-disable-next-line no-await-in-loop
+          // oxlint-disable-next-line no-await-in-loop -- Update one linked repository at a time so stdout and interactive prompts never overlap.
           const result = await withSkillImportMutation(
             root,
             () =>
@@ -434,8 +435,7 @@ async function updateSkills(
 
     try {
       if (recipe.localSource) {
-        // Source commands and registry writes must complete in recipe order.
-        // oxlint-disable-next-line no-await-in-loop
+        // oxlint-disable-next-line no-await-in-loop -- Installer commands and recipe store writes must run sequentially in recipe order.
         store = await updateLocalSkillSource({
           recipe,
           repoRoot,
@@ -454,8 +454,7 @@ async function updateSkills(
         continue;
       }
 
-      // Preparation can overlap across sources. Publish each result in recipe order.
-      // oxlint-disable-next-line no-await-in-loop
+      // oxlint-disable-next-line no-await-in-loop -- Preparation overlaps across remote sources, but publication must proceed in recipe order.
       const prepared = await prepare(recipe, index);
 
       if (!prepared) {
@@ -474,8 +473,7 @@ async function updateSkills(
       stagingDirectory = preparedDirectory;
       reportSecurityRiskAssessment(assessmentOutput, writeMessage);
 
-      // Prompts must complete before publication can change the stored recipe.
-      // oxlint-disable-next-line no-await-in-loop
+      // oxlint-disable-next-line no-await-in-loop -- Interactive slug-replacement prompts must complete before publishing the recipe.
       const stagedGuidance = await resolveUpdatedGuidance({
         confirmSlugReplacement: promptForSlugReplacement,
         declaredGuidance: installOutput.declaredGuidance,
@@ -675,7 +673,9 @@ function finalizeUpdatedImports(options: {
 function skillUpdateFailure(failures: string[], ...otherFailures: (string | undefined)[]) {
   const messages = [
     ...(failures.length > 0
-      ? [`Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`]
+      ? [
+          `Skill update failed for ${failures.length} ${failures.length === 1 ? "recipe" : "recipes"}:\n${failures.join("\n")}`
+        ]
       : []),
     ...otherFailures.filter((message) => message !== undefined)
   ];
@@ -974,8 +974,7 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   for (const replacement of replacements) {
-    // Wait for each answer before showing the next prompt.
-    // oxlint-disable-next-line no-await-in-loop
+    // oxlint-disable-next-line no-await-in-loop -- Wait for each confirmation answer before showing the next prompt.
     const accepted = await options.confirmSlugReplacement(replacement);
 
     if (!accepted) {

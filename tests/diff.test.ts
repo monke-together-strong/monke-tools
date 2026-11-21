@@ -707,7 +707,7 @@ touch "${discoveryReached}"`
   });
 
   it.each([false, true])(
-    "offers default refs once in the Diff picker with main worktree attached: %s",
+    "offers default refs once in the Diff picker with an Ordinary worktree on main attached: %s",
     async (attached) => {
       const sandbox = makeTempDir("diff-default-picker");
       const binDirectory = path.join(sandbox, "bin");

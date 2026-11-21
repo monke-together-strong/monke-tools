@@ -93,7 +93,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
       chmodSync(parent, 0o1777);
       changeOwner(parent, parentOwner);
       expect(lstatSync(parent).uid).toBe(parentOwner);
-      // oxlint-disable-next-line no-bitwise -- Verify the actual POSIX fixture permissions.
+      // oxlint-disable-next-line no-bitwise -- Mask st_mode file-type bits to verify POSIX permission and sticky bits.
       expect(lstatSync(parent).mode & 0o7777).toBe(0o1777);
       expect(lstatSync(marker, { throwIfNoEntry: false })?.uid).toBe(
         scenario.marker === "absent" ? undefined : entryOwner

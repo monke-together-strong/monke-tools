@@ -114,7 +114,10 @@ interface ConfiguredSpawn {
   worktreePlans: Map<string, WorktreePlan>;
 }
 
-/** Create or update a Session through bounded Worktree preparation. */
+/**
+ * Create or update a Session, running Worktree preparation and Repo materialization under the
+ * global lock.
+ */
 export async function runSpawn(
   runtime: Runtime,
   session: string,
@@ -139,7 +142,7 @@ export async function runSpawn(
 
 function resolveSpawnContext(runtime: Runtime, session: string) {
   if (!session) {
-    throw new MonkeError("mt spawn requires a session name");
+    throw new MonkeError("mt spawn requires a Session name");
   }
 
   const home = getMonkeHome(runtime);
@@ -154,7 +157,7 @@ function finishSpawn(
   rootWorktreePath: string,
   runOptions: SpawnRunOptions
 ) {
-  createLogger(runtime).success(`Spawned or updated session ${session}`);
+  createLogger(runtime).success(`Spawned or updated Session ${session}`);
   requestShellDirectory(runtime, rootWorktreePath);
 
   if (runOptions.codex === true) {
@@ -414,7 +417,7 @@ function assertSpawnRequest(
   options: SpawnOptions
 ) {
   if (session === "") {
-    throw new MonkeError("mt spawn requires a session name");
+    throw new MonkeError("mt spawn requires a Session name");
   }
 
   if (options.mode === "session-branch" && !branchExists(runtime, rootSourceRoot, session)) {
@@ -466,7 +469,7 @@ function resolveSpawnSourcePlan(
   }
 
   throw new MonkeError(
-    `Session state already exists for "${session}"; -m and --from require a fresh Session`
+    `Session state already exists for "${session}"; -m and --from require a fresh Session. Choose a new Session name, or run mt chop ${shellQuote(session)} first.`
   );
 }
 
@@ -875,7 +878,7 @@ function assertSessionWorktreePathsAvailable(
 
     if (collision) {
       throw new MonkeError(
-        `Session worktree path collision at ${worktreePath}; already recorded for ${collision.sourceRoot}. Repo-name/session worktree paths must be unique within MONKE_HOME.`
+        `Session worktree path collision at ${worktreePath}; already recorded for ${collision.sourceRoot}. Worktree paths must be unique inside Monke home; choose a different Session name or remove the conflicting Session first.`
       );
     }
   }
@@ -942,7 +945,7 @@ export async function runMaterialize(runtime: Runtime, options: MaterializeOptio
     });
   });
 
-  createLogger(runtime).success(`Materialized session ${request.session}`);
+  createLogger(runtime).success(`Materialized Session ${request.session}`);
 }
 
 function resolveMaterializeRequest(runtime: Runtime, options: MaterializeOptions) {
@@ -956,7 +959,7 @@ function resolveMaterializeRequest(runtime: Runtime, options: MaterializeOptions
     throw new MonkeError(
       options.adopt === true
         ? "mt materialize --adopt must run inside an Ordinary worktree, not the Source checkout"
-        : "mt materialize must run inside a session worktree"
+        : "mt materialize must run inside a Session worktree. Run it there, or pass --adopt inside an Ordinary worktree."
     );
   }
 
@@ -971,7 +974,7 @@ function resolveMaterializeRequest(runtime: Runtime, options: MaterializeOptions
   }
 
   if (!context.sessionName) {
-    throw new MonkeError("Unable to infer the current session");
+    throw new MonkeError("Unable to infer the current Session");
   }
 
   return { context, home, session: context.sessionName };

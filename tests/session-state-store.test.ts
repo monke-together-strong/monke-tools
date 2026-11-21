@@ -754,11 +754,11 @@ typo: true
     }
   ])("rejects $name in loadSessionState", ({ expected, state }) => {
     const sandbox = makeTempDir("session-state-store-lifecycle-invariant");
-    // Pin the named invariant: several of these states also trip a second, incidental rule,
-    // so matching only /Invalid/ would not prove the intended one fired.
     const home = path.join(sandbox, "home");
     const filePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
     write(path.dirname(filePath), path.basename(filePath), JSON.stringify(state));
+    // Pin the named invariant: several of these states also trip a second, incidental rule,
+    // so matching only /Invalid/ would not prove the intended one fired.
     expect(() => loadSessionState(home, state.rootSourceRoot, state.session)).toThrow(expected);
   });
 
@@ -918,7 +918,7 @@ size: 1000
     expect(firstReservation?.size).toBe(1000);
 
     expect(() => getOrCreateReservation(home, sourceRoot, 1001)).toThrow(
-      /its reservation only has room for 1000/u
+      /its Port reservation only has room for 1000/u
     );
   });
 

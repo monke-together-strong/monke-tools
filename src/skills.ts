@@ -82,7 +82,7 @@ export interface SkillPublicationScope {
   preference: SkillInstallPreference;
 }
 
-/** Noninteractive Skill targets supplied by install automation. */
+/** Noninteractive Skill install targets supplied by install automation. */
 export interface ExplicitSkillTargetSelection {
   builtInTargetKinds?: BuiltInSkillInstallTargetKind[];
   customTargetPath?: string;
@@ -142,7 +142,7 @@ export function explicitSkillInstallPreference(
   );
 }
 
-/** Preflight known guidance destinations before Local or Release core activation. */
+/** Validate affected Agent skill roots and Global agent instructions before mutating them. */
 export function preflightInstallGuidance(
   runtime: Runtime,
   guidanceSourceRoot: string,
@@ -265,7 +265,7 @@ function preflightFlatTarget(
   adoptedLinks: ReadonlyMap<string, string>
 ) {
   const previousManifest = readFlatManifest(target);
-  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent skill root");
 
   for (const link of supportingLinks) {
     assertDirectoryMutationAccess(path.dirname(link.targetPath), "Reference link parent");
@@ -283,7 +283,7 @@ function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
     return;
   }
 
-  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent skill root");
 
   if (namespaceStat?.isDirectory() === true) {
     assertDirectoryMutationAccess(target.namespacePath, "Skill namespace");
@@ -377,7 +377,7 @@ export function reconcileSkillNamespaces(options: {
 
   if (failures.length > 0) {
     throw new MonkeError(
-      `Failed to reconcile ${failures.length} Skill install target(s):\n${failures.join("\n")}`
+      `Failed to reconcile ${failures.length} ${failures.length === 1 ? "Skill install target" : "Skill install targets"}:\n${failures.join("\n")}`
     );
   }
 }
@@ -486,7 +486,7 @@ export function projectSkillProjectionRecoveryPaths(scope: SkillPublicationScope
   });
 }
 
-/** Paths target reconciliation can mutate; adoption retains them until publication completes. */
+/** Paths target reconciliation can mutate, used for publication rollback and project Git exclusions. */
 export function skillPublicationPaths(
   runtime: Runtime,
   root: string,
@@ -837,7 +837,7 @@ function discoverFlatSkillLinks(skillSourceTree: string) {
 
       if (links.has(entry.name)) {
         throw new MonkeError(
-          `Cannot flatten duplicate Skill name ${entry.name} from ${skillSourceTree}`
+          `Cannot flatten duplicate Skill slug ${entry.name} from ${skillSourceTree}`
         );
       }
 

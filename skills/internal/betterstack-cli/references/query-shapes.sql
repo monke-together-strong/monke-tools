@@ -1,5 +1,5 @@
--- Generic Better Stack query shapes. Replace source-specific table names and
--- service tags from the repo-local wrapper skill before execution.
+-- Generic Better Stack query shapes. Replace source-specific table names,
+-- time windows, and service tags from the repo-local wrapper skill before execution.
 
 -- name: latest_logs
 SELECT
@@ -10,8 +10,11 @@ SELECT
   raw
 FROM (
   SELECT dt, raw FROM remote(REPLACE_HOT_LOGS_TABLE)
+  WHERE dt >= now() - INTERVAL 1 HOUR
   UNION ALL
-  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE) WHERE _row_type = 1
+  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE)
+  WHERE _row_type = 1
+    AND dt >= now() - INTERVAL 1 HOUR
 )
 ORDER BY dt DESC
 LIMIT 100
@@ -25,8 +28,11 @@ SELECT
   raw
 FROM (
   SELECT dt, raw FROM remote(REPLACE_HOT_LOGS_TABLE)
+  WHERE dt >= now() - INTERVAL 1 HOUR
   UNION ALL
-  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE) WHERE _row_type = 1
+  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE)
+  WHERE _row_type = 1
+    AND dt >= now() - INTERVAL 1 HOUR
 )
 WHERE JSONExtract(raw, 'service', 'Nullable(String)') = 'REPLACE_SERVICE'
 ORDER BY dt DESC
@@ -41,8 +47,11 @@ SELECT
   raw
 FROM (
   SELECT dt, raw FROM remote(REPLACE_HOT_LOGS_TABLE)
+  WHERE dt >= now() - INTERVAL 1 HOUR
   UNION ALL
-  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE) WHERE _row_type = 1
+  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE)
+  WHERE _row_type = 1
+    AND dt >= now() - INTERVAL 1 HOUR
 )
 WHERE JSONExtract(raw, 'service', 'Nullable(String)') = 'REPLACE_SERVICE'
   AND JSONExtract(raw, 'level', 'Nullable(String)') IN ('error', 'fatal')
@@ -59,8 +68,13 @@ SELECT
   raw
 FROM (
   SELECT dt, raw FROM remote(REPLACE_HOT_LOGS_TABLE)
+  WHERE dt >= parseDateTimeBestEffort('REPLACE_START_UTC')
+    AND dt <= parseDateTimeBestEffort('REPLACE_END_UTC')
   UNION ALL
-  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE) WHERE _row_type = 1
+  SELECT dt, raw FROM s3Cluster(primary, REPLACE_COLD_STORAGE_TABLE)
+  WHERE _row_type = 1
+    AND dt >= parseDateTimeBestEffort('REPLACE_START_UTC')
+    AND dt <= parseDateTimeBestEffort('REPLACE_END_UTC')
 )
 WHERE raw LIKE '%REPLACE_SEARCH_TEXT%'
 ORDER BY dt ASC

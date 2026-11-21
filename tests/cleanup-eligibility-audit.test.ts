@@ -8,7 +8,7 @@ import {
 } from "../src/cleanup-eligibility.ts";
 import auditCases from "./fixtures/cleanup-eligibility-audit.json";
 
-// These anonymized cases come from an independent Git and GitHub audit (commit 46d1594).
+// These anonymized cases come from an independent Git and GitHub audit.
 // The fixture preserves identifier equality, which the eligibility decision uses.
 const AuditCaseSchema = z.object({
   expected: z.boolean(),

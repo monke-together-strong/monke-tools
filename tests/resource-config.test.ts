@@ -33,7 +33,7 @@ apps:
 
     expect(graph.reposByRoot.get(root)?.cleanupCommand).toBe("pnpm cleanup:session");
     expect(graph.reposByRoot.get(root)?.resourceValuesInOrder).toStrictEqual([
-      // oxlint-disable-next-line no-template-curly-in-string -- Preserve the placeholders for the resource interpolator.
+      // oxlint-disable-next-line no-template-curly-in-string -- Assert that the Resource value keeps its uninterpolated placeholders.
       { env: "DISCORD_CHANNEL", literal: "mt-${user}-${session}" },
       { env: "STATIC_HANDLE", literal: "stable" }
     ]);
@@ -190,7 +190,7 @@ apps:
         - E2E_FLOW1_SYMBOL`
     },
     {
-      expected: /run must resolve inside the session worktree/u,
+      expected: /run must resolve inside the owning checkout/u,
       name: "escaping run path",
       resources: `commands:
     e2e-symbols:

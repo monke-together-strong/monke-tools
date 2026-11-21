@@ -82,7 +82,7 @@ export interface ActivateReleaseInstallOptions {
   interactive?: boolean;
 }
 
-/** Read the catalog identity handed from the public bootstrap to its bundled executable. */
+/** Read the catalog identity handed from the Release bootstrap to its bundled executable. */
 export function expectedReleaseIdentityFromEnvironment(
   environment: NodeJS.ProcessEnv
 ): ExpectedReleaseIdentity | undefined {
@@ -100,7 +100,7 @@ export function expectedReleaseIdentityFromEnvironment(
   }
 
   if (values.some((value) => value === undefined)) {
-    throw new MonkeError("Public bootstrap Release identity is incomplete");
+    throw new MonkeError("Release bootstrap identity is incomplete; rerun install.sh");
   }
 
   return {
@@ -393,7 +393,7 @@ async function finishInstallActivation(
     await options.reconcileGuidance();
   } catch (cause) {
     failures.push(
-      `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(ThrownValueSchema.parse(cause))}`
+      `Skill or Global agent instructions reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(ThrownValueSchema.parse(cause))}`
     );
   }
 
@@ -407,7 +407,7 @@ async function finishInstallActivation(
 
   if (failures.length > 0) {
     throw new MonkeError(
-      `The ${options.installKind} install is active, but ${failures.length} post-activation step(s) are incomplete:\n${failures.join("\n")}`
+      `The ${options.installKind} install is active, but ${failures.length} ${failures.length === 1 ? "post-activation step is" : "post-activation steps are"} incomplete:\n${failures.join("\n")}`
     );
   }
 }

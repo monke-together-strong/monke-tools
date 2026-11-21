@@ -78,7 +78,6 @@ async function mt(
   return stdout;
 }
 
-/** Writes a fake command that records each invocation's arguments, one per line. */
 function installRecordingCommand(sandbox: Sandbox, name: string, body = "exit 0") {
   const log = path.join(sandbox.bin, `${name}.log`);
   writeExecutable(

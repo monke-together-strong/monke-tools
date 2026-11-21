@@ -32,7 +32,10 @@ const ConfiguredDirectorySchema = z.string().refine((value) => value.trim().leng
   message: "Must not be empty"
 });
 
-/** Validate a known Global instruction destination without changing it. */
+/**
+ * Validate a target's Global agent instructions file without modifying it; no-op for targets
+ * without one.
+ */
 export function preflightGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
@@ -46,7 +49,10 @@ export function preflightGlobalInstructions(
   assertGlobalInstructionsWritable(prepared.filePath);
 }
 
-/** Validate removal from a known Global instruction destination without changing it. */
+/**
+ * Validate Managed instruction section removal without modifying files; no-op for targets without
+ * Global agent instructions.
+ */
 export function preflightRemoveGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions

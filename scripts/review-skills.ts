@@ -15,7 +15,7 @@ export async function runReviewSkills(argv = process.argv.slice(2)) {
     });
   program
     .argument("<base>")
-    .argument("[head]", "Candidate source revision", "HEAD")
+    .argument("[head]", "Candidate Git revision", "HEAD")
     .option("--adapter <adapter>", "codiff or ms")
     .action(async (base, head, options) => {
       await reviewSkillRevisions(base, head, options);

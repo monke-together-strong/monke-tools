@@ -48,9 +48,8 @@ Environment:
     BETTERSTACK_QUERY_PASSWORD or BETTERSTACK_SQL_PASSWORD
 
 Notes:
-  - If --env-file is omitted, BETTERSTACK_ENV_FILE is loaded when set.
-  - If neither is set and .env.demo exists, it will be loaded automatically.
-  - query run validates that the query connection matches the requested source when a metadata token is available.
+  - Without --env-file, load BETTERSTACK_ENV_FILE when set, or .env.demo when present.
+  - With a metadata token, query run validates --table and the query endpoint against the source.
   - query run forwards the SQL text unchanged to Better Stack.`
     );
 
@@ -94,7 +93,7 @@ function createQueryRunCommand(parent: Command) {
       .command("run")
       .description("Run SQL against a Better Stack source.")
       .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
-      .requiredOption("--table <name>", "Better Stack SQL table name.")
+      .requiredOption("--table <name>", "Better Stack SQL table name (t<team_id>.<table_name>).")
       .option("--sql <query>", "Inline SQL text.")
       .option("--sql-file <path>", "Path to a file containing SQL text.")
       .option("--stdin", "Read SQL text from stdin.")
@@ -261,9 +260,9 @@ async function resolveQueryCredentials(options: QueryRunOptions, context: Resolv
         "BETTERSTACK_SQL_HOST"
       ]) ??
       (matchingConnection ? formatConnectionEndpoint(matchingConnection) : undefined),
-    `Missing query endpoint. Provide --url/--host or set BETTERSTACK_QUERY_URL, BETTERSTACK_SQL_URL, BETTERSTACK_QUERY_HOST, or BETTERSTACK_SQL_HOST. Expected ${
+    `Missing query endpoint. Provide --url or --host, or set BETTERSTACK_QUERY_URL, BETTERSTACK_SQL_URL, BETTERSTACK_QUERY_HOST, or BETTERSTACK_SQL_HOST. Expected ${
       matchingConnection?.host ??
-      `a Better Stack connection for team/source ${sourceMetadata?.teamName ?? context.sourceId}`
+      `a Better Stack connection for ${sourceMetadata ? `team ${sourceMetadata.teamName}` : `source ${context.sourceId}`}`
     }.`
   );
 
@@ -535,7 +534,9 @@ async function resolveSql(options: QueryRunOptions) {
   }
 
   if (process.stdin.isTTY) {
-    fail("Expected SQL on stdin, but stdin is a TTY.");
+    fail(
+      "Expected SQL on stdin, but stdin is a TTY. Pipe SQL into stdin, or use --sql or --sql-file."
+    );
   }
 
   const chunks: Buffer[] = [];

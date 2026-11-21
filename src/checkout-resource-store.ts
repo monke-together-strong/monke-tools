@@ -96,7 +96,9 @@ export class CheckoutResourceStore {
       !samePath(record.owner.sourceRoot, owner.sourceRoot) ||
       !samePath(record.owner.checkoutPath, owner.checkoutPath)
     ) {
-      throw new MonkeError(`Resource ownership mismatch at ${file}`);
+      throw new MonkeError(
+        `Resource ownership mismatch at ${file}. Inspect or remove the invalid record before retrying.`
+      );
     }
 
     return record;
@@ -198,7 +200,9 @@ export class CheckoutResourceStore {
         );
 
         if (path.basename(this.file(record.owner)) !== name) {
-          throw new MonkeError(`Resource record storage key mismatch: ${name}`);
+          throw new MonkeError(
+            `Resource record storage key mismatch at ${path.join(directory, name)}. Inspect or remove the misplaced record before retrying.`
+          );
         }
 
         return record;

@@ -156,7 +156,7 @@ function projectedRecoveryParent(source: string) {
   return path.resolve(realpathSync.native(ancestor), path.relative(ancestor, parent));
 }
 
-/** Restore source namespace links without following newly introduced directory aliases. */
+/** Restore original source directory links without following newly introduced directory aliases. */
 function prepareRecoveryParents(
   snapshot: ReturnType<typeof backupSourceFolders>,
   directory: string
@@ -374,7 +374,10 @@ function validateDeclaredSlugs(
   }
 }
 
-/** Include the publisher's reference imports without treating them as linked Skills. */
+/**
+ * Include the publisher's Repo import recipes (skills and references) as copies rather than linked
+ * skills.
+ */
 async function discoverLocalGuidance(
   recipe: SkillImportRecipe & { localSource: NonNullable<SkillImportRecipe["localSource"]> },
   workingDirectory: string,
@@ -521,7 +524,7 @@ export async function updateLocalSkillSource(options: {
 
       if (result.exitCode !== 0) {
         throw new MonkeError(
-          `Skill installer for ${recipe.source} exited with code ${result.exitCode}`
+          `Skill installer command for ${recipe.source} exited with code ${result.exitCode}`
         );
       }
     }

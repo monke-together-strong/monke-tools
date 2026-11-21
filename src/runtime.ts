@@ -748,7 +748,7 @@ export function getMonkeHome(runtime: Runtime) {
     : path.resolve(runtime.cwd, configuredHome);
 }
 
-/** Resolve the OS home directory used for external Agent skill roots. */
+/** Resolve the user's home directory, preferring `runtime.env.HOME` over `os.homedir()`. */
 export function getHomeDirectory(runtime: Runtime) {
   return runtime.env.HOME ?? homedir();
 }
@@ -782,7 +782,7 @@ type LockRelease = (() => void) & {
   protectProcessGroup: (pid: number) => void;
 };
 
-/** Run asynchronous Session work while holding the machine-wide Monke lock. */
+/** Run asynchronous work while holding the Monke home global lock. */
 export async function withGlobalLockAsync<T>(
   home: string,
   callback: (lock: OperationLock) => Promise<T>
@@ -790,7 +790,10 @@ export async function withGlobalLockAsync<T>(
   return await withLockPathAsync(path.join(home, "lock"), callback);
 }
 
-/** Run an asynchronous installation mutation under the machine-wide installation lock. */
+/**
+ * Run an asynchronous installation mutation while holding the Monke home Installation mutation
+ * lock.
+ */
 export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
   return await withLockPathAsync(path.join(home, "locks", "installation.lock"), callback);
 }
@@ -845,7 +848,7 @@ export function acquireCheckoutResourceLock(home: string, checkoutPath: string) 
   return release;
 }
 
-/** Run asynchronous work while holding a lock scoped inside the monke home directory. */
+/** Run asynchronous work while holding a lock scoped inside Monke home. */
 export async function withScopedLockAsync<T>(
   home: string,
   namespace: string,
@@ -1004,7 +1007,9 @@ function tryAcquireLockPath(lockPath: string) {
 
 function assertLockDeadline(lockPath: string, deadline: number) {
   if (Date.now() >= deadline) {
-    throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
+    throw new MonkeError(
+      `Timed out waiting for lock at ${lockPath}. Wait for the other mt command to finish, or remove the lock if no mt process is running, then retry.`
+    );
   }
 }
 

@@ -73,15 +73,22 @@ import { createOxlintConfig } from "@monke-together-strong/oxc-config/oxlint";
 export default createOxlintConfig();
 ```
 
-The Oxfmt preset formats JSDoc and uses a print width of 100. It formats first-party skill code and metadata while excluding imported skills, imported references, skill Markdown, and `AGENTS.md`. Consumer `ignorePatterns` append after these shared ignores; other consumer fields override the shared formatter defaults.
+The Oxfmt preset formats JSDoc and uses a print width of 100. It formats first-party skill code and metadata while excluding `**/routeTree.gen.ts`, imported skills, imported references, skill Markdown, and `AGENTS.md`. Consumer `ignorePatterns` append after these shared ignores. Other consumer fields override the shared formatter defaults.
 
-The default Oxlint preset composes Ultracite's core, anti-slop, and Vitest presets, enables type-aware linting and TypeScript type checking, and rejects console calls and direct environment access. Environment variables should be read and validated through a centralized configuration boundary. It uses `eslint-plugin-perfectionist` to sort object literals, destructuring, object types, interfaces, JSX props, enums, and heritage clauses while treating comments as intentional object and enum partitions, and disables Ultracite's `sort-keys` rule. It disables anti-slop's `no-array-filter-map` because its suggested `flatMap` and iterator-helper rewrites run slower than `filter().map()` on Bun. It also loads `eslint-plugin-jsdoc` through Oxlint's JavaScript-plugin compatibility layer to reject undefined JSDoc types that Oxlint does not yet implement natively. Files named `*.test.*`, `*.spec.*`, or stored under `__tests__` are assumed to use Vitest. Its framework-neutral test policy also covers files under `test/` and `tests/`, where `typescript/no-unsafe-type-assertion` is disabled because typed mock and fixture setup is not yet ergonomic enough to justify the churn.
+The default Oxlint preset composes Ultracite's core, anti-slop, and Vitest presets and adds these shared rules:
 
-Catch bindings and promise rejection callbacks use the name `cause`. Annotate rejection callbacks with `cause: unknown` and narrow the value before reading its properties. This aligns `unicorn/catch-error-name` with anti-slop's existing exception for unknown error parameters. Error helpers accepting `unknown` also use `cause`.
+- Enables type-aware linting and TypeScript type checking, and rejects console calls and direct environment access so environment variables are read and validated through a centralized configuration boundary.
+- Uses `eslint-plugin-perfectionist` to sort object literals, destructuring, object types, interfaces, JSX props, enums, and heritage clauses while treating comments as intentional object and enum partitions, and disables Ultracite's `sort-keys` rule.
+- Disables anti-slop's `no-array-filter-map` because its suggested `flatMap` and iterator-helper rewrites run slower than `filter().map()` on Bun.
+- Loads `eslint-plugin-jsdoc` through Oxlint's JavaScript-plugin compatibility layer to reject undefined JSDoc types that Oxlint does not yet implement natively.
+- Assumes Vitest for files named `*.test.*`, `*.spec.*`, `*.test-d.*`, `*.spec-d.*`, or stored under `__tests__/`.
+- Applies its framework-neutral test policy to those files plus files under `test/`, `tests/`, and `__mocks__/`, disabling `typescript/no-unsafe-type-assertion` because typed mock and fixture setup is not yet ergonomic enough to justify the churn.
+
+Catch bindings and promise rejection callbacks use the name `cause`. Annotate rejection callbacks with `cause: unknown` and narrow the value before reading its properties. Using `cause` aligns `unicorn/catch-error-name` with anti-slop's existing exception for unknown error parameters. Error helpers accepting `unknown` also use `cause`.
 
 When a function returns a value on some paths but not at its end, finish it with `return undefined`. `noImplicitReturns` rejects falling off the end, and `no-useless-return` rejects a final bare `return`. The preset disables `unicorn/no-useless-undefined`, which would otherwise flag `return undefined` whenever the return type is inferred.
 
-The preset disables `promise/prefer-catch`. `.then(ok, err)` and `.then(ok).catch(err)` are not equivalent: the `.catch` also receives failures thrown by `ok`. Oxlint offers no fix for the two-handler form for that reason.
+The preset disables `promise/prefer-catch`. `.then(ok, err)` and `.then(ok).catch(err)` are not equivalent. The `.catch` also receives failures thrown by `ok`. Oxlint offers no fix for the two-handler form for that reason.
 
 ### Framework presets
 
@@ -135,6 +142,6 @@ export default createOxlintConfig({
 });
 ```
 
-`extends`, `ignorePatterns`, `jsPlugins`, and `overrides` append after the preset's values. Consumer `rules`, `options`, and `settings` override the preset's defaults. Other Oxlint fields pass through at the root.
+`extends`, `ignorePatterns`, `jsPlugins`, and `overrides` append after the preset's values. Consumer `rules`, `options`, and `settings` override the preset's defaults. Passing `testFiles` replaces the default test-file list. Other Oxlint fields pass through at the root.
 
 The presets are published on public npm under the MIT license.

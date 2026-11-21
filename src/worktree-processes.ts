@@ -235,7 +235,9 @@ export function stopStaleWorktreeProcesses(
     throw new MonkeError(
       `Could not stop stale process${remaining.length === 1 ? "" : "es"} in ${worktreePath}: ${remaining
         .map((candidate) => `${candidate.pid} ${candidate.command}`)
-        .join(", ")}`
+        .join(
+          ", "
+        )}. Stop the listed process${remaining.length === 1 ? "" : "es"} manually and retry.`
     );
   }
 

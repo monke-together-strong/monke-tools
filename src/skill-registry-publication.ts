@@ -293,7 +293,9 @@ export function initializeSkillRegistry(
     const stat = lstatSync(target, { throwIfNoEntry: false });
 
     if (stat && !stat.isSymbolicLink()) {
-      throw new MonkeError(`Registry guidance link is occupied: ${target}`);
+      throw new MonkeError(
+        `Skill registry guidance link is occupied by a non-symlink entry: ${target}. Move or remove it and retry.`
+      );
     }
 
     rmSync(target, { force: true });
@@ -329,7 +331,9 @@ export function distributeRegistry(runtime: Runtime, root: string, scope?: Skill
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
 
   if (!config.skillInstallPreference) {
-    throw new MonkeError("Select targets first with: mt skills configure");
+    throw new MonkeError(
+      "No Skill install targets are configured. Select them with: mt skills configure"
+    );
   }
 
   reconcileSkillNamespaces({

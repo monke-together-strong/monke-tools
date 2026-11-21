@@ -39,9 +39,7 @@ export function setSkillMetadata(
   const skillEntryPath = path.join(skillPath, "SKILL.md");
 
   if (!existsSync(skillEntryPath) || !lstatSync(skillEntryPath).isFile()) {
-    throw new MonkeError(
-      `Expected staged Skill entry document to be a regular file at ${skillEntryPath}`
-    );
+    throw new MonkeError(`Expected Skill entry document to be a regular file at ${skillEntryPath}`);
   }
 
   const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
@@ -94,16 +92,12 @@ export function setSkillMetadata(
   const legacyOpenaiMetadataPath = path.join(skillPath, "agents", "openai.yml");
 
   if (existsSync(agentsPath) && !lstatSync(agentsPath).isDirectory()) {
-    throw new MonkeError(
-      `Expected staged Skill agents path to be a regular directory at ${agentsPath}`
-    );
+    throw new MonkeError(`Expected Skill agents path to be a regular directory at ${agentsPath}`);
   }
 
   for (const metadataPath of [openaiMetadataPath, legacyOpenaiMetadataPath]) {
     if (existsSync(metadataPath) && !lstatSync(metadataPath).isFile()) {
-      throw new MonkeError(
-        `Expected staged Codex metadata to be a regular file at ${metadataPath}`
-      );
+      throw new MonkeError(`Expected Codex metadata to be a regular file at ${metadataPath}`);
     }
   }
 

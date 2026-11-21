@@ -37,7 +37,9 @@ export function assertWorktreeUnlocked(entry: WorktreeEntry) {
   }
 
   const reason = entry.locked === "" ? "" : `: ${entry.locked}`;
-  throw new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
+  throw new MonkeError(
+    `Cannot remove locked worktree ${entry.path}${reason}. Unlock it with git worktree unlock first.`
+  );
 }
 
 export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: string) {
@@ -66,7 +68,7 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
     !samePath(context.sourceRoot, sourceRoot) ||
     !samePath(context.worktreeRoot, sourceRoot)
   ) {
-    throw new MonkeError(`Recorded Source checkout is not that repository's Source checkout`);
+    throw new MonkeError(`Recorded path ${sourceRoot} is not a repository's Source checkout.`);
   }
 }
 
@@ -109,7 +111,7 @@ export function preflightWorktreeRemoval(
   return { forceGitRemoval, worktree };
 }
 
-/** Validate one registered linked worktree before a foreground removal. */
+/** Validate one registered linked worktree before inspection or removal. */
 export function validateRegisteredWorktreeForRemoval(
   runtime: Runtime,
   sourceRoot: string,
@@ -126,7 +128,7 @@ export function validateRegisteredWorktreeForRemoval(
   assertWorktreeUnlocked(entry);
 
   if (samePath(entry.path, sourceRoot)) {
-    throw new MonkeError(`Cannot Chop the Source checkout at ${sourceRoot}`);
+    throw new MonkeError(`Cannot remove the Source checkout at ${sourceRoot}.`);
   }
 
   const nested = worktrees.find(
@@ -158,7 +160,7 @@ function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
 
   if (status.trim() !== "") {
     throw new MonkeError(
-      `Cannot Chop dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`
+      `Cannot remove dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`
     );
   }
 

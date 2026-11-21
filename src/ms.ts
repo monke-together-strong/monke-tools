@@ -107,7 +107,7 @@ async function resolveSourceArgs(runtime: Runtime, plan: ComparisonPlan) {
     }
 
     default: {
-      throw new MonkeError("Unsupported Monke See comparison source.");
+      throw new MonkeError("Unsupported Monke See Diff source.");
     }
   }
 }
@@ -128,7 +128,7 @@ async function resolveProviderArgs(
 
   if (executable === null) {
     throw new MonkeError(
-      `${command} is required to resolve this Diff review; provide a full PR/MR URL or install and authenticate ${command}.`
+      `${command} is required to resolve this Diff review; provide a full pull request or merge request URL or install and authenticate ${command}.`
     );
   }
 

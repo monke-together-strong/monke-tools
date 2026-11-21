@@ -1652,7 +1652,7 @@ skillInstallPreference:
     });
 
     await expect(runCliAsync(["skills", "configure"], runningCommand)).rejects.toThrow(
-      /Active tool install changed[\s\S]*rerun mt skills configure/u
+      /Active tool install changed[\s\S]*rerun the command/u
     );
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({

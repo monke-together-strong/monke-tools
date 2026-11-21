@@ -1,11 +1,12 @@
 # Own created and adopted skill files in Monke home
 
 New global skills default to Monke management unless the user explicitly requests
-a specific harness. Creation and adoption establish one editable source in Monke
-home and reuse the existing personal Skill registry and Skill projections. This
-keeps editing authority independent of whichever harness created the skill;
-using a harness folder as the authoritative source would make that harness's
-installation and cleanup lifecycle control every shared copy.
+a specific Agent harness. Creation and adoption establish one editable source in
+Monke home and reuse the existing personal Skill registry and Skill projections.
+Owning the source in Monke home keeps editing authority independent of whichever
+Agent harness created the skill. Using an Agent harness folder as the
+authoritative source would make that harness's installation and cleanup
+lifecycle control every shared copy.
 
 Existing local imports can continue to retain an external source through
 `mt skills add --link`. Adoption transfers source ownership rather than merely

@@ -240,7 +240,7 @@ apps:
     }).toThrow(`Bootstrap command failed for ${root}: exit 7`);
   });
 
-  it("removes dead session state during cleanup but leaves repo reservations intact", () => {
+  it("removes Session state for a missing Session worktree during Cleanup while leaving Port reservations intact", () => {
     const sandbox = makeTempDir("cleanup");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

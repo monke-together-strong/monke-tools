@@ -1,14 +1,14 @@
-# Spec Orchestration
+# Spec orchestration
 
-Use this when `$implement` is given a Spec that has implementation issues attached.
+Use this workflow when `$implement` is given a Spec that has implementation issues attached.
 
 The goal is the entire Spec implemented on one integration branch. The Spec
-`$implement` agent coordinates tickets; each ticket runs `$implement` and owns
+`$implement` agent coordinates tickets. Each ticket runs `$implement` and owns
 its implementation, code review, and fixes.
 
 The tickets are not a list of steps. They are a **task graph** with blocking
 relationships. The **frontier** is the set of tickets whose blockers are complete
-and integrated; tickets without blockers are ready immediately.
+and integrated. Tickets without blockers are ready immediately.
 
 Delegate with the prompt below, including a supplied review base when applicable.
 Add user constraints only when the worker cannot obtain them from the ticket or
@@ -37,7 +37,7 @@ checkout.
    shipping review.
    Use the user-supplied review base, or the branch point from the intended PR
    base branch. Resolve and record its full commit SHA with
-   `git rev-parse <review base>^{commit}`; stop to ask if none can be identified.
+   `git rev-parse <review base>^{commit}`. Stop to ask if none can be identified.
 4. Launch a fresh implementer subagent for each ticket on the frontier,
    using the delegation prompt below.
 5. After a worker finishes implementation, review, and fixes, collect its commit
@@ -46,8 +46,8 @@ checkout.
    worker using that checkout to finish first.
    Work already on that branch needs no merge. Check that the combined changes
    work before treating a ticket as integrated.
-   After verified integration, run `mt chop <worker-session>` from source to clean
-   up each separate worker Session.
+   After verified integration, run `mt chop <worker-session>` from the Source
+   checkout to remove each separate worker Session.
 6. If integration changes the frontier, launch implementer subagents for the
    newly ready tickets immediately, while unrelated tickets continue. A blocked
    ticket pauses only its dependents. Record newly discovered dependencies
@@ -56,8 +56,8 @@ checkout.
    ticket before delegating it, with links to source evidence. Findings that
    block the current ticket remain its responsibility until fixed or explicitly
    reassigned.
-8. Complete remaining Spec acceptance and integration work using scoped checks;
-   assign code fixes to an implementer. Resolve each deferred finding through
+8. Complete remaining Spec acceptance and integration work using scoped checks.
+   Assign code fixes to an implementer. Resolve each deferred finding through
    a fix, verification, or explicit user acceptance of exclusion from scope.
    Return the integration branch, final commit SHA, recorded review base SHA,
    and concise verification summary.

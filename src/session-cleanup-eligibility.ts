@@ -95,7 +95,7 @@ export interface CleanupSourceInspection {
   message?: string;
   sourceRoot: string;
   status: "inspected" | "missing" | "unavailable";
-  /** Registered linked worktrees, including stale registrations, excluding the Source. */
+  /** Registered linked worktrees, including stale registrations, excluding the Source checkout. */
   worktreeCount: number | null;
 }
 
@@ -290,7 +290,7 @@ function withRelevantPullRequests(snapshot: SessionCleanupEvidence): SessionClea
   };
 }
 
-/** Discover retained Sessions globally without acquiring a lock or changing Git/state. */
+/** Discover retained Sessions globally without acquiring a lock or changing Git or Session state. */
 export async function inspectSessionCleanup(
   runtime: Runtime,
   home: string,
@@ -305,7 +305,7 @@ export async function inspectSessionCleanup(
   } = {}
 ) {
   const readOnly = readOnlyCleanupRuntime(runtime);
-  // Collection memoizes per-Source structure; revalidation and discovery below read fresh.
+  // Collection memoizes per-Source-checkout structure; revalidation and discovery below read fresh.
   const collector = memoizeRepoStructure(runtime);
   const collectorReadOnly = readOnlyCleanupRuntime(collector);
   const scan = scanSessionStates(home);

@@ -102,14 +102,14 @@ function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
 
   if (resolveActiveInstallRoot(monkeHome) !== fixedRoot) {
     throw new MonkeError(
-      "The Active tool install changed while mt skills configure was waiting; rerun mt skills configure"
+      "The Active tool install changed while waiting for the Installation mutation lock; rerun the command"
     );
   }
 
   return loadToolInstall(fixedRoot);
 }
 
-/** Reconcile source-backed guidance from a Local checkout under the installation lock. */
+/** Reconcile guidance from the Installed source checkout under the Installation mutation lock. */
 export function runLocalInstallSkills(
   runtime: Runtime,
   sourceCheckout: string,
@@ -122,7 +122,7 @@ export function runLocalInstallSkills(
 
     if (activeInstall?.manifest.installKind !== "local") {
       throw new MonkeError(
-        "mt skills local-install requires an Active Local tool install; run vpr install:local from the source checkout"
+        "mt skills local-install requires an Active Local tool install; run vpr install:local from the Source checkout"
       );
     }
 
@@ -139,7 +139,10 @@ export function runLocalInstallSkills(
   });
 }
 
-/** Reconcile guidance from a Local source checkout or Release install while the lock is held. */
+/**
+ * Reconcile guidance from a Source checkout or Release install while the Installation mutation lock
+ * is held.
+ */
 export async function runInstallSkillsLocked(
   runtime: Runtime,
   guidanceSourceRoot: string,
@@ -180,7 +183,10 @@ export async function runInstallSkillsLocked(
   );
 }
 
-/** Reconcile Release-mode guidance after core activation. */
+/**
+ * Reconcile Release install guidance after Install activation while the Installation mutation lock
+ * is held.
+ */
 export async function runReleaseInstallSkillsLocked(
   runtime: Runtime,
   releaseInstallRoot: string,

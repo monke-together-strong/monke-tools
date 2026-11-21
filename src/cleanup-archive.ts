@@ -41,7 +41,9 @@ export function archiveCleanupFiles(runtime: Runtime, home: string, evidence: Cl
       (entry) => entry.head !== null || entry.index !== null || entry.disk === null
     )
   ) {
-    throw new MonkeError(`Untracked archive evidence changed at ${worktreePath}`);
+    throw new MonkeError(
+      `Untracked archive evidence changed at ${worktreePath}. Rerun mt cleanup once edits settle.`
+    );
   }
 
   const parent = path.join(home, "archives", "cleanup");
@@ -71,7 +73,9 @@ export function archiveCleanupFiles(runtime: Runtime, home: string, evidence: Cl
     const oid = gitBlobOid(bytes);
 
     if (oid !== entry.disk?.oid) {
-      throw new MonkeError(`Untracked file changed during archival: ${source}`);
+      throw new MonkeError(
+        `Untracked file changed during archival: ${source}. Rerun mt cleanup once edits settle.`
+      );
     }
 
     if (link) {
@@ -107,7 +111,9 @@ export function archiveCleanupFiles(runtime: Runtime, home: string, evidence: Cl
   syncFile(manifest);
 
   if (inspectPendingWork(runtime, worktreePath, evidence.head)?.fingerprint !== proof.fingerprint) {
-    throw new MonkeError(`Untracked files changed during archival: ${worktreePath}`);
+    throw new MonkeError(
+      `Untracked files changed during archival: ${worktreePath}. Rerun mt cleanup once edits settle.`
+    );
   }
 
   for (const directory of [...directories].toSorted((a, b) => b.length - a.length)) {
@@ -153,14 +159,18 @@ export function assertCleanupArchive(
     manifest.worktreePath !== evidence.candidate.worktreePath ||
     manifest.files.length !== pending.paths.length
   ) {
-    throw new MonkeError("Cleanup archive manifest changed");
+    throw new MonkeError(
+      `Cleanup archive manifest changed at ${archivePath}. Rerun mt cleanup to re-archive and verify.`
+    );
   }
 
   for (const entry of pending.paths) {
     const saved = manifest.files.find((file) => file.path === entry.path);
 
     if (saved?.oid !== entry.disk?.oid || saved?.mode !== entry.disk?.mode) {
-      throw new MonkeError("Cleanup archive entry changed");
+      throw new MonkeError(
+        `Cleanup archive entry changed for ${entry.path} in ${archivePath}. Rerun mt cleanup to re-archive and verify.`
+      );
     }
 
     assertArchivedFile(archivePath, entry.path, entry.disk);
@@ -177,7 +187,9 @@ function assertArchivedFile(
 
   while (containsPath(archivePath, directory)) {
     if (!lstatSync(directory).isDirectory()) {
-      throw new MonkeError("Cleanup archive directory replaced");
+      throw new MonkeError(
+        `Cleanup archive directory replaced at ${directory}. Rerun mt cleanup to re-archive and verify.`
+      );
     }
 
     directory = path.dirname(directory);
@@ -187,19 +199,25 @@ function assertArchivedFile(
   const link = expected?.mode === "120000";
 
   if (link ? !stat.isSymbolicLink() : !stat.isFile()) {
-    throw new MonkeError("Cleanup archive file replaced");
+    throw new MonkeError(
+      `Cleanup archive file replaced at ${file}. Rerun mt cleanup to re-archive and verify.`
+    );
   }
 
   // oxlint-disable-next-line eslint/no-bitwise -- stat.mode exposes executable permission only as mode bits.
   if (!link && ((stat.mode & 0o111) !== 0) !== (expected?.mode === "100755")) {
-    throw new MonkeError("Cleanup archive executable mode changed");
+    throw new MonkeError(
+      `Cleanup archive executable mode changed at ${file}. Rerun mt cleanup to re-archive and verify.`
+    );
   }
 
   const bytes = link ? readlinkSync(file, { encoding: "buffer" }) : readFileSync(file);
   const oid = gitBlobOid(bytes);
 
   if (oid !== expected?.oid) {
-    throw new MonkeError("Cleanup archive content changed");
+    throw new MonkeError(
+      `Cleanup archive content changed at ${file}. Rerun mt cleanup to re-archive and verify.`
+    );
   }
 }
 

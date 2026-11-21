@@ -11,7 +11,7 @@ case "$SYSTEM:$MACHINE" in
   Darwin:arm64) PLATFORM=macos-arm64 ;;
   Linux:x86_64 | Linux:x64) PLATFORM=linux-x64 ;;
   *)
-    printf 'Unsupported platform %s/%s; supported platforms: %s\n' "$SYSTEM" "$MACHINE" "$SUPPORTED_PLATFORMS" >&2
+    printf 'Unsupported platform %s/%s. Supported platforms: %s.\n' "$SYSTEM" "$MACHINE" "$SUPPORTED_PLATFORMS" >&2
     exit 1
     ;;
 esac
@@ -132,7 +132,7 @@ if ! github_curl -o "$checksums_path" "$release_download/$checksums_name"; then
   exit 1
 fi
 if ! actual_checksums_digest=$(sha256_file "$checksums_path"); then
-  printf 'SHA-256 verification is unavailable; install sha256sum or shasum\n' >&2
+  printf 'SHA-256 verification is unavailable. Install sha256sum or shasum and retry.\n' >&2
   exit 1
 fi
 if [ "$actual_checksums_digest" != "${checksums_digest#sha256:}" ]; then
@@ -153,7 +153,7 @@ expected_checksum=$(awk -v name="$archive_name" '
 }
 
 if ! actual_checksum=$(sha256_file "$archive_path"); then
-  printf 'SHA-256 verification is unavailable; install sha256sum or shasum\n' >&2
+  printf 'SHA-256 verification is unavailable. Install sha256sum or shasum and retry.\n' >&2
   exit 1
 fi
 
@@ -162,7 +162,7 @@ if [ "$actual_checksum" != "$expected_checksum" ]; then
   exit 1
 fi
 if [ "$actual_checksum" != "${asset_digest#sha256:}" ]; then
-  printf 'Release archive checksum does not match GitHub asset digest metadata (%s != %s)\n' "$actual_checksum" "${asset_digest#sha256:}" >&2
+  printf 'Release archive checksum does not match stable catalog digest metadata (%s != %s)\n' "$actual_checksum" "${asset_digest#sha256:}" >&2
   exit 1
 fi
 

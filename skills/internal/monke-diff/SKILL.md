@@ -6,7 +6,7 @@ description: Open visual diffs with mt. Use only when the user asks to see, revi
 # Monke diff
 
 Use `mt diff --help` to choose the comparison and `mt diff configure` to set the
-machine's adapter. Codiff opens on the user's screen. Run this skill only in
+machine's adapter. Codiff opens on the user's screen. Run `mt diff` only in
 the user's thread in response to their visual diff request. Monke See prints
 a review URL. Give that URL to the user.
 

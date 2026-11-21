@@ -125,8 +125,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "no-script-url": "off",
           "node/no-process-env": "off",
           "require-await": "off",
-          // TODO: Reconsider after test generators and setup provide ergonomic, fully typed mocks and fixtures.
           "typescript/no-dynamic-delete": "off",
+          // TODO: Reconsider typescript/no-unsafe-type-assertion after test generators and setup provide ergonomic, fully typed mocks and fixtures.
           "typescript/no-unsafe-type-assertion": "off",
           "typescript/restrict-template-expressions": "off",
           "typescript/unbound-method": "off",

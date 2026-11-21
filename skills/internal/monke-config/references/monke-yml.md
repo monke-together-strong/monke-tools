@@ -1,8 +1,8 @@
 # monke.yml reference
 
 Commit `monke.yml` to share it, or gitignore it in the Source checkout to keep it
-local. Spawns use the local file when their branch has none and copy it into the
-Session worktree; list gitignored resource modules in `seedPaths`.
+local. Spawn uses the local file when the branch has none and copies it into the
+Session worktree. List gitignored resource modules in `seedPaths`.
 
 ```yaml
 apps:
@@ -26,9 +26,9 @@ bootstrapCommand: bun install --frozen-lockfile
 
 ## Env and dependencies
 
-`apps` maps owned port keys to env variables. App `path` is repo-relative and may be `.`; `envFile` is app-relative and defaults to `.env`. Set it explicitly for files such as `.env.local`.
+`apps` maps owned port keys to env variables. App `path` is repo-relative and may be `.`. `envFile` is app-relative and defaults to `.env`. Set it explicitly for files such as `.env.local`.
 
-`external` points to dependency repo roots, each with its own `monke.yml`. `pathEnv` writes the dependency checkout path into the current repo's root `.env`. Each external mapping must name a port owned by that dependency and an app in the declaring repo. In this example, `dep` must own `DEP_POSTGRES_PORT`.
+`external` points to dependency repo roots, each with its own `monke.yml`. `pathEnv` writes the relative dependency checkout path into the current repo's root `.env`. Each external mapping must name a port owned by that dependency and an app in the declaring repo. In this example, `dep` must own `DEP_POSTGRES_PORT`.
 
 ## Seed and bootstrap
 
@@ -37,7 +37,7 @@ List extra local files or directories in `seedPaths`. Spawn seeds env files,
 `.claude/settings.local.json`, `PR.md`, and `monke.yml` automatically. It
 preserves existing Session files.
 
-`bootstrapCommand` runs in the session worktree after env/path and deterministic resource values are written. Dynamic resource commands run afterward so their modules can use installed dependencies.
+`bootstrapCommand` runs in the Session worktree after port mappings, dependency paths, and deterministic resource values are written. Automatic resource commands run afterward so their modules can use installed dependencies.
 
 If bootstrap generates files with absolute paths, disable shared caching for
 that task. For example, set `"cache": false` on a Turbo task that generates
@@ -47,8 +47,8 @@ Prisma clients into the worktree.
 
 `resources.values` contains literal strings with `${user}`, `${id}`, and
 `${session}` placeholders. Use `${id}` for a value that must be stable and distinct per checkout.
-Use `${session}` only for Session worktrees. Setup writes the resolved values
-to root `.env`.
+Use `${session}` only for Session worktrees. Setup and Spawn write the resolved
+values to root `.env`.
 
 ```yaml
 resources:
@@ -62,7 +62,7 @@ resources:
       timeoutSeconds: 60
 ```
 
-A repo-relative JS/TS module exports `acquire` and, for external resources,
+A repo-relative JavaScript or TypeScript module exports `acquire` and, for external resources,
 `release`:
 
 ```ts
@@ -89,9 +89,9 @@ Acquisition receives deterministic values through the environment. For an extern
 allocation, export `release({ owner, outputs, values })` and release only the
 resource identified by the recorded outputs. Make both exports safe to retry.
 
-Automatic acquisition runs after Session bootstrap. For a resource that needs
-additional setup, choose `acquire: explicit` and follow the
-[resource procedure](../../../references/internal/RESOURCES.md).
+Automatic acquisition (`acquire: automatic`, the default) runs after Session
+bootstrap. For a resource that needs additional setup, choose `acquire: explicit`
+and follow the [resource procedure](../../../references/internal/RESOURCES.md).
 
 ## Cleanup
 
@@ -112,7 +112,7 @@ Give each checkout its own Compose project before starting containers:
 ```yaml
 resources:
   values:
-    COMPOSE_PROJECT_NAME: myapp-${id}
+    COMPOSE_PROJECT_NAME: banana-${id}
 cleanupCommand: docker compose --profile '*' down
 ```
 
@@ -120,8 +120,8 @@ Run `mt setup` before starting containers in a Source checkout. Spawn prepares
 the values for a Session worktree. Point Compose at the checkout's root `.env`
 so startup uses the same project name that Session cleanup receives.
 
-Match startup's Compose files and env loading, and ensure startup does not override
-the project name with `-p` or a different environment value. Enable the profiles
+Match startup's Compose files and env loading. Do not override the project name
+during startup with `-p` or a different environment value. Enable the profiles
 the repo uses (`'*'` enables all). Preserve volumes by default. Use `--remove-orphans`
 only when all containers in the project belong to this checkout.
 
@@ -150,8 +150,8 @@ skills:
         description: Use when editing Obsidian Markdown notes.
 ```
 
-Run `mt skills update --repo` to resolve each `source` to a commit pin before
-restoring it. To rename a skill locally, set `slug` to the local name and
+Omit `commit` for a new source, then run `mt skills update --repo` to pin and
+write its files. To rename a skill locally, set `slug` to the local name and
 `selector` to the upstream name. Per-skill `modelInvocation` overrides the source
 default. Choose `kind: reference` for files that another skill should read
 without making them invocable.

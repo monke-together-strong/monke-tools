@@ -193,7 +193,9 @@ function resolveExplicitComparison(
     const plan = planBranchComparison(runtime, context, options.branch);
 
     if (!plan) {
-      throw new MonkeError(`Diff branch ${options.branch} has no merge base with HEAD.`);
+      throw new MonkeError(
+        `Diff branch ${options.branch} has no merge base with HEAD. Choose a branch with shared history or pass a direct commit range (base..head).`
+      );
     }
 
     return plan;
@@ -266,7 +268,9 @@ function validateProviderTarget(
           cwd: context.worktreeRoot
         }).exitCode !== 0))
   ) {
-    throw new MonkeError(`Invalid Diff ${provider} target: ${value}`);
+    throw new MonkeError(
+      `Invalid Diff ${provider} target: ${value ?? ""}. Pass a ${provider === "pr" ? "PR number or branch name" : "MR number"}.`
+    );
   }
 }
 
@@ -296,7 +300,9 @@ function resolveRangeComparison(
       cwd: context.worktreeRoot
     }).exitCode !== 0
   ) {
-    throw new MonkeError(`Diff range ${target} has no merge base.`);
+    throw new MonkeError(
+      `Diff range ${target} has no merge base. Use base..head for a direct range without a merge base.`
+    );
   }
 
   return { base, head, kind: "range", symmetric, worktreePath: context.worktreeRoot };

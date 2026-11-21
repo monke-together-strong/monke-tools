@@ -93,7 +93,9 @@ export async function cleanupOrdinaryWorktrees(
         lock.assertHeld();
 
         if (scanSessionStates(home).fingerprint !== fingerprint) {
-          throw new MonkeError("Session ownership changed during ordinary cleanup");
+          throw new MonkeError(
+            "Session ownership changed during Ordinary worktree cleanup. Inspect again before retrying."
+          );
         }
 
         assertUnowned(runtime, home, worktree, options.sourceRoots);
@@ -101,7 +103,9 @@ export async function cleanupOrdinaryWorktrees(
         const changed = revalidateCleanupEvidence(runtime, evidence);
 
         if (changed) {
-          throw new MonkeError(`Ordinary worktree changed: ${changed.code}`);
+          throw new MonkeError(
+            `Ordinary worktree changed during inspection (${changed.code}). Inspect again before retrying.`
+          );
         }
       };
 
@@ -116,7 +120,9 @@ export async function cleanupOrdinaryWorktrees(
       });
 
       if (stopped.recent.length > 0) {
-        throw new MonkeError("Ordinary worktree has recent running processes");
+        throw new MonkeError(
+          "Ordinary worktree has running processes under a day old. Stop them or wait before retrying."
+        );
       }
 
       if (evidence.branch === null && evidence.head) {
@@ -142,7 +148,9 @@ export async function cleanupOrdinaryWorktrees(
         scanWorktreeProcesses(runtime, [worktree.worktreePath]).treesUnder(worktree.worktreePath)
           .length > 0
       ) {
-        throw new MonkeError("Ordinary worktree became active during recovery");
+        throw new MonkeError(
+          "Ordinary worktree started new processes during recovery. Stop them and inspect the worktree before retrying."
+        );
       }
 
       const checked = preflightWorktreeRemoval(

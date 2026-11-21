@@ -52,7 +52,7 @@ const ComparisonSchema = z.object({
 export interface CleanupCandidate {
   allowDetached?: boolean;
   archiveUntracked?: boolean;
-  /** Set only when retained Session membership proves this is a dependency. */
+  /** Set from retained Session membership ("root" or "dependency"); omitted for unowned worktrees. */
   role?: "root" | "dependency";
   /** Retained Session identity; never inferred from a directory name. */
   sessionBranch?: string;

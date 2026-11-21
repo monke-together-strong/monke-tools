@@ -874,7 +874,7 @@ function mergeAlternatePublisherCatalog(options: {
       skillDirectoryDigest(previous.directory) !== skillDirectoryDigest(directory)
     ) {
       throw new MonkeError(
-        `Ambiguous Skill selector ${item.selector} in ${source}; default and internal discovery deliver different guidance`
+        `Ambiguous Skill import selector ${item.selector} in ${source}; default and internal discovery deliver different guidance`
       );
     }
 
@@ -1198,7 +1198,7 @@ export async function stageLockedRecipe(
   return output;
 }
 
-/** Hashes delivered paths, bytes, executable bits and confined symlink targets. */
+/** Hashes delivered paths, bytes, executable bits, and confined symlink targets. */
 export function guidanceDigest(
   repoRoot: string,
   guidance: readonly SkillImportRecipeSkill[],

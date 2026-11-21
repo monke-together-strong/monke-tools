@@ -99,7 +99,7 @@ describe("shell navigation", () => {
     expect(readFileSync(directivePath, "utf-8")).toBe(worktreeRoot);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain(
-      `Spawned or updated session banana\nRequested shell switch to ${worktreeRoot}`
+      `Spawned or updated Session banana\nRequested shell switch to ${worktreeRoot}`
     );
   });
 

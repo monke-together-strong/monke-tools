@@ -36,7 +36,7 @@ function resolveCheckout(runtime: Runtime) {
 
   if (!context.isSourceCheckout && owners.length !== 1) {
     throw new MonkeError(
-      "Resource commands require a source checkout or an owned Session worktree"
+      "Resource commands require a Source checkout or a Session worktree. Run from the Source checkout, or run mt materialize --adopt first to adopt this Ordinary worktree."
     );
   }
 

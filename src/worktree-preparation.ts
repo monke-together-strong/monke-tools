@@ -287,13 +287,13 @@ async function ensureSessionWorktree(
 
   if (branchMatch && path.normalize(branchMatch.path) !== path.normalize(expectedPath)) {
     throw new MonkeError(
-      `Session "${session}" already exists at unexpected path ${branchMatch.path}; expected ${expectedPath}`
+      `Session "${session}" already exists at unexpected path ${branchMatch.path}; expected ${expectedPath}. Move or remove that worktree, or use a different Session name.`
     );
   }
 
   if (pathMatch && pathMatch.branch !== session) {
     throw new MonkeError(
-      `Worktree ${expectedPath} exists but is on branch ${pathMatch.branch ?? "detached"} instead of ${session}`
+      `Worktree ${expectedPath} exists but is on branch ${pathMatch.branch ?? "detached"} instead of ${session}. Switch it back to "${session}" or remove it before retrying.`
     );
   }
 
@@ -364,7 +364,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (branchExists(runtime, sourceRoot, session)) {
     throw new MonkeError(
-      `Session branch "${session}" already exists for ${sourceRoot}; -m and --from require a fresh Session branch`
+      `Session branch "${session}" already exists for ${sourceRoot}; -m and --from require a fresh Session branch. Choose a new Session name, or remove the existing branch first.`
     );
   }
 
@@ -374,7 +374,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (branchMatch) {
     throw new MonkeError(
-      `Session "${session}" already has a worktree at ${branchMatch.path}; -m and --from require a fresh Session worktree`
+      `Session "${session}" already has a worktree at ${branchMatch.path}; -m and --from require a fresh Session worktree. Choose a new Session name, or remove the existing worktree first.`
     );
   }
 
@@ -387,7 +387,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (pathMatch || existsSync(expectedPath)) {
     throw new MonkeError(
-      `Session worktree path collision at ${expectedPath}; -m and --from require an unused ${path.basename(sourceRoot)}/${session} path`
+      `Session worktree path collision at ${expectedPath}; -m and --from require an unused ${path.basename(sourceRoot)}/${session} path. Choose a new Session name, or remove the existing directory first.`
     );
   }
 }
@@ -399,7 +399,7 @@ function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session
   });
 
   if (result.exitCode !== 0) {
-    throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
+    throw new MonkeError(`Invalid Session name "${session}": must be a valid Git branch name`);
   }
 }
 

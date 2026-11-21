@@ -1,6 +1,6 @@
 # monke-tools
 
-monke-tools manages workspace Sessions across a root repo and its dependencies,
+monke-tools manages workspace Sessions across a Root repo and its Dependency repos,
 and distributes shared and personal agent guidance across Consumer repos.
 This file and the references below form one glossary, split by domain area.
 
@@ -19,13 +19,13 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Session**: A named local workspace for one **Root repo** and its **Dependency repos**. Its name is the branch it expects in each participating worktree. _Avoid_: Branch, environment, sandbox
 
-**Source checkout**: The original working copy in a Git clone, shared as the source for its linked worktrees. A **Session** is created from one. _Avoid_: Main worktree, root worktree
+**Source checkout**: The original working copy in a Git clone, shared as the source for its linked worktrees. _Avoid_: Main worktree, root worktree
 
 **Session worktree**: A linked Git worktree owned by one **Session** for one participating repo.
 
 **Ordinary worktree**: A linked Git worktree that is not owned by a **Session**. _Avoid_: Non-Monke worktree, external worktree, unmanaged Session
 
-**Root repo**: The source repo from which a session was requested and whose dependency graph defines the session scope. _Avoid_: Main repo, parent repo
+**Root repo**: The source repo from which a **Session** was requested and whose dependency graph defines the **Session** scope. _Avoid_: Main repo, parent repo
 
 **Dependency repo**: A repo reachable through the **Root repo**'s declared dependencies, directly or through another dependency. It participates in the same **Session**. _Avoid_: External repo, child repo
 
@@ -45,7 +45,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Seed material**: Files from the **Source checkout** used to fill missing content in a **Session worktree** during **Worktree preparation**.
 
-**Bootstrap command**: A repo-scoped shell command run after env syncing to prepare a materialized worktree.
+**Bootstrap command**: A repo-scoped shell command run after env syncing during **Repo materialization** to prepare a **Session worktree**.
 
 **Path env**: A root-level env variable that points from one repo to a dependency repo's path.
 
@@ -57,7 +57,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **External mapping**: A rule that binds one app env variable to a port key owned by a dependency repo.
 
-**Assigned port**: The concrete numeric port chosen for a port key within one session. _Avoid_: Port key, reserved port
+**Assigned port**: The concrete numeric port chosen for a port key within one **Session**. _Avoid_: Port key, reserved port
 
 **Port reservation**: The persisted block of port numbers from which a repo allocates **Assigned ports** to Sessions. _Avoid_: Port range, sticky ports
 
@@ -71,7 +71,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Setup**: Reconciliation of a checkout's project skill links and, where configured, its dependency paths and deterministic resource values. _Avoid_: Materialize, bootstrap
 
-**Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target performs **Session removal**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
+**Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target performs **Session removal**. An Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
 **Cleanup**: The operation that inspects retained Sessions across all Root repos and removes **Cleanup-eligible Sessions** through **Session removal**. _Avoid_: Delete session, prune repos
 
@@ -85,7 +85,7 @@ Historical decisions live in [docs/adr](docs/adr).
   Session state. The same repo can participate in different Sessions.
 - An App belongs to one repo and may have multiple Local mappings. A Port key
   has one owner across the session graph. Local mappings consume that repo's
-  keys; External mappings consume dependency-owned keys.
+  keys. External mappings consume dependency-owned keys.
 - Each Assigned port belongs to one Port key in a Session. A repo's Port
   reservation survives **Session removal** for future allocations.
 - Consumer repo describes tool usage. Root repo and Dependency repo describe

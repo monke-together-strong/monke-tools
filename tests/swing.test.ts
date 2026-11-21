@@ -622,7 +622,7 @@ apps:
     );
     expect(readFileSync(path.join(worktreeRoot, ".env"), "utf-8")).toBe(`API_PORT=${apiPort}\n`);
     expect(result.stderr).toContain(`Bootstrapping ${repoRoot} in ${worktreeRoot}`);
-    expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
+    expect(result.stderr).toContain(`Spawned or updated Session ${prBranch}`);
     expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
     expect(completed.repos[0]?.diffBaseRef).toBeUndefined();

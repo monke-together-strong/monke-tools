@@ -689,7 +689,7 @@ apps: {}
       }).toThrow(
         change === "reappeared"
           ? /Session worktree reappeared after preflight/u
-          : /Session worktree branch\/HEAD changed/u
+          : /Session worktree HEAD changed/u
       );
 
       expect(existsSync(fixture.cleanupLog)).toBeFalsy();
@@ -768,7 +768,7 @@ apps: {}
       };
 
       const expectedFailures = {
-        branch: /Session worktree branch\/HEAD changed from banana to raced/u,
+        branch: /Session worktree HEAD changed from banana to raced/u,
         lock: /locked.*race/u,
         registration: /Session worktree is missing/u,
         repository: /Cannot verify registered worktree/u
@@ -1416,7 +1416,7 @@ apps: {}
     expect(result.stdout).toBe(`${fixture.sourceRoot}\n`);
     expect(result.stderr).toContain(`Chopped Ordinary worktree ${fixture.worktreePath}`);
     expect(result.stderr).toContain(
-      `Warning: your shell is still in the removed worktree. Switch to ${fixture.sourceRoot}.`
+      `Your shell is still in the removed worktree. Switch to ${fixture.sourceRoot}.`
     );
   });
 
@@ -1622,7 +1622,7 @@ apps: {}
         cwd: fixture.sourceRoot,
         monkeHome: fixture.home
       });
-    }).toThrow(/branch\/HEAD changed from feature to raced/u);
+    }).toThrow(/HEAD changed from feature to raced/u);
 
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
@@ -1883,7 +1883,7 @@ apps: {}
     }).toThrow(/Run mt chop <target> from the Source checkout/u);
     expect(() => {
       runMonke({ args: ["chop", sourceRoot, "--force"], cwd: sourceRoot, monkeHome: home });
-    }).toThrow(/Cannot Chop the Source checkout/u);
+    }).toThrow(/Cannot remove the Source checkout/u);
     expect(() => {
       runMonke({ args: ["chop", "branch-only"], cwd: sourceRoot, monkeHome: home });
     }).toThrow(/has no registered worktree to Chop/u);
@@ -1901,7 +1901,7 @@ apps: {}
         cwd: fixture.sourceRoot,
         monkeHome: fixture.home
       });
-    }).toThrow(/managed worktree.*Ordinary/u);
+    }).toThrow(/Ordinary worktree because it is inside Monke home/u);
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
   });
 

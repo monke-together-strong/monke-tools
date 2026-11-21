@@ -141,7 +141,7 @@ export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchem
 
   const instructions = [
     "This Team coding baseline is required for all reviews.",
-    "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team baseline takes precedence on conflicts.",
+    "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team coding baseline takes precedence on conflicts.",
     ...documents.map((document, index) =>
       index === 0 || !document.showSource
         ? document.contents

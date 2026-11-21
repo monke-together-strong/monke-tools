@@ -54,7 +54,7 @@ const SnapshotSchema = z.object({
   session: z.string().nullable()
 }) satisfies z.ZodType<SessionCleanupEvidence>;
 
-// An independent ownership audit supplied the expected decisions (commit d25878c).
+// An independent ownership audit supplied the expected decisions.
 // The anonymized fixture preserves which repos and worktrees belong to each Session.
 const inventory = z
   .array(z.object({ expected: z.boolean(), id: z.string(), snapshot: SnapshotSchema }))

@@ -191,7 +191,7 @@ Follow the [shared rules](../imported/shared.md).
     expect(
       baseline?.instructions.startsWith(
         "This Team coding baseline is required for all reviews.\n\n" +
-          "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team baseline takes precedence on conflicts."
+          "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team coding baseline takes precedence on conflicts."
       )
     ).toBeTruthy();
     expect(baseline?.instructions).toContain("# Team baseline");

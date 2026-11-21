@@ -101,14 +101,15 @@ export function rewriteManagedEnvFiles(
     );
 
     if (!existsSync(envPath)) {
-      throw new MonkeError(`Expected managed env file to exist at ${envPath}`);
+      throw new MonkeError(
+        `Expected Managed env file to exist at ${envPath}. Create it in the Source checkout or update apps.*.envFile in monke.yml.`
+      );
     }
 
     rewriteEnvFile(envPath, new Map(requests.map((request) => [request.env, request.value])));
   }
 }
 
-/** Synchronize assignments in the supplied checkout's root `.env` and remove stale names. */
 export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
   assignments: { env: string; value: string }[],
@@ -188,7 +189,9 @@ function rewriteEnvFile(filePath: string, requests: Map<string, number>) {
   const missing = [...requests.keys()].filter((key) => !touched.has(key));
 
   if (missing.length > 0) {
-    throw new MonkeError(`Missing mapped env vars in ${filePath}: ${missing.join(", ")}`);
+    throw new MonkeError(
+      `Missing mapped env vars in ${filePath}: ${missing.join(", ")}. Add them to the Managed env file or update mappings in monke.yml.`
+    );
   }
 
   writeFileSync(filePath, rewritten.join("\n"), "utf-8");
@@ -229,7 +232,7 @@ function seedRelativePath(
   if (!existsSync(sourcePath)) {
     if (warnIfMissing) {
       onWarning?.(
-        `Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`
+        `Warning: Seed path ${normalizedRelativePath} is missing at ${sourcePath}; skipping`
       );
     }
 
@@ -367,7 +370,7 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
     nextInnerValue = replaceUrlPort(innerValue, newPort, location);
   } else {
     throw new MonkeError(
-      `Unsupported env value at ${location}: ${describeRedactedValue(innerValue)}`
+      `Unsupported env value at ${location}: ${describeRedactedValue(innerValue)}. Use a numeric port or a URL with an explicit port.`
     );
   }
 

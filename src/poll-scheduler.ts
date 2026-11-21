@@ -22,7 +22,9 @@ export function schedulePoll(runtime: Runtime) {
   const mt = findExecutable("mt", runtime.env);
 
   if (mt === null) {
-    throw new MonkeError("Cannot schedule mt prs poll: mt was not found on PATH");
+    throw new MonkeError(
+      "Cannot schedule mt prs poll: mt was not found on PATH. Add mt to PATH, then run mt prs track again."
+    );
   }
 
   const job = pollJob(runtime, mt);

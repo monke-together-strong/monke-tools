@@ -210,7 +210,9 @@ function listSwingPickerOptions(
   }
 
   if (options.length === 0) {
-    throw new MonkeError(`No other Swing targets found for ${rootSourceRoot}`);
+    throw new MonkeError(
+      `No other Swing targets found for ${rootSourceRoot}. Run mt spawn <session> to create one.`
+    );
   }
 
   return options;
@@ -249,18 +251,24 @@ function resolveSwingTarget(
     const { previous } = loadSwingHistory(home, rootSourceRoot);
 
     if (!previous) {
-      throw new MonkeError(`No Previous Swing target recorded for ${rootSourceRoot}`);
+      throw new MonkeError(
+        `No Previous Swing target recorded for ${rootSourceRoot}. Run mt swing to choose a target.`
+      );
     }
 
     return resolveStoredTarget(runtime, home, rootSourceRoot, previous);
   }
 
   if (rawTarget.startsWith("mr:")) {
-    throw new MonkeError("Merge request Swing targets are not supported");
+    throw new MonkeError(
+      "Merge request Swing targets are not supported. Check out the branch locally or pass a GitHub PR target."
+    );
   }
 
   if (rawTarget === "@") {
-    throw new MonkeError("@ Swing targets are not supported");
+    throw new MonkeError(
+      "@ Swing targets are not supported. Pass a Session name, branch, ^ for the Source checkout, or - for the Previous Swing target."
+    );
   }
 
   const pullRequestTarget = parsePullRequestTarget(rawTarget);
@@ -375,7 +383,7 @@ async function resolveStoredTarget(
         session: target.session,
         spawnOptions: { mode: "session-branch" }
       });
-      createLogger(runtime).success(`Spawned or updated session ${target.session}`);
+      createLogger(runtime).success(`Spawned or updated Session ${target.session}`);
     } else {
       throw new MonkeError(
         `No worktree or Session named "${target.session}" exists for ${rootSourceRoot}. Run mt spawn ${shellQuote(target.session)} to create it.`
@@ -405,7 +413,7 @@ function resolvePullRequestSession(
 
   if (pullRequestTarget.repo && !isSameGithubRepo(pullRequestTarget.repo, currentRepo)) {
     throw new MonkeError(
-      `Cross-repo PR URLs are not supported: target ${pullRequestTarget.repo.owner}/${pullRequestTarget.repo.name} does not match current repo ${currentRepo.owner}/${currentRepo.name}`
+      `Cross-repo PR URLs are not supported: target ${pullRequestTarget.repo.owner}/${pullRequestTarget.repo.name} does not match current repo ${currentRepo.owner}/${currentRepo.name}. Run mt swing from that repository's checkout.`
     );
   }
 
@@ -605,7 +613,9 @@ function validateOrdinaryWorktreeTarget(
   target: Extract<SwingHistoryTarget, { kind: "ordinary-worktree" }>
 ) {
   if (!existsSync(target.path)) {
-    throw new MonkeError(`Linked worktree does not exist at ${target.path}`);
+    throw new MonkeError(
+      `Linked worktree does not exist at ${target.path}. Run mt swing to choose another target.`
+    );
   }
 
   const sourceContext = resolveRepoContext(runtime, rootSourceRoot, null, {

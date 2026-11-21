@@ -6,7 +6,7 @@ description: Use when writing or reviewing documentation, code comments, user-fa
 # Documentation standards
 
 Repo-specific requirements take precedence on conflicts. When asked to review,
-leave the text unchanged and report a decision for every passage in scope: list
+leave the text unchanged and report a decision for every passage in scope. List
 kept passages by location, grouping adjacent ones into ranges, and give each cut
 or correction as a finding. Otherwise, edit passages in scope. Decide what to
 delete before rewrites or additions, then check what remains for accuracy.
@@ -30,7 +30,7 @@ changes, as separate findings.
   failure, state the condition that fails, not the message text or the fix it
   already gives. Leave out edge cases the reader is unlikely to hit.
 - Write for someone who has not seen the conversation. Keep relevant reasons and
-  consequences; put investigation history and reviewer bookkeeping in commit
+  consequences. Put investigation history and reviewer bookkeeping in commit
   messages, PRs, or issues.
 - Keep each fact in one authoritative place, and link to it when the reader would
   not otherwise reach it. Use code, configuration, and command help as the source
@@ -81,7 +81,7 @@ changes, as separate findings.
 - Put skills for consumers of the repository in `skills/`. They ship without the
   repository, so keep references contained in that directory.
 - Consolidate related new ADRs when they record one decision. When trimming an
-  ADR, keep the decision and its reasons; cut inventories of changed code.
+  ADR, keep the decision and its reasons. Cut inventories of changed code.
 - Put parallel items such as files, options, or cases in a list, and keep
   paragraphs for reasoning that connects ideas.
 - Follow the established audience, terminology, and structure. Apply

@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Break a plan, spec, or the current conversation into tracer-bullet tickets published as GitHub issues.
+description: Break a plan, Spec, or the current conversation into tracer-bullet tickets published as GitHub issues.
 disable-model-invocation: true
 ---
 

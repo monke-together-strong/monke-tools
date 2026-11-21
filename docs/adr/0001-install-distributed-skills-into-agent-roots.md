@@ -8,7 +8,7 @@ skill roots without requiring per-repo loading instructions.
 
 ## Decision
 
-Distributed skills are installed directly into explicit Agent skill roots selected by the teammate. Codex, Cursor, and custom targets receive one namespace path inside each selected root:
+Distributed skills are installed directly into explicit Agent skill roots selected by the user. Codex, Cursor, and custom targets receive one namespace path inside each selected root:
 
 ```text
 <agent-skill-root>/monke-tools -> <installed-source-checkout>/skills
@@ -37,6 +37,6 @@ Internal skills are owned by monke-tools. Imported skills come from other projec
 
 ## Consequences
 
-Local install always includes skill installation. It atomically activates a versioned Local tool install whose manifest records the Installed source checkout, then replaces the preference and reconciles when built-in targets are supplied explicitly, prompts through Skills Configure when no preference exists, or reconciles the existing preference. Source-backed links preserve Skill authoring mode.
+Local install always includes skill installation. It atomically activates a versioned Local tool install whose manifest records the Installed source checkout. When built-in targets are supplied explicitly, it replaces the preference and reconciles. Otherwise it prompts through `mt skills configure` when no preference exists, or reconciles the existing preference. Source-backed links preserve Skill authoring mode.
 
 Deselecting a namespace target removes only a managed `monke-tools` symlink namespace. Deselecting Claude removes only flat links recorded in the managed manifest. A failure in one selected target does not prevent other selected targets from being reconciled, but the operation fails overall so partial installation is visible.

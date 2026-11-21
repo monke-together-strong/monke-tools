@@ -1276,7 +1276,7 @@ done
 
     for (const command of [add, ["skills", "update"]]) {
       await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(
-        "Ambiguous Skill selector internal"
+        "Ambiguous Skill import selector internal"
       );
       expect(read(fixture.registry, "skills.lock.json")).toBe(lock);
       expect(read(fixture.registry, "skills/imported/internal/SKILL.md")).toBe(accepted);
@@ -3888,7 +3888,6 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     symlinkSync("support.md", path.join(gitSource, "skills/git-skill/alias.md"));
     git(gitSource, ["add", "."]);
     git(gitSource, ["commit", "-m", "First skill"]);
-    // Exercise the actual published-importer process boundary without network downloads.
     installGitImporter(fixture);
     await runCliAsync(
       ["skills", "add", `${gitSource}#HEAD`, "--name", "git-source"],

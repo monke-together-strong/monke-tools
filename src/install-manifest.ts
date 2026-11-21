@@ -62,13 +62,13 @@ export const ReleaseInstallManifestSchema = strictObject({
           )
         );
       }),
-    "must use the predictable versioned Release archive name"
+    "must use the monke-tools-v<semver>-<platform>.tar.gz Release archive name"
   ),
   createdAt: iso.datetime(),
   guidanceHashes: record(
     stringSchema().regex(
       /^(?:monke\.yml|skills\.lock\.json|instructions\/GLOBAL\.md|skills\/(?:codex|imported|internal|references)\/.+)$/u,
-      "must be a projected guidance path"
+      "must be a bundled Release guidance path"
     ),
     stringSchema().regex(/^[0-9a-f]{64}$/u, "must be a SHA-256 hash")
   ),
@@ -113,7 +113,6 @@ export function installIdForManifest(manifest: ToolInstallManifest) {
     : `release-${manifest.releaseVersion}-${manifest.platform}`;
 }
 
-/** Load the self-describing Active tool install, regardless of install kind. */
 export function loadActiveToolInstall(monkeHome: string) {
   const installRoot = resolveActiveInstallRoot(monkeHome);
 

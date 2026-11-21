@@ -22,7 +22,7 @@ skills:
     skills: [obsidian-bases]
 ```
 
-Run `mt skills update --repo` to pin it. This also advances other declared
+Run `mt skills update --repo` to pin the source. That command also advances other declared
 sources.
 
 To identify both a subpath and a branch containing `/`, put the branch in the
@@ -32,9 +32,10 @@ selects `course` at `feature/topic`.
 Define YAML anchors used by other sections outside `skills` so Monke can replace
 the recipes without breaking their aliases.
 
-Run `mt skills restore --repo` after changing selections or overrides, reverting
-pins, or cloning a repo. Save any edits to generated files first. Restore can
-replace those edits and remove files the recipe no longer selects.
+Save any edits to generated files before restoring, because restore can replace
+those edits and remove files the recipe no longer selects. Run
+`mt skills restore --repo` after changing selections or overrides, reverting
+pins, or cloning a repo.
 
 ## Review repo updates
 
@@ -47,15 +48,16 @@ Failed sources keep their previous pins and files. If any source fails, pruning
 undeclared files waits for a successful restore or update. If the viewer fails,
 use the printed `mt diff` command to reopen the saved comparison.
 
-Run `vpr skills:review <base> [head]` to reconstruct a comparison between two
-committed versions. Reconstruction uses current import tooling, so the result
-may differ from the original release. Run `vpr skills:review clear` to remove
-saved comparisons. Clearing or cache eviction invalidates their viewer links.
+In the `monke-tools` repository, run `vpr skills:review <base> [head]` to
+reconstruct a comparison between two committed versions. Reconstruction uses
+current import tooling, so the result may differ from the original release. Run
+`vpr skills:review clear` to remove saved comparisons. Clearing or cache
+eviction invalidates saved reopen commands and viewer links.
 
 ## Review updates from linked checkouts
 
 Global and project updates can advance `monke.yml` in their linked Git checkouts.
-A global update can also advance the source checkout of a local Monke install.
+A global update can also advance the Installed source checkout of a Local tool install.
 Review those repo changes in the same comparison as installed guidance, then
 commit each changed `monke.yml` separately. Successful repo updates stay applied
 if refreshing installed guidance fails. If Monke cannot save the comparison, a
@@ -63,7 +65,7 @@ retry compares against the original repo recipes and guidance.
 
 In a saved installer command for an already-linked repo, use
 `mt skills restore --repo` to restore its imports. The outer update advances that
-repo first and holds the recipe update lock until it finishes.
+repo first and holds the recipe update lock until the outer update finishes.
 
 ## Distribute the collection
 

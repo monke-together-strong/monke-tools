@@ -6,13 +6,13 @@ disable-model-invocation: true
 
 # Retro sweep
 
-Apply the [retro](../retro/SKILL.md) rubric to the threads the user started recently, and report fixes to the agent **environment**: repo guidance, checks, docs, skills, global instructions, and tools. The sweep is report-only; the human decides what to change. Product bugs met along the way go to the report's Out of scope list as one-liners.
+Apply the [retro](../retro/SKILL.md) rubric to the threads the user started recently, and report fixes to the agent **environment**: repo guidance, checks, docs, skills, global instructions, and tools. The sweep is report-only. The human decides what to change. Product bugs met along the way go to the report's Out of scope list as one-liners.
 
-State lives in `~/.monke/agent-retrospectives/`:
+State lives in `$(mt home)/agent-retrospectives/`:
 
 - `reports/`: one `*-retro-sweep.md` report per sweep, beside legacy `*-retrospective.md` reports and their companion files. Each report has a `Window: <start> to <end>` line in ISO UTC.
-- `*-retro-sweep-evidence.md`: companion worker returns and disposition ledger; these files do not advance the window.
-- `accepted.md`: user-owned conditions the sweep must not raise again. Read it; leave it unchanged.
+- `reports/*-retro-sweep-evidence.md`: companion worker returns and disposition ledger. These files do not advance the window.
+- `accepted.md`: user-owned conditions the sweep must not raise again. Read it and leave it unchanged.
 
 ## 1. Resolve the window
 
@@ -48,19 +48,19 @@ SQL
 
 Attach each sidechat to the unit holding its parent. When no in-window unit holds the parent, the parent and its sidechats form a new unit whose parent supplies context only, read up to `fork_run`. If the query fails, record unlisted sidechats as a coverage gap.
 
-Each T3 project is one repo; its worktrees already map to it. "No project" units form the global group. A unit's size is its thread's `itemCount` plus its sidechats' `item_count`, or only the sidechats' when the parent supplies context only. Batch each project's units: at most 8 units of size 50 or more, and at most 15 units in total, per batch. Pool projects with 3 or fewer units into one shared batch.
+Each T3 project is one repo. Its worktrees already map to it. "No project" units form the global group. A unit's size is its thread's `itemCount` plus its sidechats' `item_count`, or only the sidechats' when the parent supplies context only. Batch each project's units: at most 8 units of size 50 or more, and at most 15 units in total, per batch. Pool projects with 3 or fewer units into one shared batch.
 
 **Done when** every in-window unit sits in exactly one batch or in Deferred.
 
 ## 3. Review batches
 
-Dispatch one worker per batch with your native subagent tool on your own model, each in a fresh context with its brief in the prompt. Start them all at once; when the host caps concurrency, start the rest as slots free. Brief each worker with:
+Dispatch one worker per batch with your native subagent tool on your own model, each in a fresh context with its brief in the prompt. Start them all at once. When the host caps concurrency, start the rest as slots free. Brief each worker with:
 
-- the absolute path of [the worker brief](WORKER.md) and of the retro rubric, to read first;
-- the window;
-- each project's name and `workspaceRoot`;
-- each unit's link, status, size, PR URLs, and sidechat thread ids, plus `fork_run` when the parent supplies context only;
-- the text of `accepted.md`.
+- The absolute path of [the worker brief](WORKER.md) and [the base retrospective rubric](../../references/imported/retro/MAIN.md), to read first.
+- The window.
+- Each project's name and `workspaceRoot`.
+- Each unit's link, status, size, PR URLs, and sidechat thread ids, plus `fork_run` when the parent supplies context only.
+- The text of `accepted.md`.
 
 **Done when** every worker has returned findings and coverage, or its failure is recorded as a coverage gap.
 
@@ -68,18 +68,18 @@ Dispatch one worker per batch with your native subagent tool on your own model, 
 
 Combine once, after every worker returns, because promotion needs every repo's findings.
 
-1. **Dedupe all dispositions**: split independently repaired mechanisms within bundled claims, then merge the same cause and fix surface across workers, including Already fixed and exclusions, keeping their evidence; reconcile conflicting states against the current effective surface before counting or reporting them.
-2. **Promote to Global** a finding whose fix surface is global (a skill, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, T3, `mt`, harness config), or whose cause shows up in two or more repos. One global fix replaces the repo copies.
-3. **Recurrence**: drop findings an `accepted.md` entry covers. Compare the rest with the newest three reports; mark each `new`, `recurring` (raised before, still unfixed), or `regression` (fixed since, back again).
-4. **Verify Global findings yourself**: reopen each cited item with `t3_thread_read` and apply [the current-state check](../../references/internal/RETRO_CURRENT_STATE.md), including subsequent repairs and user clarifications. Apply that check to every suppression: reopen incomplete or conflicting proof; put unresolved claims in coverage gaps.
+1. **Dedupe all dispositions.** Split independently repaired mechanisms within bundled claims, then merge identical causes and fix targets across workers, including Already fixed and exclusions, preserving their evidence. Reconcile conflicting states against the current effective installation before counting or reporting them.
+2. **Promote to Global.** Promote a finding whose fix target is global (a skill, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, T3, `mt`, or harness config), or whose cause shows up in two or more repos. One global fix replaces the repo copies.
+3. **Recurrence.** Drop findings an `accepted.md` entry covers. Compare the rest with the newest three reports. Mark each `new`, `recurring` (raised before, still unfixed), or `regression` (fixed since, back again).
+4. **Verify Global findings yourself.** Reopen each cited item with `t3_thread_read` and apply [the current-state check](../../references/internal/RETRO_CURRENT_STATE.md), including subsequent repairs and user clarifications. Apply that check to every suppression. Reopen incomplete or conflicting proof, and put unresolved claims in coverage gaps.
 
-Save the worker returns and a disposition ledger to the companion evidence file: one row per distinct cause with an ID, cause and fix surface, incident outcome, subsequent repairs or decisions, state, current-state proof, and report ID or exclusion reason. Count `fixed` rows for Coverage; keep superseded, accepted, and unverified causes separate. An open fix PR or a repair absent from the effective installation stays active with that qualification; propose the remaining adoption work instead of reimplementing the repair.
+Save the worker returns and a disposition ledger to `reports/<end as YYYY-MM-DDTHH-MM-SSZ>-retro-sweep-evidence.md`: one row per distinct cause with an ID, cause and fix target, incident outcome, subsequent repairs or decisions, state, current-state proof, and report ID or exclusion reason. Count `fixed` rows for Coverage. Keep superseded, accepted, and unverified causes separate. An open fix PR or a repair absent from the effective installation stays active with that qualification. Propose the remaining adoption work instead of reimplementing the repair.
 
 **Done when** every candidate maps to one ledger row, every retained finding and fixed suppression has current-state proof, and every Global finding is independently verified.
 
 ## 5. Write the report
 
-Write `reports/<end as YYYY-MM-DDTHH-MM-SSZ>-retro-sweep.md`. The template below is the whole report, written for a human deciding in five minutes. Order findings by severity; keep at most 5 Global and 3 per repo in full. Summarize the rest under each section's **Minor** heading with the remaining gap, subsequent-repair qualification, and a link to its ledger proof. Keep each field to one sentence and each quote under 15 words, with at most three quotes per finding.
+Write `reports/<end as YYYY-MM-DDTHH-MM-SSZ>-retro-sweep.md`. The template below is the whole report, written for a human deciding in five minutes. Order findings by severity. Keep at most 5 Global and 3 per repo in full. Summarize the rest under each section's **Minor** heading with the remaining gap, subsequent-repair qualification, and a link to its ledger proof. Keep each field to one sentence and each quote under 15 words, with at most three quotes per finding.
 
 ```markdown
 # Retro sweep: <end date>
@@ -96,8 +96,8 @@ Evidence: <companion file link containing worker returns and the disposition led
 
 Evidence: <thread link> @<position>: "<short quote establishing the incident and intended behavior>"; at most three.
 Since then: <incident outcome, later repairs or decisions, and their evidence>.
-Remaining: <missing|unwired|partial>: <uncovered case, effective source/version, check time, and verification limit>.
-Fix: <surface>: <smallest change that covers the remaining case>.
+Remaining: <missing|unwired|partial>: <uncovered case, effective source and version, check time, and verification limit>.
+Fix: <target>: <smallest change that covers the remaining case>.
 
 ## <repo>
 

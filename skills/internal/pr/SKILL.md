@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Create or edit a PR
+description: Create or edit a PR, or brief a delegate that opens one.
 ---
 
 # PR
@@ -32,8 +32,8 @@ changes documentation, comments, or user-facing messages.
 
 ## Load PR requirements
 
-Read root `PR.md` when present. Otherwise read user defaults at
-`$(mt home)/instructions/PR.md` when available.
+Read Repo PR guidance from root `PR.md` when present. Otherwise read User PR
+guidance from `$(mt home)/instructions/PR.md` when available.
 
 Use the repository's PR template from its default branch, or the
 [default template](references/default-pr-template.md).
@@ -46,14 +46,14 @@ Link the source issue or Spec. Identify material risks, including rollback limit
 ## Choose the explanation
 
 Lead with a paragraph of one or two sentences on the problem, then show the
-resulting behavior separately. Aim for under 200 words of prose; expand only for
+resulting behavior separately. Aim for under 200 words of prose. Expand only for
 a concrete review decision or required template field. Give each later point its
 own short paragraph.
 
 When the change alters behavior along a path, such as control flow, error
 handling, state transitions, component interactions, schemas, or key data
 structures, apply [show-me](../../imported/show-me/SKILL.md) to show the before
-and after, and leave that behavior out of the prose. Use prose for the resulting
+and after. Leave that behavior out of the prose. Use prose for the resulting
 behavior only when no such path changes, as in a rename or a configuration value.
 
 For changes to a public API or configuration contract, show code blocks of what
@@ -83,17 +83,18 @@ template or unexpected in a way that affects review.
   workflow carries the claim. Inspect final assets using
   [proof asset review](references/proof-asset-review.md), and use
   `$github-media-upload` to attach them when publishing. Keep screenshots and
-  videos expanded; do not put them in collapsed sections. Caption each screenshot
-  with the behavior it demonstrates. Use matched, labeled before/after pairs for
-  comparisons and group multiple screenshots by claim. Number workflow states.
-  Choose side-by-side or stacked layouts based on readability.
+  videos expanded outside collapsed sections. Caption each screenshot
+  with the behavior it demonstrates. Use matched, labeled before-and-after pairs
+  for comparisons and group multiple screenshots by claim. Number workflow
+  states. Choose side-by-side or stacked layouts based on readability.
 - For deployment-dependent correctness, add any extra verification using
   the [post-merge contract](../post-merge/SKILL.md#load-the-contracts).
 
 ## Draft the title and body
 
 The writer model (`mt models get writer`) writes the title and body. When you
-run on that model, or your instructions bar subagents, draft them yourself.
+already run on the writer role's first available model, or your instructions bar
+subagents, draft them yourself.
 Otherwise, have a subagent on the writer model draft them. Brief it with the diff
 against the base, the PR requirements, and your facts: the source issue or Spec,
 risks, evidence, and media. Point it at

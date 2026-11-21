@@ -67,7 +67,6 @@ export function listStagedSkillSlugs(stagingDirectory: string) {
   return stagedSkillNames;
 }
 
-/** Runs upstream `skills` CLI arguments and returns captured output or throws on failure. */
 export function runSkillsCaptured(
   args: string[],
   cwd: string,

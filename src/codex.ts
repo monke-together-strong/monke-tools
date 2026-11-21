@@ -8,7 +8,9 @@ export function openCodexWorkspace(runtime: Runtime, targetPath: string) {
   const opener = getUrlOpener(url);
 
   if (!canRunUrlOpener(runtime, opener.command)) {
-    logger.warning(`Could not open workspace in Codex: ${opener.command} was not found`);
+    logger.warning(
+      `Could not open workspace in Codex: ${opener.command} was not found. Open ${targetPath} in Codex manually.`
+    );
 
     return;
   }
@@ -16,7 +18,9 @@ export function openCodexWorkspace(runtime: Runtime, targetPath: string) {
   const result = runtime.exec(opener.command, opener.args, { allowFailure: true });
 
   if (result.exitCode !== 0 || result.timedOut === true) {
-    logger.warning(`Could not open workspace in Codex: ${formatOpenFailure(result)}`);
+    logger.warning(
+      `Could not open workspace in Codex: ${formatOpenFailure(result)}. Open ${targetPath} in Codex manually.`
+    );
 
     return;
   }

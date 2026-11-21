@@ -137,7 +137,9 @@ export function runSkillsRegistry(
       request.action !== "list" &&
       !loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference
     ) {
-      throw new MonkeError("Select targets first with: mt skills configure");
+      throw new MonkeError(
+        "No Skill install targets are configured. Select them with: mt skills configure"
+      );
     }
 
     const registry = path.join(getMonkeHome(runtime), "skill-registry");
@@ -185,7 +187,7 @@ async function runRepoSkillsRegistry(
         } else if (request.action === "add") {
           if (!request.source || request.command || request.link || request.cwd || request.name) {
             throw new MonkeError(
-              "Repo recipes require a Git source; --command, --link, --cwd and --name are machine-local"
+              "Repo import recipes require a Git source; --command, --link, --cwd, and --name are machine-local"
             );
           }
 
@@ -385,7 +387,9 @@ function localSourceRecipe(
   const name = request.name ?? (directory ? path.basename(directory) : undefined);
 
   if (!name || !/^[a-z\d][a-z\d_-]*$/u.test(name)) {
-    throw new MonkeError("Command imports require --name with a lowercase source identifier");
+    throw new MonkeError(
+      "Invalid Skill source name: pass --name using lowercase letters, digits, hyphens, or underscores, starting with a letter or digit"
+    );
   }
 
   const previous = store.recipes.find((item) => (item.name ?? item.source) === name);

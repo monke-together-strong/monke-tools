@@ -256,7 +256,6 @@ async function pollRailway(
     }
 
     case "success": {
-      // Railway reports "No deployment needed" when the service's watched paths did not change.
       if (/no deployment needed/iu.test(latest.description ?? "")) {
         return { detail, status: "skipped" };
       }

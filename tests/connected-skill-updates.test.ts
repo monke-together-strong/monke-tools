@@ -283,7 +283,7 @@ describe("updates through connected local repositories", () => {
     const lock = read(registry, "skills.lock.json");
 
     await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(
-      /duplicate Skill name base/u
+      /duplicate Skill slug base/u
     );
 
     expect(read(registry, "skills.lock.json")).toBe(lock);

@@ -1,13 +1,13 @@
 ---
 name: preferred-libraries
-description: Preferred JavaScript and TypeScript project tooling and external libraries by capability. Use when setting up a new project or choosing or replacing libraries, CLI parsing, runtime validation, or generic utilities; default to listed tools when they fit.
+description: Preferred JavaScript and TypeScript project tooling and external libraries by capability. Use when setting up a new project or choosing or replacing libraries, CLI parsing, runtime validation, or generic utilities.
 ---
 
 # Preferred libraries
 
 Before adding or proposing an external JavaScript or TypeScript library, or writing a custom implementation that a listed library would cover, check this registry.
 
-Use the listed default unless an exception applies. Completion requires one of these outcomes: use the listed library, follow an existing project standard, state that no listed library fits, or run the fresh comparison the user asked for.
+Default to the listed library. Finish with one of these outcomes: use the listed library, follow an existing project standard, state that no listed library fits, or run the fresh comparison the user asked for.
 
 ## Project tooling
 
@@ -26,12 +26,12 @@ Use the listed default unless an exception applies. Completion requires one of t
 - `shadcn/ui`: Use as the default source for ownable, styled React components.
 - `@base-ui/react`: Use as the default primitive layer for accessible React UI behavior, including shadcn-style components that need low-level primitives.
 - `tailwindcss`: Use for utility-first styling, design tokens, responsive layout, and component styling.
-- `cn`: Use to merge Tailwind class names instead of `clsx` + `tailwind-merge`.
+- `cn`: Use the `cn` package to merge Tailwind class names instead of `clsx` and `tailwind-merge`.
 - `@hugeicons/react`: Use with `@hugeicons/core-free-icons` for React icons instead of `lucide-react`. In shadcn projects, set `iconLibrary` to `hugeicons` in `components.json` so added components import Hugeicons.
 
 ## Keyboard shortcuts and interaction
 
-- `@tanstack/react-hotkeys`: Use for React keyboard shortcut systems, especially command-heavy apps that need type-safe shortcut strings, cross-platform `Mod` handling, scoped hotkeys, sequences, shortcut recording/display, or key-state tracking. For non-React code, use the relevant TanStack framework adapter or the core `@tanstack/hotkeys` package directly.
+- `@tanstack/react-hotkeys`: Use for React keyboard shortcut systems, especially command-heavy apps that need type-safe shortcut strings, cross-platform `Mod` handling, scoped hotkeys, sequences, shortcut recording and display, or key-state tracking. For non-React code, use the relevant TanStack framework adapter or the core `@tanstack/hotkeys` package directly.
 
 ## App data and routing
 
@@ -44,8 +44,8 @@ Use the listed default unless an exception applies. Completion requires one of t
 
 ## Database access
 
-- `drizzle-orm`: Use as the default ORM/query builder when the project needs lightweight typed database access, SQL visibility, migrations, edge/serverless friendliness, or a small dependency footprint. Use `drizzle-kit` alongside it when schema migrations or introspection are needed.
-- `prisma`: Use when the project benefits from a generated client, Prisma schema workflow, broad database tooling, introspection, or a more batteries-included ORM experience.
+- `drizzle-orm`: Use as the default ORM or query builder when the project needs lightweight typed database access, SQL visibility, migrations, edge or serverless support, or a small dependency footprint. Use `drizzle-kit` alongside it for schema migrations or introspection.
+- `prisma`: Use when the project needs a generated client, Prisma schema workflow, broad database tooling, or introspection.
 
 ## File storage
 

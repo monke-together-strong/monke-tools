@@ -5,7 +5,7 @@ description: Speak text aloud. Use when the user asks to speak or say something 
 
 # Speak
 
-Use `sag` when available, otherwise use macOS `say`, and wait for playback to
+Use `sag` when available, or macOS `say` otherwise, and wait for playback to
 finish:
 
 ```sh

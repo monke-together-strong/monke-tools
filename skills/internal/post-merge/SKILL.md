@@ -3,11 +3,11 @@ name: post-merge
 description: Finish a PR after it merges, or a commit pushed directly to the base branch.
 ---
 
-# Post-Merge
+# Post-merge
 
 ## Resolve the PR
 
-For a PR, use the explicit number or URL; otherwise use `gh pr view`. Ask if no single PR
+For a PR, use the explicit number or URL when given, or `gh pr view` otherwise. Ask if no single PR
 resolves. Continue only when
 `gh pr view <number> --json state,body,mergeCommit,headRefName,headRefOid,baseRefName`
 reports `MERGED`.
@@ -51,17 +51,17 @@ When only routine cleanup remains, run **Finish the merge**, then **Report** in
 the current thread, whether it is the original thread or an existing post-merge
 thread.
 
-When a specific verification check remains, move post-merge ownership to an
-independent top-level thread. When this thread was started to run post-merge,
-continue below. Running this skill is the user's request for that thread; in T3
-Code, start it with `t3_thread_launch`. Finish here only when no thread tool
-exists. Otherwise:
+When a specific verification check remains, continue below if this thread was
+started to run post-merge or if no thread tool exists. Otherwise, move
+post-merge ownership to a new top-level thread. Running this skill is the user's
+request for that thread. In T3 Code, start it with `t3_thread_launch`:
 
-1. Start a new thread on the post-merge model (`mt models get post-merge`) that
-   runs post-merge for the PR, or the pushed commit with its base and source
-   branches, using this skill and its checkout. Link it.
-2. Finish this thread in the same turn. The deploy gate, contract checks,
-   demo repairs and cleanup now belong to the new thread. Recap only what
+1. Start a new thread on the post-merge model (`mt models get post-merge`) in
+   the PR checkout. Prompt it with the PR (or the pushed commit with its base
+   and source branches) and the path to this `SKILL.md`. Include the new thread
+   link in your reply.
+2. Finish this thread in the same turn. The deployment gate, contract checks,
+   follow-up fixes, and cleanup now belong to the new thread. Recap only what
    remains here outside them: a decision still waiting on the user, or agreed
    work not yet done. When nothing remains, settle this thread with
    `t3_thread_organize` (`action: "settle"`).
@@ -76,10 +76,11 @@ exists. Otherwise:
    `git status --short` is empty, and
    `HEAD` equals `headRefOid`. A local branch is a candidate only when no
    worktree uses it and its tip equals `headRefOid`.
-3. Clean up candidates. Use `mt chop <session>` from the source checkout for mt
-   Sessions, only when every member is clean and its work has landed; retain
-   failed teardowns for recovery. Use `git worktree remove <path>` for ordinary
-   worktrees, then delete candidate branches. Never run global `mt cleanup` here.
+3. Clean up candidates from the Source checkout. For Sessions, run
+   `mt chop <session>` only when every member is clean and its work has landed,
+   and retain failed teardowns for recovery. For Ordinary worktrees, run
+   `mt chop <path>`. Then delete candidate branches. Never run global
+   `mt cleanup` here.
 4. Run `git fetch origin`. In a clean checkout already on `baseRefName`, run
    `git pull --ff-only origin <baseRefName>`. Switch a retained PR checkout to
    `baseRefName`, and leave other checkouts on their branches.
@@ -94,15 +95,15 @@ requirement. Continue to **Verify** when its checks need no gate.
 
 In T3 Code, rename the thread with `t3_thread_update` to
 `Verify #<number>: <subject>`, or `Verify <short-sha>: <subject>` for a direct
-push, where the subject names the behavior under check
-and its environment, such as `Verify #123: web embeds on production`.
+push. Name the behavior under check and its environment in `<subject>`, such as
+`Verify #123: web embeds on production`.
 
 Use `mt prs wait-for-gate --help` for gate selectors. Wait on the merge commit.
 For Railway, check the commit status context of each service the change deploys.
 
-For a library release PR, wait for the release workflow and confirm the release
-PR includes this change's entry. Hand off its URL. When the user asks to publish
-the new version, follow [library release](references/library-release.md).
+For a library Release PR, wait for the release workflow and confirm the Release
+PR includes this change's Release entry. Hand off its URL. When the user asks to
+publish the new version, follow [library release](references/library-release.md).
 
 On `skipped`, the gate did not deploy, so skip its deployment checks. On
 `timed_out`, ask before waiting longer. When the gate has no signal `mt prs wait-for-gate`
@@ -118,7 +119,7 @@ defect, open a root-cause fix PR with `$pr`, linking the merged PR.
 ## Report
 
 Report the base update, removals, skipped cleanup, contract sources, each check's
-result and evidence, any fix PR or release PR handoff, skip reasons, and pending
+result and evidence, any fix PR or Release PR handoff, skip reasons, and pending
 items.
 
 When no user decision or agreed work remains, settle the current thread with

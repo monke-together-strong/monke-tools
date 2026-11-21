@@ -129,11 +129,13 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
 
   if (options.recoveryCommand !== undefined) {
     if (options.recoveryCommand.trim().length === 0) {
-      throw new MonkeError("--recover-with requires a nonempty recovery command");
+      throw new MonkeError("--recover-with requires a non-empty recovery command.");
     }
 
     if ((targets?.length ?? 0) === 0) {
-      throw new MonkeError("--recover-with requires explicit worktree targets");
+      throw new MonkeError(
+        "--recover-with requires explicit worktree targets. Pass one or more worktree paths to mt cleanup."
+      );
     }
   }
 
@@ -183,7 +185,7 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
 
       if (source?.status !== "inspected") {
         throw new MonkeError(
-          `Cannot inspect requested Source ${sourceRoot}: ${source?.message ?? source?.status ?? "not discovered"}`
+          `Cannot inspect requested Source checkout ${sourceRoot}: ${source?.message ?? source?.status ?? "not discovered"}`
         );
       }
     }
@@ -354,7 +356,7 @@ function writeCleanupReport(
 
     for (const source of report.sources) {
       runtime.writeStdout(
-        `Source (${source.status}): ${source.sourceRoot}${source.worktreeCount !== null ? `; ${quantity(source.worktreeCount, "registered worktree")}` : ""}${source.message ? `: ${source.message}` : ""}\n`
+        `Source checkout (${source.status}): ${source.sourceRoot}${source.worktreeCount !== null ? `; ${quantity(source.worktreeCount, "registered worktree")}` : ""}${source.message ? `: ${source.message}` : ""}\n`
       );
     }
 
@@ -401,20 +403,22 @@ function summarizeCleanup(report: CleanupReport & { summary: ReturnType<typeof c
     .map(([label, total]) => `${total} ${label}`);
 
   const notes = [
-    report.summary.sourcesSkipped > 0 ? `${report.summary.sourcesSkipped} Sources skipped` : null,
+    report.summary.sourcesSkipped > 0
+      ? `${quantity(report.summary.sourcesSkipped, "Source checkout")} skipped`
+      : null,
     report.summary.wouldRemoveWorktrees > 0
-      ? `would remove ${report.summary.wouldRemoveWorktrees} worktrees`
+      ? `would remove ${quantity(report.summary.wouldRemoveWorktrees, "worktree")}`
       : null,
     report.summary.removedWorktrees > 0
-      ? `${report.summary.removedWorktrees} worktrees removed`
+      ? `${quantity(report.summary.removedWorktrees, "worktree")} removed`
       : null,
     inspectionErrors > 0 ? `${inspectionErrors} with inspection errors` : null,
     report.unownedWorktrees.length > 0
-      ? `${report.unownedWorktrees.length} unowned worktrees reported`
+      ? `${quantity(report.unownedWorktrees.length, "unowned worktree")} reported`
       : null
   ].filter((note) => note !== null);
 
-  return `Inspected ${quantity(report.summary.sourcesInspected, "Source")}, ${quantity(report.summary.registeredWorktrees, "registered worktree")}, ${quantity(sessions.length, "Session")}${parts.length > 0 ? `: ${parts.join(", ")}` : "."}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
+  return `Inspected ${quantity(report.summary.sourcesInspected, "Source checkout")}, ${quantity(report.summary.registeredWorktrees, "registered worktree")}, ${quantity(sessions.length, "Session")}${parts.length > 0 ? `: ${parts.join(", ")}` : "."}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
 }
 
 function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {
@@ -426,7 +430,7 @@ function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {
 
   if (inventory.unboundedOwnership) {
     throw new GlobalCleanupError(
-      "Invalid retained state has unbounded ownership; no further Sessions can be cleaned."
+      "An invalid Session state file cannot be scoped to specific worktrees, so Cleanup stopped. Inspect or fix the invalid files under Monke home's sessions directory, then rerun mt cleanup."
     );
   }
 
@@ -508,7 +512,7 @@ function executeSession(
       if (active.length > 0) {
         progress.step(processStop(repo));
         throw new MonkeError(
-          `Worktree ${repo.worktreePath} is in use: ${active.map(describeTree).join("; ")}`
+          `Worktree ${repo.worktreePath} is in use: ${active.map(describeTree).join("; ")}. Stop the listed processes or wait before retrying.`
         );
       }
     }
@@ -677,7 +681,9 @@ function processStop(repo: SessionState["repos"][number]): SessionAction {
 function assertFinalizationReady(runtime: Runtime, home: string, state: SessionState) {
   for (const repo of state.repos) {
     if (inspectSessionRepoRegistration(runtime, home, state, repo).mode !== "gone") {
-      throw new MonkeError(`Session member reappeared before finalization: ${repo.worktreePath}`);
+      throw new MonkeError(
+        `Session member reappeared before finalization: ${repo.worktreePath}. Inspect the path and rerun mt cleanup.`
+      );
     }
   }
 }

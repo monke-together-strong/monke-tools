@@ -11,17 +11,17 @@ Monke edits only the `skills` YAML node when it writes repo recipes. Repos can
 declare imports without Session configuration. Restored guidance stays ignored.
 Hand edits take effect after restore.
 
-This supersedes [ADR 0002](0002-import-skills-through-skills-cli-wrapper.md)'s
+Repo import recipes supersede [ADR 0002](0002-import-skills-through-skills-cli-wrapper.md)'s
 rejection of runtime import commands and its grouped selection requirement.
 The upstream skills CLI remains responsible for staging selected skills and
 reporting security assessments. Reference conversion keeps its existing rules.
 
-This amends [ADR 0012](0012-reconstruct-historical-skill-reviews-from-locks.md).
+Repo import recipes also amend [ADR 0012](0012-reconstruct-historical-skill-reviews-from-locks.md).
 Historical review reads older locks and newer repo declarations, then rebuilds
 both sides with current tooling. It compares accepted pins consistently without
 promising the exact transformation a historical Monke release shipped.
 
-This amends [ADR 0013](0013-keep-personal-skill-imports-in-a-machine-local-registry.md).
+Finally, repo import recipes amend [ADR 0013](0013-keep-personal-skill-imports-in-a-machine-local-registry.md).
 monke-tools' own Repo import recipes replace Bundled import recipes. Releases
 carry those recipes and restored guidance. Installation seeds machine registries
 as before, while personal link and command sources remain machine-local. Old

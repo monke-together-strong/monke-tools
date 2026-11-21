@@ -19,8 +19,8 @@ Use Markdown references for assets in the body. Put a video reference such as
 `![](./demo.mp4)` in its own paragraph for inline playback.
 
 Supported formats: PNG, JPEG, GIF, WebP, SVG, MP4, MOV, and WebM. Images are limited
-to 10 MB; videos to 10 MB on Free plans or 100 MB on paid plans. Prefer H.264 MP4
-for browser compatibility.
+to 10 MB. Videos are limited to 10 MB on Free plans and 100 MB on paid plans. Prefer
+H.264 MP4 for browser compatibility.
 
-If some uploads failed, check the published body before retrying. Retry only
+If some uploads fail, check the published body before retrying. Retry only
 the failed files on the existing item.
