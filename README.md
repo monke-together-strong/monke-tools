@@ -1,6 +1,6 @@
 # monke-tools
 
-`monke-tools` gives each coding session its own Git worktrees, ports, and environment values across a repo and its dependencies. It also distributes shared agent skills to Codex, Claude, Cursor, and custom agents.
+`monke-tools` gives each coding session its own Git worktrees, ports, and environment values across a repo and its dependencies. It also distributes shared agent skills to Codex, Claude, Cursor, Antigravity, and custom agents.
 
 ## Install
 

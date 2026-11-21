@@ -47,17 +47,29 @@ const CODEX_NAMESPACE_SOURCE_FOLDERS = ["codex", ...SHARED_NAMESPACE_SOURCE_FOLD
 const BUILT_IN_TARGET_ROOTS = {
   claude: path.join(".claude", "skills"),
   codex: path.join(".codex", "skills"),
-  cursor: path.join(".cursor", "skills")
+  cursor: path.join(".cursor", "skills"),
+  // Antigravity scans its global customization root `~/.gemini/config/skills` one level deep.
+  antigravity: path.join(".gemini", "config", "skills")
 } satisfies Record<BuiltInSkillInstallTargetKind, string>;
 
-const SkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor", "custom"]);
+const SkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor", "antigravity", "custom"]);
 
 const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string }[] = [
   { kind: "codex", label: "Codex" },
   { kind: "claude", label: "Claude" },
   { kind: "cursor", label: "Cursor" },
+  { kind: "antigravity", label: "Antigravity" },
   { kind: "custom", label: "Custom" }
 ];
+
+export function skillTargetLabel(kind: SkillInstallTargetKind) {
+  return TARGET_OPTIONS.find((option) => option.kind === kind)?.label ?? kind;
+}
+
+/** Agents that discover skills only one level below their Skill root get flat links. */
+export function usesFlatSkillLayout(kind: SkillInstallTargetKind) {
+  return kind === "claude" || kind === "antigravity";
+}
 
 export interface ResolvedSkillInstallTarget {
   agentSkillRoot: string;
@@ -265,7 +277,7 @@ function preflightFlatTarget(
 
 function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
   const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
-  const manifest = target.kind === "claude" ? readFlatManifest(target) : null;
+  const manifest = usesFlatSkillLayout(target.kind) ? readFlatManifest(target) : null;
 
   if (!namespaceStat && !manifest) {
     return;
@@ -409,7 +421,7 @@ function reconcileAdoptedSkillLinks(root: string, targets: ResolvedSkillInstallT
         const stat = lstatSync(destination, { throwIfNoEntry: false });
 
         if (configured) {
-          if (configured.kind !== "claude" && stat) {
+          if (!usesFlatSkillLayout(configured.kind) && stat) {
             rmSync(destination);
           }
 
@@ -499,7 +511,7 @@ export function skillPublicationPaths(
   for (const target of targets) {
     paths.push(target.namespacePath);
 
-    if (target.kind === "claude") {
+    if (usesFlatSkillLayout(target.kind)) {
       const manifest = readFlatManifest(target);
       const links = discoverFlatSkillLinks(resolveSkillSourceTree(root));
       paths.push(
@@ -644,7 +656,7 @@ function reconcileNamespaceTarget(
 ) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
 
-  if (target.kind === "claude") {
+  if (usesFlatSkillLayout(target.kind)) {
     removeFlatManagedLinks(target);
   }
 
@@ -731,7 +743,7 @@ function removeManagedTarget(
     includeGlobalInstructions?: boolean;
   }
 ) {
-  if (target.kind === "claude") {
+  if (usesFlatSkillLayout(target.kind)) {
     removeFlatManagedLinks(target);
   }
 
@@ -1043,7 +1055,7 @@ function prepareSkillTargetPlan(
 }
 
 function skillTargetPolicy(target: ResolvedSkillInstallTarget) {
-  const layout = target.kind === "claude" ? "flat" : "namespace";
+  const layout = usesFlatSkillLayout(target.kind) ? "flat" : "namespace";
 
   return {
     layout,

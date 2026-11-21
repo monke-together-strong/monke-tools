@@ -13,6 +13,7 @@ import path from "node:path";
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
+import type { SkillInstallTargetKind } from "./global-config.ts";
 import { assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { containsPath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withScopedLockAsync } from "./runtime.ts";
@@ -61,6 +62,12 @@ export function withProjectSkillsLock<T>(
   );
 }
 
+// Antigravity reads project skills from `.agents/skills`, the Codex project root, so only global
+// publication supports it for now.
+function isProjectSkillTarget(kind: SkillInstallTargetKind) {
+  return kind !== "custom" && kind !== "antigravity";
+}
+
 /** Start with the user's built-in targets and an empty imported collection. */
 export function initializeProjectSkillRegistry(
   runtime: Runtime,
@@ -71,7 +78,7 @@ export function initializeProjectSkillRegistry(
   if (!config.skillInstallPreference) {
     const configured = loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
 
-    const targets = configured?.targets.filter((target) => target.kind !== "custom") ?? [
+    const targets = configured?.targets.filter((target) => isProjectSkillTarget(target.kind)) ?? [
       { kind: "codex" as const },
       { kind: "claude" as const },
       { kind: "cursor" as const }
@@ -87,8 +94,10 @@ export function initializeProjectSkillRegistry(
     saveGlobalMonkeConfig(context.root, config);
   }
 
-  if (config.skillInstallPreference.targets.some((target) => target.kind === "custom")) {
-    throw new MonkeError("Project skills support built-in targets inside the checkout only");
+  if (config.skillInstallPreference.targets.some((target) => !isProjectSkillTarget(target.kind))) {
+    throw new MonkeError(
+      "Project skills support the Codex, Claude, and Cursor targets inside the checkout only"
+    );
   }
 
   const scope = { homeDirectory: context.checkoutRoot, preference: config.skillInstallPreference };

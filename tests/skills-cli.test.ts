@@ -781,6 +781,7 @@ describe("skills CLI", () => {
         { label: "Codex", value: "codex" },
         { label: "Claude", value: "claude" },
         { label: "Cursor", value: "cursor" },
+        { label: "Antigravity", value: "antigravity" },
         { label: "Custom", value: "custom" }
       ],
       required: true

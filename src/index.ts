@@ -8,7 +8,7 @@ import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { createWaitForGateCommand } from "./deployment-gate.ts";
 import { runDiffConfigure, runDiffInteractive } from "./diff.ts";
 import { MonkeError, ThrownValueSchema } from "./errors.ts";
-import { MODEL_ROLES } from "./global-config.ts";
+import { BUILT_IN_SKILL_INSTALL_TARGET_KINDS, MODEL_ROLES } from "./global-config.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import { addInstallGuidance } from "./install-guidance.ts";
 import {
@@ -296,7 +296,7 @@ function createProgram(runtime: Runtime) {
       new Option(
         "--targets <targets...>",
         "Replace the saved Skill install preference with built-in targets"
-      ).choices(["codex", "claude", "cursor"])
+      ).choices(BUILT_IN_SKILL_INSTALL_TARGET_KINDS)
     )
     .action((bundleRoot, options) =>
       runActivateReleaseInstall(runtime, {
@@ -323,7 +323,7 @@ function createProgram(runtime: Runtime) {
       new Option(
         "--targets <targets...>",
         "Replace the saved Skill install preference with built-in targets"
-      ).choices(["codex", "claude", "cursor"])
+      ).choices(BUILT_IN_SKILL_INSTALL_TARGET_KINDS)
     )
     .action((stagedInstall, sourceCheckout, options) =>
       runActivateLocalInstall(runtime, {
@@ -497,7 +497,7 @@ function createProgram(runtime: Runtime) {
       new Option(
         "--targets <targets...>",
         "Replace the saved Skill install preference with built-in targets"
-      ).choices(["codex", "claude", "cursor"])
+      ).choices(BUILT_IN_SKILL_INSTALL_TARGET_KINDS)
     )
     .action((sourceCheckout, options) =>
       runLocalInstallSkills(

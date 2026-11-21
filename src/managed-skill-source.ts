@@ -19,13 +19,18 @@ import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-
 import type { SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { rememberSkillGuidance } from "../scripts/skill-review.ts";
 import { MonkeError } from "./errors.ts";
-import { loadGlobalMonkeConfig } from "./global-config.ts";
+import { BUILT_IN_SKILL_INSTALL_TARGET_KINDS, loadGlobalMonkeConfig } from "./global-config.ts";
 import { containsPath } from "./path-identity.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { resolveSkillPath } from "./skill-path.ts";
 import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
 import { discoverSourceSkillCopies, resolveSkillSourceFolder } from "./skill-source-discovery.ts";
-import { resolveSkillInstallTargets, skillPublicationPaths } from "./skills.ts";
+import {
+  resolveSkillInstallTargets,
+  skillPublicationPaths,
+  skillTargetLabel,
+  usesFlatSkillLayout
+} from "./skills.ts";
 import type { Runtime } from "./types.ts";
 
 type ManagedSkillRequest =
@@ -216,17 +221,20 @@ function adoptionTargets(runtime: Runtime) {
     }
   });
 
-  const claude = configured.find((target) => target.kind === "claude");
   const custom = configured.find((target) => target.kind === "custom");
 
-  if (
-    claude &&
+  const flat =
     custom &&
-    resolveSkillPath(claude.agentSkillRoot).resolved ===
-      resolveSkillPath(custom.agentSkillRoot).resolved
-  ) {
+    configured.find(
+      (target) =>
+        usesFlatSkillLayout(target.kind) &&
+        resolveSkillPath(target.agentSkillRoot).resolved ===
+          resolveSkillPath(custom.agentSkillRoot).resolved
+    );
+
+  if (custom && flat) {
     throw new MonkeError(
-      `Skill adoption preflight failed: overlapping Claude and custom Skill layouts at ${claude.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
+      `Skill adoption preflight failed: overlapping ${skillTargetLabel(flat.kind)} and custom Skill layouts at ${flat.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
     );
   }
 
@@ -234,7 +242,7 @@ function adoptionTargets(runtime: Runtime) {
 
   const known = resolveSkillInstallTargets({
     homeDirectory,
-    preference: { targets: [{ kind: "claude" }, { kind: "codex" }, { kind: "cursor" }] }
+    preference: { targets: BUILT_IN_SKILL_INSTALL_TARGET_KINDS.map((kind) => ({ kind })) }
   });
 
   for (const target of known) {
@@ -323,7 +331,7 @@ function registeredOwnerLayoutFailures(
     target &&
     !containsPath(target.namespacePath, copy) &&
     (copy !== path.join(target.agentSkillRoot, slug) ||
-      (target.kind !== "claude" &&
+      (!usesFlatSkillLayout(target.kind) &&
         configured.some((item) => item.agentSkillRoot === target.agentSkillRoot)))
   ) {
     return [
@@ -552,7 +560,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
           copy === path.join(target.agentSkillRoot, slug) &&
           lstatSync(copy).isSymbolicLink() &&
           readlinkSync(copy) === owner &&
-          (target.kind === "claude" ||
+          (usesFlatSkillLayout(target.kind) ||
             !configured.some((item) => item.agentSkillRoot === target.agentSkillRoot))
         ) {
           return false;
@@ -596,11 +604,11 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
             (entry) =>
               !configured.some(
                 (target) =>
-                  target.kind !== "claude" && path.dirname(entry) === target.agentSkillRoot
+                  !usesFlatSkillLayout(target.kind) && path.dirname(entry) === target.agentSkillRoot
               )
           ),
           ...configured.map((target) =>
-            target.kind === "claude"
+            usesFlatSkillLayout(target.kind)
               ? path.join(target.agentSkillRoot, slug)
               : path.join(
                   target.namespacePath,

@@ -6,7 +6,9 @@ import * as z from "zod";
 
 import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
 
-const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]);
+const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor", "antigravity"]);
+
+export const BUILT_IN_SKILL_INSTALL_TARGET_KINDS = BuiltInSkillInstallTargetKindSchema.options;
 
 const AbsolutePathSchema = z
   .string({ error: "must be a non-empty absolute path" })
