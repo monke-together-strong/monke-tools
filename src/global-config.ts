@@ -51,7 +51,7 @@ const ModelPreferenceSchema = z.strictObject({
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   // `mt models get` prints `<model> <effort>` entries on one comma-separated line.
   model: z.string().regex(/^[^\s,\p{C}]+$/u, {
-    error: "must be a model id without spaces, commas, or control characters"
+    error: "must be a non-empty model id without spaces, commas, or control characters"
   }),
   provider: z.enum(["antigravity", "claudeAgent", "codex"])
 });

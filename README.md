@@ -124,8 +124,8 @@ models:
     - { provider: claudeAgent, model: claude-opus-5-5, effort: high }
 ```
 
-`provider` is the T3 Code provider instance that automatic post-merge starts
-use: `antigravity`, `claudeAgent`, or `codex`.
+`provider` is the T3 Code provider instance that `mt prs poll` uses to start a
+post-merge thread: `antigravity`, `claudeAgent`, or `codex`.
 
 ## Update
 

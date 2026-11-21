@@ -9,7 +9,7 @@ description: Create or edit a PR
 
 When a delegate will open the PR, name this skill in the brief, pass facts
 rather than body sections, and allow subagents for each documentation review run
-and the draft.
+and for drafting the title and body.
 
 ## Prepare the branch
 
@@ -90,18 +90,20 @@ template or unexpected in a way that affects review.
 - For deployment-dependent correctness, add any extra verification using
   the [post-merge contract](../post-merge/SKILL.md#load-the-contracts).
 
-## Draft
+## Draft the title and body
 
-Have a subagent on the writer model (`mt models get writer`) draft the title and
-body. Brief it with the diff against the base, the PR requirements, and your
-facts: the source issue or Spec, risks, evidence, and media. Point it at
+The writer model (`mt models get writer`) writes the title and body. When you
+run on that model, or your instructions bar subagents, draft them yourself.
+Otherwise, have a subagent on the writer model draft them. Brief it with the diff
+against the base, the PR requirements, and your facts: the source issue or Spec,
+risks, evidence, and media. Point it at
 [Choose the explanation](#choose-the-explanation) and
 [Choose the evidence](#choose-the-evidence) in this file, and have it return the
-draft without publishing. When your instructions bar subagents, write the draft
-yourself.
+draft without publishing.
 
 Before publishing, check every claim in the draft against the diff and your
-evidence, then fix or cut each one that does not hold.
+evidence. When a subagent drafted it, return each claim that does not hold to
+the writer with its correction, and check the revision the same way.
 
 ## Publish and verify
 
