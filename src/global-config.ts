@@ -47,11 +47,53 @@ export const SkillInstallPreferenceSchema = z.strictObject({
     })
 });
 
+const ModelPreferenceSchema = z.strictObject({
+  effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
+  // `mt models get` prints `<model> <effort>` entries on one comma-separated line.
+  model: z.string().regex(/^[^\s,\p{C}]+$/u, {
+    error: "must be a non-empty model id without spaces, commas, or control characters"
+  }),
+  provider: z.enum(["antigravity", "claudeAgent", "codex"])
+});
+
+const modelFamily = (model: string) => model.split("-")[0];
+
+const ModelPreferencesSchema = z
+  .tuple([ModelPreferenceSchema], ModelPreferenceSchema)
+  .superRefine((preferences, context) => {
+    const families = preferences.map(({ model }) => modelFamily(model));
+
+    for (const [index, family] of families.entries()) {
+      if (families.indexOf(family) !== index) {
+        context.addIssue({
+          code: "custom",
+          message: `repeats the ${family} model family`,
+          path: [index, "model"]
+        });
+      }
+    }
+  });
+
+const ModelRolesSchema = z.strictObject({
+  "post-merge": ModelPreferencesSchema.optional(),
+  reviewer: ModelPreferencesSchema.optional(),
+  writer: ModelPreferencesSchema.optional()
+});
+
+export const MODEL_ROLES = ModelRolesSchema.keyof().options;
+
 const GlobalMonkeConfigSchema = z.strictObject({
   diffAdapter: z.enum(["codiff", "ms"]).optional(),
+  models: ModelRolesSchema.optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
 });
+
+export type ModelRole = (typeof MODEL_ROLES)[number];
+
+export type ModelPreference = z.output<typeof ModelPreferenceSchema>;
+
+export type ModelPreferences = z.output<typeof ModelPreferencesSchema>;
 
 export type BuiltInSkillInstallTargetKind = z.output<typeof BuiltInSkillInstallTargetKindSchema>;
 

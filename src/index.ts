@@ -8,6 +8,7 @@ import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { createWaitForGateCommand } from "./deployment-gate.ts";
 import { runDiffConfigure, runDiffInteractive } from "./diff.ts";
 import { MonkeError, ThrownValueSchema } from "./errors.ts";
+import { MODEL_ROLES } from "./global-config.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import { addInstallGuidance } from "./install-guidance.ts";
 import {
@@ -15,6 +16,7 @@ import {
   runActivateLocalInstall,
   runActivateReleaseInstall
 } from "./installation.ts";
+import { runModelsGet } from "./model-roles.ts";
 import {
   ADOPTION_CONSEQUENCES,
   runSpawn,
@@ -130,6 +132,16 @@ function createProgram(runtime: Runtime) {
     .description("Save this machine's Diff adapter without launching a review")
     .option("--adapter <adapter>", "noninteractive selection (codiff or ms)")
     .action((options) => runDiffConfigure(runtime, options));
+
+  program
+    .command("models")
+    .description("Show the models agents use for each Model role")
+    .command("get")
+    .description("Print a Model role's models in fallback order")
+    .addArgument(new Argument("<role>", "Model role").choices(MODEL_ROLES))
+    .action((role) => {
+      runModelsGet(runtime, role);
+    });
 
   program
     .command("materialize")

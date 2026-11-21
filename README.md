@@ -69,8 +69,8 @@ mt prs create --thread <thread-id> --checkout <checkout> -- \
 
 Use `mt prs track` for an existing PR. When a tracked PR merges outside its
 owning thread, `mt prs poll` asks the thread to run post-merge. If delivery
-fails, the poller tries to start a thread for it. Untrack a PR before merging
-it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
+fails, the poller attempts to start a thread for it on the first
+[`post-merge` model](#model-roles). Untrack a PR before merging it yourself. The [post-merge skill](skills/internal/post-merge/SKILL.md) describes
 cleanup and when verification needs a separate thread.
 
 ## Configure a repo
@@ -106,6 +106,26 @@ See the [skills guide](skills/internal/monke-skills/SKILL.md) to create or adopt
 global skill, import personal skills, or sync project installs to other worktrees.
 
 Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
+
+### Model roles
+
+Skills and post-merge hand-offs choose models by Model role: `writer`,
+`reviewer`, or `post-merge`. `mt models get <role>` prints a role's models in
+fallback order, without providers, so a skill may run a model through any
+provider that serves it. To override a role, list its models under `models` in
+`$(mt home)/config.yml`, at most one per model family. The family is the model
+id's leading name, such as `claude` or `gemini`, so use canonical model ids.
+
+```yaml
+version: 1
+models:
+  writer:
+    - { provider: antigravity, model: gemini-4-neon, effort: high }
+    - { provider: claudeAgent, model: claude-opus-5-5, effort: high }
+```
+
+`provider` is the T3 Code provider instance that `mt prs poll` uses to start a
+post-merge thread: `antigravity`, `claudeAgent`, or `codex`.
 
 ## Update
 

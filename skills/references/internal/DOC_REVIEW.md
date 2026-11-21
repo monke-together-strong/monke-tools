@@ -1,11 +1,10 @@
 # Documentation review
 
-Have a subagent review documentation, code comments, user-facing messages, and
-domain terminology in the full diff against the PR's base, including pending
-edits and new files, using
-[documentation standards](../../internal/documentation-standards/SKILL.md).
-Use a Codex subagent when available. When your instructions bar subagents, run
-the review yourself under these rules.
+Have a subagent on the writer model (`mt models get writer`) review
+documentation, code comments, user-facing messages, and domain terminology in
+the full diff against the PR's base, including pending edits and new files,
+using [documentation standards](../../internal/documentation-standards/SKILL.md).
+When your instructions bar subagents, run the review yourself under these rules.
 
 Every run covers the full diff, not only the latest commit. Brief it with the
 standards' completion criterion: a keep, cut, or correct decision for every

@@ -18,7 +18,8 @@ description: Ship an agreed Spec, given as its URL or the thread that agreed it,
 4. After implementation, code review, and fixes finish, start
    [$autoreview](../../imported/autoreview/SKILL.md) and
    [$behavior-validator](../../imported/behavior-validator/SKILL.md)
-   concurrently on the committed HEAD from this thread, using Codex for both.
+   concurrently on the committed HEAD from this thread, both on the reviewer
+   model (`mt models get reviewer`).
    Use the recorded review base for AutoReview and the Spec as the behavior
    contract. Delegate behavior validation to a fresh source-blind subagent.
    Freshness applies to agent context. The parent selects and owns the validation
