@@ -9,7 +9,7 @@ This file and the references below form one glossary, split by domain area.
 - [Session lifecycle](docs/reference/session-lifecycle.md): preparation, materialization, removal, and navigation.
 - [Resources](docs/reference/resources.md): checkout ownership, values, and allocations.
 - [Installation](docs/reference/installation.md): installs, releases, activation, and provenance.
-- [Agent guidance](docs/reference/agent-guidance.md): skills, import sources, registries, invocation overrides, projections, and reviews.
+- [Agent guidance](docs/reference/agent-guidance.md): skills, import sources, registries, invocation overrides, projections, model roles, and reviews.
 
 Historical decisions live in [docs/adr](docs/adr).
 

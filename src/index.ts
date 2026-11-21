@@ -138,7 +138,7 @@ function createProgram(runtime: Runtime) {
     .description("Show the models agents use for each Model role")
     .command("get")
     .description("Print a Model role's models in fallback order")
-    .addArgument(new Argument("<role>").choices(MODEL_ROLES))
+    .addArgument(new Argument("<role>", "Model role").choices(MODEL_ROLES))
     .action((role) => {
       runModelsGet(runtime, role);
     });

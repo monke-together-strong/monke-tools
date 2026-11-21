@@ -114,7 +114,7 @@ Skills and post-merge hand-offs choose models by Model role: `writer`,
 fallback order, without providers, so a skill may run a model through any
 provider that serves it. To override a role, list its models under `models` in
 `$(mt home)/config.yml`, at most one per model family. The family is the model
-id's leading name, such as `claude` or `gemini`, so use canonical model ids:
+id's leading name, such as `claude` or `gemini`, so use canonical model ids.
 
 ```yaml
 version: 1
