@@ -326,7 +326,8 @@ export function distributeRegistry(runtime: Runtime, root: string, scope?: Skill
     return;
   }
 
-  const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
+  const monkeHome = getMonkeHome(runtime);
+  const config = loadGlobalMonkeConfig(monkeHome);
 
   if (!config.skillInstallPreference) {
     throw new MonkeError("Select targets first with: mt skills configure");
@@ -337,6 +338,7 @@ export function distributeRegistry(runtime: Runtime, root: string, scope?: Skill
     environment: runtime.env,
     guidanceSourceRoot: root,
     homeDirectory: getHomeDirectory(runtime),
+    monkeHome,
     nextPreference: config.skillInstallPreference,
     previousPreference: config.skillInstallPreference,
     writeMessage: runtime.writeStderr

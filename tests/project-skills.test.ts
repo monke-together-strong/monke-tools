@@ -14,7 +14,7 @@ import { parse } from "yaml";
 
 import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { saveGlobalMonkeConfig } from "../src/global-config.ts";
+import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { projectSkillRegistry } from "../src/project-skills.ts";
 import {
@@ -231,6 +231,20 @@ describe("project skill installation", () => {
     expect(existsSync(path.join(f.repo, ".agents/skills/monke-tools"))).toBeFalsy();
   });
 
+  it("rejects project targets whose Agent skill roots alias each other before publishing", async () => {
+    const f = fixture();
+    const agentsSkills = path.join(f.repo, ".agents/skills");
+    mkdirSync(agentsSkills, { recursive: true });
+    symlinkSync(agentsSkills, path.join(f.repo, ".claude/skills"), "dir");
+    await expect(runCliAsync(["skills", "add", f.source, "--project"], f.runtime)).rejects.toThrow(
+      /Codex at .* and Claude at .* overlap as Agent skill roots/u
+    );
+    expect(readImportRecipeStore(f.registry).recipes).toStrictEqual([]);
+    expect(loadGlobalMonkeConfig(f.registry).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(agentsSkills, "monke-tools"))).toBeFalsy();
+    expect(existsSync(path.join(agentsSkills, "ms-view"))).toBeFalsy();
+  });
+
   it.each(["directory", "read-only"] as const)(
     "rejects a %s in exclusion preflight before publishing links",
     async (kind) => {
@@ -312,6 +326,15 @@ describe("project skill installation", () => {
       ".claude/skills/personal/"
     );
     expect(readImportRecipeStore(f.registry).recipes).toStrictEqual([]);
+  });
+
+  it("upgrades a pre-manifest project Skill namespace on the next project update", async () => {
+    const f = fixture();
+    await runCliAsync(["skills", "add", f.source, "--project"], f.runtime);
+    const namespace = path.join(f.repo, ".agents/skills/monke-tools");
+    rmSync(path.join(namespace, ".monke-tools-namespace.json"));
+    await runCliAsync(["skills", "update", "--project"], f.runtime);
+    expect(existsSync(path.join(namespace, ".monke-tools-namespace.json"))).toBeTruthy();
   });
 
   it("rediscovers added and removed folders on project update", async () => {

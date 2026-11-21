@@ -19,6 +19,7 @@ import { containsPath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withScopedLockAsync } from "./runtime.ts";
 import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
 import {
+  assertDistinctSkillInstallTargets,
   projectSkillProjectionRecoveryPaths,
   reconcileSkillNamespaces,
   resolveSkillInstallTargets,
@@ -74,6 +75,7 @@ export function initializeProjectSkillRegistry(
   context: ProjectSkillRegistry
 ): SkillPublicationScope {
   const config = loadGlobalMonkeConfig(context.root);
+  const inheritsPreference = !config.skillInstallPreference;
 
   if (!config.skillInstallPreference) {
     const configured = loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
@@ -91,7 +93,6 @@ export function initializeProjectSkillRegistry(
     }
 
     config.skillInstallPreference = { targets };
-    saveGlobalMonkeConfig(context.root, config);
   }
 
   if (config.skillInstallPreference.targets.some((target) => !isProjectSkillTarget(target.kind))) {
@@ -100,8 +101,18 @@ export function initializeProjectSkillRegistry(
     );
   }
 
-  const scope = { homeDirectory: context.checkoutRoot, preference: config.skillInstallPreference };
+  const scope = {
+    homeDirectory: context.checkoutRoot,
+    preference: config.skillInstallPreference,
+    registryRoot: context.root
+  };
+
   assertProjectSkillDestinations(scope);
+
+  if (inheritsPreference) {
+    saveGlobalMonkeConfig(context.root, config);
+  }
+
   mkdirSync(path.join(context.root, "skills", "imported"), { recursive: true });
   writeImportRecipeStore(context.root, readImportRecipeStore(context.root));
 
@@ -110,8 +121,9 @@ export function initializeProjectSkillRegistry(
 
 function assertProjectSkillDestinations(scope: SkillPublicationScope) {
   const checkout = realpathSync.native(scope.homeDirectory);
+  const targets = resolveSkillInstallTargets({ ...scope, project: true });
 
-  for (const target of resolveSkillInstallTargets({ ...scope, project: true })) {
+  for (const target of targets) {
     let existing = target.agentSkillRoot;
 
     while (!lstatSync(existing, { throwIfNoEntry: false })) {
@@ -124,6 +136,11 @@ function assertProjectSkillDestinations(scope: SkillPublicationScope) {
       );
     }
   }
+
+  assertDistinctSkillInstallTargets(targets, {
+    homeDirectory: scope.homeDirectory,
+    project: true
+  });
 }
 
 /** Publish project skills without writing global or repository agent instructions. */
