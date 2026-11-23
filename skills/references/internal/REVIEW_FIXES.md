@@ -22,6 +22,10 @@ Keep one deduplicated advisory list across attempts.
 2. Fix all validated findings within scope, blocking and advisory, in one batch.
    Fix defects at their root cause per
    [principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md).
+   When a finding says a doc, comment, or API description is wrong, fix it in
+   edit mode of
+   [documentation standards](../../internal/documentation-standards/SKILL.md).
+   Its Accuracy rule cuts or generalizes a wrong claim before adding a case.
    Run the affected checks and commit the fixes, preserving unrelated checkout
    edits.
 3. If the batch fixed any blockers, rerun the required reviews on the updated
