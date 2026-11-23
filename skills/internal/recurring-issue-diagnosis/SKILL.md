@@ -9,7 +9,7 @@ Continue from established evidence and run the next check that separates the rem
 
 ## Reconstruct
 
-Read the canonical tracker, retired predecessors, evidence comments, prior threads, deployments, reports, and retained artifacts. Establish the latest deployment or time boundary before checking for recurrences.
+Read the canonical tracker, retired predecessors, evidence comments, prior threads, deployments, reports, and retained artifacts. Establish the latest deployment or time boundary before checking for recurrences. When deployment identity matters, check the repo's documented read-only runtime version endpoint before relying on deployment-provider metadata, and recheck after intervening releases because an endpoint missing earlier may now exist. A current runtime SHA proves the current service version, not the image an earlier log host ran.
 
 Classify material interventions as `confirmed`, `failed`, `inconclusive`, or `superseded`. Keep causal prevention, recovery, continuity and impact, and observability separate, because evidence on one does not settle another. Build the deepest supported causal chain from trigger through mechanism to impact. When the initiating trigger remains unknown, name the diagnosed boundary, the evidence ruling out earlier boundaries, and what would confirm or falsify each remaining hypothesis.
 

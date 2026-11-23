@@ -5,11 +5,20 @@ Before writing SQL, use `source get` to confirm the source ID, `team_id`,
 `data_region`. Include the metadata token when querying to validate the
 table and endpoint against that source. Use CLI help for credential options.
 
+The `source get` response includes the source's ingestion `token`; redact it
+before keeping or showing the output. Trust live `data_region` over region
+maps in docs or memory. In an isolated worktree where a repo wrapper's
+sibling skill path is missing, run the shared CLI directly with
+`--env-file` pointing at the source checkout's env file. A missing path or
+wrong env file is not an invalid credential.
+
 ## Query shape
 
 Use an explicit time window and `LIMIT`. Prefer `FORMAT JSONEachRow` for
 machine-readable output. For retained log history, query both hot and cold
-storage with the [SQL examples](references/query-shapes.sql).
+storage with the [SQL examples](references/query-shapes.sql). Hot and cold
+storage overlap, so deduplicate by `(dt, raw)` for exact counts, and count
+distinct failures separately from multiple log records of one failure.
 
 Follow these query rules:
 
@@ -34,3 +43,13 @@ To determine whether a message, job, pipeline run, or event was processed, follo
    - `failed_at_boundary`: name the boundary and first concrete error or missing expected event.
    - `not_captured`: no source capture exists after checking the expected source, service, and time window.
    - `inconclusive`: name the missing payload, ID, source, time window, or state evidence needed to decide.
+
+For a dependency HTTP failure, keep the status, sanitized body, responder
+headers, and request ID; a gateway fallback can reuse a domain error's status.
+When the caller aborts without a response, compare elapsed time with the
+deployed caller's timeout and check the downstream request timeline. A caller
+deadline shows where the read stopped, not why the dependency did not respond.
+
+For a polling incident, compare the entity's last success with its next
+scheduled attempt. A healthy service or recovered alert does not prove that
+entity reconciled.
