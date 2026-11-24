@@ -44,7 +44,10 @@ To use or release allocations, follow the
 
 Run `mt chop` inside a Session or Ordinary worktree to remove it (for a Session,
 this removes the whole Session), or run `mt chop <target>` from the Source
-checkout with a Session name, branch, or worktree path. Before removing a
+checkout with a Session name, branch, or worktree path. A thread bound to a
+removed worktree can never open again, so remove your own thread's worktree only
+as its final action, and run work that continues afterward from the Source
+checkout. Before removing a
 worktree or Session,
 [clear reproducible generated changes](../../references/internal/CLEANUP_RECOVERY.md#generated-output)
 in each member and preserve the remaining work.

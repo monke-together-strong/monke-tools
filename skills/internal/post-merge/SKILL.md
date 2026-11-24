@@ -47,19 +47,24 @@ check remains unverified by that evidence. Name the check and explain the gap.
 
 ## Hand off
 
-When only routine cleanup remains, run **Finish the merge**, then **Report** in
-the current thread, whether it is the original thread or an existing post-merge
-thread.
+Cleanup removes the PR checkout, and a thread bound to a removed checkout can
+never open again. Post-merge runs from a thread whose workspace **survives**
+cleanup: the Source checkout, or any checkout outside the cleanup candidates.
+Read this thread's workspace with `t3_worktree_status`.
 
-When a specific verification check remains, continue below if this thread was
-started to run post-merge or if no thread tool exists. Otherwise, move
-post-merge ownership to a new top-level thread. Running this skill is the user's
-request for that thread. In T3 Code, start it with `t3_thread_launch`:
+When this thread's workspace survives, continue below if only routine cleanup
+remains or this thread was started to run post-merge. Without a thread tool,
+continue below and run every command from the Source checkout.
+
+Otherwise, move post-merge ownership to a new top-level thread. Running this
+skill is the user's request for that thread. In T3 Code, start it with
+`t3_thread_launch`:
 
 1. Start a new thread on the post-merge model (`mt models get post-merge`) in
-   the PR checkout. Prompt it with the PR (or the pushed commit with its base
-   and source branches) and the path to this `SKILL.md`. Include the new thread
-   link in your reply.
+   the Source checkout (`workspaceStrategy: { type: "root" }`). Prompt it with
+   the PR (or the pushed commit with its base and source branches), the PR
+   checkout path, and the path to this `SKILL.md`. Include the new thread link
+   in your reply.
 2. Finish this thread in the same turn. The deployment gate, contract checks,
    follow-up fixes, and cleanup now belong to the new thread. Recap only what
    remains here outside them: a decision still waiting on the user, or agreed
