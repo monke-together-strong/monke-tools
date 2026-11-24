@@ -28,5 +28,10 @@ direction and ask them again until all delegates are satisfied or only
 user-level disagreements remain. Summarize the useful opinions, remaining
 disagreements, and recommended next steps.
 
-Hold the request's scope fixed across rounds. Push back on delegate proposals
-that add work the request does not need.
+Take scope from the request's source, such as its ticket, Spec or the user's
+words, and give it to every delegate. Get the source before convening; if you
+cannot read it, say so before any work starts. Delegates may meet it any way
+they choose, including approaches the source does not suggest, as long as
+every requirement it states is met. Keep the direction on the source's
+requirements, and list each proposal to drop or narrow one, or to add work
+beyond the source, as a scope note with its reason in your summary.

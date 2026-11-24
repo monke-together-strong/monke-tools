@@ -1,6 +1,6 @@
 ## Code style
 
-- Ground proposed changes in actual callers, data, and behavior. Before adding complexity, show a concrete case that requires it and compare the simpler existing solution. If the requirement is uncertain, run a focused experiment. Delegate to a subagent when it can investigate independently.
+- Ground proposed changes in actual callers, data, and behavior. Before adding complexity beyond what the request requires, show a concrete case that requires it and compare the simpler existing solution. If the requirement is uncertain, run a focused experiment. Delegate to a subagent when it can investigate independently.
 - Propose broad or unconventional changes when they clearly improve maintainability or outcomes.
 - Write focused behavioral tests. Skip repetitive smoke tests and regression tests for deleted features.
 
