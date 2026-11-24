@@ -119,6 +119,7 @@ jobs:
     if: needs.prepare-release.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
     permissions:
+      actions: write
       contents: write
 
     steps:
@@ -227,3 +228,18 @@ jobs:
               -f message="Publish stable monke-tools Release catalog for v${VERSION}" \
               -f content="$catalog_content" >/dev/null
           fi
+
+      # The published Release holds the archives, and these Actions copies count
+      # against the org's shared artifact quota until retention expires. A failed
+      # run skips this step and keeps them for debugging and reruns.
+      - name: Delete published archive artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact_ids="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq '.artifacts[] | select(.name | startswith("monke-tools-release-")) | .id'
+          )"
+          for artifact_id in $artifact_ids; do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id"
+          done
