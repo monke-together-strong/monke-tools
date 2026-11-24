@@ -94,8 +94,9 @@ for dependencies, env files, seed paths, and resources. For `PR.md` and
 
 ## Agent skills
 
-Run `mt skills configure` to select agents or change the saved targets. Codex
-and Claude also receive Global agent instructions in a Managed instruction section.
+Run `mt skills configure` to select agents or change the saved targets. Codex,
+Claude, and Antigravity also receive Global agent instructions in a Managed
+instruction section.
 
 To use skills from a local checkout in one project, run `mt skills add` inside the Consumer repo:
 

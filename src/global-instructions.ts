@@ -273,6 +273,12 @@ export function globalInstructionsPath(
     return path.join(configDirectory, "CLAUDE.md");
   }
 
+  if (target.kind === "antigravity") {
+    // Antigravity reads `~/.gemini/GEMINI.md` across App, CLI, and IDE extensions. Ignore
+    // `GEMINI_HOME`, which wrappers like T3 Code set to isolate private profile state.
+    return path.join(options.homeDirectory, ".gemini", "GEMINI.md");
+  }
+
   return null;
 }
 
