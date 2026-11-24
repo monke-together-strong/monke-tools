@@ -29,3 +29,7 @@ Use GitHub Issues for skills such as `to-spec` and `to-tickets`, even when a pro
 ## UI changes
 
 When making UI changes, attach screenshots of the result and link directly to each changed view or state rather than the app or folder root. If the local app is login-gated, use the repo's `agent:login` script. Set up `agent:login` if needed using `references/internal/AGENT_LOGIN.md` from your Monke guidance installation.
+
+## Tooling
+
+- Use Composio for Linear operations and Mobbin.
