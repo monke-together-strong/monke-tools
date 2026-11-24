@@ -585,13 +585,14 @@ describe("skills CLI", () => {
     expect(readFileSync(destinationPath, "utf-8")).toBe("");
   });
 
-  it("honors harness config directories and preserves instruction symlinks during mt skills local-install", async () => {
+  it("honors Codex and Claude config dirs, ignores GEMINI_HOME, and preserves instruction symlinks during mt skills local-install", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-config");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     const codexHome = path.join(osHome, "codex-config");
     const claudeConfig = path.join(osHome, "claude-config");
+    const privateGeminiHome = path.join(sandbox, "private-gemini-home");
     const dotfileTarget = path.join(sandbox, "dotfiles", "AGENTS.md");
     writeSkillSource(sourceCheckout);
     write(sandbox, "dotfiles/AGENTS.md", "Personal Codex guidance.\n");
@@ -600,13 +601,14 @@ describe("skills CLI", () => {
     selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
-      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude", "antigravity"],
       createTestRuntime({
         cwd: sandbox,
         env: {
           ...skillsEnvironment(osHome, monkeHome),
           CLAUDE_CONFIG_DIR: path.relative(sandbox, claudeConfig),
-          CODEX_HOME: path.relative(sandbox, codexHome)
+          CODEX_HOME: path.relative(sandbox, codexHome),
+          GEMINI_HOME: privateGeminiHome
         },
         onStderr() {},
         onStdout() {}
@@ -618,36 +620,12 @@ describe("skills CLI", () => {
       "Personal Codex guidance.\n<!-- monke-rules:start -->"
     );
     expect(readFileSync(path.join(claudeConfig, "CLAUDE.md"), "utf-8")).toContain("Team baseline.");
-    expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
-    expect(existsSync(path.join(osHome, ".claude", "CLAUDE.md"))).toBeFalsy();
-  });
-
-  it("writes Antigravity Global agent instructions to ~/.gemini/GEMINI.md even when GEMINI_HOME is set", async () => {
-    const sandbox = makeTempDir("skills-local-install-instructions-antigravity-gemini-home");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const osHome = path.join(sandbox, "home");
-    const sourceCheckout = path.join(sandbox, "source");
-    const privateGeminiHome = path.join(sandbox, "private-gemini-home");
-    writeSkillSource(sourceCheckout);
-    selectActiveLocalInstall(monkeHome, sourceCheckout);
-
-    await runCliAsync(
-      ["skills", "local-install", sourceCheckout, "--targets", "antigravity"],
-      createTestRuntime({
-        cwd: sandbox,
-        env: {
-          ...skillsEnvironment(osHome, monkeHome),
-          GEMINI_HOME: privateGeminiHome
-        },
-        onStderr() {},
-        onStdout() {}
-      })
-    );
-
     expect(readFileSync(path.join(osHome, ".gemini", "GEMINI.md"), "utf-8")).toBe(
       managedInstructions("Team baseline.\n")
     );
     expect(existsSync(path.join(privateGeminiHome, "GEMINI.md"))).toBeFalsy();
+    expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
+    expect(existsSync(path.join(osHome, ".claude", "CLAUDE.md"))).toBeFalsy();
   });
 
   it.each([

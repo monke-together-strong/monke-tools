@@ -274,8 +274,8 @@ export function globalInstructionsPath(
   }
 
   if (target.kind === "antigravity") {
-    // Antigravity App, CLI, IDE extensions, and T3 Code read `~/.gemini/GEMINI.md`; T3 Code sets
-    // `GEMINI_HOME` to isolate private state and symlinks `~/.gemini/GEMINI.md` into it.
+    // Antigravity reads `~/.gemini/GEMINI.md` across App, CLI, and IDE extensions. Ignore
+    // `GEMINI_HOME`, which wrappers like T3 Code set to isolate private profile state.
     return path.join(options.homeDirectory, ".gemini", "GEMINI.md");
   }
 
